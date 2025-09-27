@@ -1,0 +1,10 @@
+{
+    "recommendations": [
+        "xaver.clang-format",
+        "ms-vscode.cpptools",
+        "ms-vscode.cmake-tools",
+        "twxs.cmake",
+        "GitHub.copilot",
+        "GitHub.copilot-chat"
+    ]
+}

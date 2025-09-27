@@ -1,20 +1,56 @@
 {
+    // Formatting settings
     "editor.formatOnSave": true,
+    "editor.formatOnType": true,
+    "editor.formatOnPaste": true,
     "editor.defaultFormatter": "xaver.clang-format",
     "C_Cpp.formatting": "clangFormat",
+    "C_Cpp.clang_format_style": "file",
+    "C_Cpp.clang_format_fallbackStyle": "Google",
+    
+    // Git settings
     "git.enableSmartCommit": true,
     "git.autoStageFilePattern": "**/*",
     "git.autoAddNewFolders": true,
+    
+    // CMake settings
     "cmake.configureOnOpen": true,
     "cmake.buildDirectory": "${workspaceFolder}/build_x86_64",
     "C_Cpp.default.configurationProvider": "ms-vscode.cmake-tools",
+    
+    // File settings
+    "files.trimTrailingWhitespace": true,
+    "files.insertFinalNewline": true,
+    "files.trimFinalNewlines": true,
+    "files.autoSave": "afterDelay",
+    "files.autoSaveDelay": 1000,
+    
+    // Editor display settings
+    "editor.rulers": [120],
+    "editor.renderWhitespace": "boundary",
+    
+    // File associations
+    "files.associations": {
+        "*.c": "c",
+        "*.h": "c",
+        "*.cpp": "cpp",
+        "*.hpp": "cpp"
+    },
+    
+    // Language-specific settings
     "[c]": {
         "editor.defaultFormatter": "xaver.clang-format",
-        "editor.formatOnSave": true
+        "editor.formatOnSave": true,
+        "editor.tabSize": 8,
+        "editor.insertSpaces": false,
+        "editor.detectIndentation": false
     },
     "[cpp]": {
         "editor.defaultFormatter": "xaver.clang-format",
-        "editor.formatOnSave": true
+        "editor.formatOnSave": true,
+        "editor.tabSize": 8,
+        "editor.insertSpaces": false,
+        "editor.detectIndentation": false
     },
     "github.copilot.advanced": {
         "mcp": {

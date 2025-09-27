@@ -79,6 +79,12 @@ typedef int socket_t;
 #define C64U_BYTES_PER_LINE 192 // 384 pixels / 2 (4-bit per pixel) - keeping original
 #define C64U_LINES_PER_PACKET 4
 
+// Frame assembly constants
+#define C64U_MAX_PACKETS_PER_FRAME 68           // PAL: 272 lines ÷ 4 lines/packet = 68 packets
+#define C64U_FRAME_TIMEOUT_MS 100               // Timeout for incomplete frames
+#define C64U_PAL_FRAME_INTERVAL_NS 20000000ULL  // 20ms for 50Hz PAL
+#define C64U_NTSC_FRAME_INTERVAL_NS 16666667ULL // 16.67ms for 60Hz NTSC
+
 // Logging control
 static bool c64u_debug_logging = true;
 
@@ -127,6 +133,24 @@ static const uint32_t vic_colors[16] = {
 	0xFFB2B2B2  // 15: Light Grey
 };
 
+// Frame packet structure for reordering
+struct frame_packet {
+	uint16_t line_num;
+	uint8_t lines_per_packet;
+	uint8_t packet_data[C64U_VIDEO_PACKET_SIZE - C64U_VIDEO_HEADER_SIZE];
+	bool received;
+};
+
+// Frame assembly structure
+struct frame_assembly {
+	uint16_t frame_num;
+	uint16_t expected_packets;
+	uint16_t received_packets;
+	struct frame_packet packets[C64U_MAX_PACKETS_PER_FRAME];
+	bool complete;
+	uint64_t start_time;
+};
+
 struct c64u_source {
 	obs_source_t *source;
 
@@ -140,8 +164,33 @@ struct c64u_source {
 	uint32_t width;
 	uint32_t height;
 	uint8_t *video_buffer;
-	uint32_t *frame_buffer;
+
+	// Double buffering for smooth video
+	uint32_t *frame_buffer_front; // For rendering (OBS thread)
+	uint32_t *frame_buffer_back;  // For UDP assembly (video thread)
 	bool frame_ready;
+	bool buffer_swap_pending;
+
+	// Frame assembly and packet reordering
+	struct frame_assembly current_frame;
+	uint16_t last_completed_frame;
+	uint32_t frame_drops;
+	uint32_t packet_drops;
+
+	// Frame diagnostic counters (Stats for Nerds style)
+	uint32_t frames_expected;
+	uint32_t frames_captured;
+	uint32_t frames_delivered_to_obs;
+	uint32_t frames_completed;
+	uint32_t buffer_swaps;
+	uint64_t last_capture_time;
+	uint64_t total_capture_latency;
+	uint64_t total_pipeline_latency;
+
+	// Dynamic video format detection
+	uint32_t detected_frame_height;
+	bool format_detected;
+	double expected_fps;
 
 	// Audio data
 	struct audio_output_info audio_info;
@@ -158,6 +207,11 @@ struct c64u_source {
 
 	// Synchronization
 	pthread_mutex_t frame_mutex;
+	pthread_mutex_t assembly_mutex;
+
+	// Frame timing
+	uint64_t last_frame_time;
+	uint64_t frame_interval_ns; // Target frame interval (20ms for 50Hz PAL)
 
 	// Auto-start control
 	bool auto_start_attempted;
@@ -188,6 +242,64 @@ static void c64u_cleanup_networking(void)
 	WSACleanup();
 	C64U_LOG_DEBUG("Windows networking cleaned up");
 #endif
+}
+
+// Helper functions for frame assembly
+static void init_frame_assembly(struct frame_assembly *frame, uint16_t frame_num)
+{
+	memset(frame, 0, sizeof(struct frame_assembly));
+	frame->frame_num = frame_num;
+	frame->start_time = os_gettime_ns();
+}
+
+static bool is_frame_complete(struct frame_assembly *frame)
+{
+	return frame->received_packets > 0 && frame->received_packets == frame->expected_packets;
+}
+
+static bool is_frame_timeout(struct frame_assembly *frame)
+{
+	uint64_t elapsed = (os_gettime_ns() - frame->start_time) / 1000000; // Convert to ms
+	return elapsed > C64U_FRAME_TIMEOUT_MS;
+}
+
+static void swap_frame_buffers(struct c64u_source *context)
+{
+	// Atomically swap front and back buffers
+	uint32_t *temp = context->frame_buffer_front;
+	context->frame_buffer_front = context->frame_buffer_back;
+	context->frame_buffer_back = temp;
+	context->frame_ready = true;
+	context->buffer_swap_pending = false;
+}
+
+static void assemble_frame_to_buffer(struct c64u_source *context, struct frame_assembly *frame)
+{
+	// Assemble complete frame into back buffer
+	for (int i = 0; i < C64U_MAX_PACKETS_PER_FRAME; i++) {
+		struct frame_packet *packet = &frame->packets[i];
+		if (!packet->received)
+			continue;
+
+		uint16_t line_num = packet->line_num;
+		uint8_t lines_per_packet = packet->lines_per_packet;
+
+		for (int line = 0; line < (int)lines_per_packet && (int)(line_num + line) < (int)context->height;
+		     line++) {
+			uint32_t *dst_line = context->frame_buffer_back + ((line_num + line) * C64U_PIXELS_PER_LINE);
+			uint8_t *src_line = packet->packet_data + (line * C64U_BYTES_PER_LINE);
+
+			// Convert 4-bit VIC colors to 32-bit RGBA
+			for (int x = 0; x < C64U_BYTES_PER_LINE; x++) {
+				uint8_t pixel_pair = src_line[x];
+				uint8_t color1 = pixel_pair & 0x0F;
+				uint8_t color2 = pixel_pair >> 4;
+
+				dst_line[x * 2] = vic_colors[color1];
+				dst_line[x * 2 + 1] = vic_colors[color2];
+			}
+		}
+	}
 }
 
 static int c64u_get_socket_error(void)
@@ -413,9 +525,8 @@ static void *video_thread_func(void *data)
 		last_video_seq = seq_num;
 		first_video = false;
 
-		// Count frames (last packet of frame)
-		if (last_packet)
-			video_frames++;
+		// NOTE: Frame counting is now done only in frame assembly completion logic
+		// Do not count frames here based on last_packet flag as it creates duplicate counting
 
 		// Log comprehensive video statistics every 5 seconds
 		uint64_t time_diff = now - last_video_log;
@@ -426,13 +537,47 @@ static void *video_thread_func(void *data)
 			double fps = video_frames / duration;
 			double loss_pct = video_packets_period > 0 ? (100.0 * video_drops) / video_packets_period : 0.0;
 
+			// Calculate frame delivery metrics (Stats for Nerds style)
+			double expected_fps = context->format_detected ? context->expected_fps
+								       : 50.0; // Default to PAL if not detected yet
+			double frame_delivery_rate = context->frames_delivered_to_obs / duration;
+			double frame_completion_rate = context->frames_completed / duration;
+			double capture_drop_pct =
+				context->frames_expected > 0
+					? (100.0 * (context->frames_expected - context->frames_captured)) /
+						  context->frames_expected
+					: 0.0;
+			double delivery_drop_pct =
+				context->frames_completed > 0
+					? (100.0 * (context->frames_completed - context->frames_delivered_to_obs)) /
+						  context->frames_completed
+					: 0.0;
+			double avg_pipeline_latency = context->frames_delivered_to_obs > 0
+							      ? context->total_pipeline_latency /
+									(context->frames_delivered_to_obs * 1000000.0)
+							      : 0.0; // Convert to ms
+
 			C64U_LOG_INFO("📺 VIDEO: %.1f fps | %.2f Mbps | %.0f pps | Loss: %.1f%% | Frames: %u", fps,
 				      bandwidth_mbps, pps, loss_pct, video_frames);
+			C64U_LOG_INFO(
+				"🎯 DELIVERY: Expected %.0f fps | Captured %.1f fps | Delivered %.1f fps | Completed %.1f fps",
+				expected_fps, context->frames_captured / duration, frame_delivery_rate,
+				frame_completion_rate);
+			C64U_LOG_INFO(
+				"📊 PIPELINE: Capture drops %.1f%% | Delivery drops %.1f%% | Avg latency %.1f ms | Buffer swaps %u",
+				capture_drop_pct, delivery_drop_pct, avg_pipeline_latency, context->buffer_swaps);
 
 			// Reset period counters
 			video_bytes_period = 0;
 			video_packets_period = 0;
 			video_frames = 0;
+			// Reset diagnostic counters
+			context->frames_expected = 0;
+			context->frames_captured = 0;
+			context->frames_delivered_to_obs = 0;
+			context->frames_completed = 0;
+			context->buffer_swaps = 0;
+			context->total_pipeline_latency = 0;
 			last_video_log = now;
 		}
 
@@ -444,35 +589,129 @@ static void *video_thread_func(void *data)
 			continue;
 		}
 
-		// Process pixel data
-		if (pthread_mutex_lock(&context->frame_mutex) == 0) {
-			uint8_t *pixel_data = packet + C64U_VIDEO_HEADER_SIZE;
+		// Process packet with frame assembly and double buffering
+		if (pthread_mutex_lock(&context->assembly_mutex) == 0) {
+			// Track frame capture timing for diagnostics (per-frame, not per-packet)
+			uint64_t capture_time = os_gettime_ns();
 
-			for (int line = 0;
-			     line < (int)lines_per_packet && (int)(line_num + line) < (int)context->height; line++) {
-				uint32_t *dst_line = context->frame_buffer + ((line_num + line) * C64U_PIXELS_PER_LINE);
-				uint8_t *src_line = pixel_data + (line * C64U_BYTES_PER_LINE);
+			// Check if this is a new frame
+			if (context->current_frame.frame_num != frame_num) {
+				// Count expected and captured frames only on new frame start
+				if (context->last_capture_time > 0) {
+					context->frames_expected++;
+				}
+				context->frames_captured++;
+				context->last_capture_time = capture_time;
+				// Complete previous frame if it exists and is reasonably complete
+				if (context->current_frame.received_packets > 0) {
+					if (is_frame_complete(&context->current_frame) ||
+					    is_frame_timeout(&context->current_frame)) {
+						if (is_frame_complete(&context->current_frame)) {
+							// Assemble complete frame and swap buffers (only if not already completed)
+							if (pthread_mutex_lock(&context->frame_mutex) == 0) {
+								if (context->last_completed_frame !=
+								    context->current_frame.frame_num) {
+									assemble_frame_to_buffer(
+										context, &context->current_frame);
+									swap_frame_buffers(context);
+									context->last_completed_frame =
+										context->current_frame.frame_num;
+									// Track diagnostics consistently
+									context->frames_completed++;
+									context->buffer_swaps++;
+									context->frames_delivered_to_obs++;
+									context->total_pipeline_latency +=
+										(os_gettime_ns() - capture_time);
+									// video_frames++ removed - counted in main completion section
+								}
+								pthread_mutex_unlock(&context->frame_mutex);
+							}
+						} else {
+							// Frame timeout - log drop and continue
+							context->frame_drops++;
+						}
+					}
+				}
 
-				// Convert 4-bit VIC colors to 32-bit RGBA
-				// Each byte contains 2 pixels - LOW NIBBLE FIRST (matches grab.py)
-				for (int x = 0; x < C64U_BYTES_PER_LINE; x++) {
-					uint8_t pixel_pair = src_line[x];
-					uint8_t color1 = pixel_pair & 0x0F; // Low nibble first pixel
-					uint8_t color2 = pixel_pair >> 4;   // High nibble second pixel
+				// Start new frame
+				init_frame_assembly(&context->current_frame, frame_num);
+			}
 
-					// Pixel processing (debug logging removed for performance)
+			// Add packet to current frame (calculate packet index from line number)
+			uint16_t packet_index = line_num / lines_per_packet;
+			if (packet_index < C64U_MAX_PACKETS_PER_FRAME) {
+				struct frame_packet *fp = &context->current_frame.packets[packet_index];
+				if (!fp->received) {
+					fp->line_num = line_num;
+					fp->lines_per_packet = lines_per_packet;
+					fp->received = true;
+					memcpy(fp->packet_data, packet + C64U_VIDEO_HEADER_SIZE,
+					       C64U_VIDEO_PACKET_SIZE - C64U_VIDEO_HEADER_SIZE);
+					context->current_frame.received_packets++;
+				}
 
-					dst_line[x * 2] = vic_colors[color1];
-					dst_line[x * 2 + 1] = vic_colors[color2];
+				// Update expected packet count and detect video format based on last packet
+				if (last_packet && context->current_frame.expected_packets == 0) {
+					context->current_frame.expected_packets = packet_index + 1;
+
+					// Detect PAL vs NTSC format from frame height
+					uint32_t frame_height = line_num + lines_per_packet;
+					if (!context->format_detected ||
+					    context->detected_frame_height != frame_height) {
+						context->detected_frame_height = frame_height;
+						context->format_detected = true;
+
+						// Calculate expected FPS based on detected format
+						if (frame_height == C64U_PAL_HEIGHT) {
+							context->expected_fps = 50.0; // PAL: 50 Hz
+							C64U_LOG_INFO("🎥 Detected PAL format: 384x%u @ %.0f Hz",
+								      frame_height, context->expected_fps);
+						} else if (frame_height == C64U_NTSC_HEIGHT) {
+							context->expected_fps = 60.0; // NTSC: 60 Hz
+							C64U_LOG_INFO("🎥 Detected NTSC format: 384x%u @ %.0f Hz",
+								      frame_height, context->expected_fps);
+						} else {
+							// Unknown format, estimate based on packet count
+							context->expected_fps = (frame_height <= 250) ? 60.0 : 50.0;
+							C64U_LOG_WARNING(
+								"⚠️ Unknown video format: 384x%u, assuming %.0f Hz",
+								frame_height, context->expected_fps);
+						}
+
+						// Update context dimensions if they changed
+						if (context->height != frame_height) {
+							context->height = frame_height;
+							context->width = C64U_PIXELS_PER_LINE; // Always 384
+						}
+					}
+				}
+
+				// Check if frame is complete
+				if (is_frame_complete(&context->current_frame)) {
+					// Assemble complete frame and swap buffers (only if not already completed)
+					if (pthread_mutex_lock(&context->frame_mutex) == 0) {
+						if (context->last_completed_frame != context->current_frame.frame_num) {
+							assemble_frame_to_buffer(context, &context->current_frame);
+							swap_frame_buffers(context);
+							context->last_completed_frame =
+								context->current_frame.frame_num;
+							// Track diagnostics (only once per completed frame!)
+							context->frames_completed++;
+							context->buffer_swaps++;
+							context->frames_delivered_to_obs++;
+							context->total_pipeline_latency +=
+								(os_gettime_ns() - capture_time);
+							video_frames++; // Count completed frames for statistics (primary location)
+						}
+						pthread_mutex_unlock(&context->frame_mutex);
+					}
+
+					// Reset for next frame
+					init_frame_assembly(&context->current_frame, 0);
 				}
 			}
 
-			if (last_packet) {
-				context->frame_ready = true;
-				// Frame completed (logged periodically in statistics)
-			}
-
-			pthread_mutex_unlock(&context->frame_mutex);
+			pthread_mutex_unlock(&context->assembly_mutex);
 		}
 	}
 
@@ -616,21 +855,41 @@ static void *c64u_create(obs_data_t *settings, obs_source_t *source)
 	context->width = C64U_PAL_WIDTH;
 	context->height = C64U_PAL_HEIGHT;
 
-	// Allocate video buffers
+	// Allocate video buffers (double buffering)
 	size_t frame_size = context->width * context->height * 4; // RGBA
-	context->frame_buffer = bmalloc(frame_size);
-	if (!context->frame_buffer) {
-		C64U_LOG_ERROR("Failed to allocate video frame buffer");
+	context->frame_buffer_front = bmalloc(frame_size);
+	context->frame_buffer_back = bmalloc(frame_size);
+	if (!context->frame_buffer_front || !context->frame_buffer_back) {
+		C64U_LOG_ERROR("Failed to allocate video frame buffers");
+		if (context->frame_buffer_front)
+			bfree(context->frame_buffer_front);
+		if (context->frame_buffer_back)
+			bfree(context->frame_buffer_back);
 		bfree(context);
 		return NULL;
 	}
-	memset(context->frame_buffer, 0, frame_size);
+	memset(context->frame_buffer_front, 0, frame_size);
+	memset(context->frame_buffer_back, 0, frame_size);
 	context->frame_ready = false;
 
-	// Initialize mutex
+	// Initialize video format detection
+	context->detected_frame_height = 0;
+	context->format_detected = false;
+	context->expected_fps = 50.0; // Default to PAL until detected
+
+	// Initialize mutexes
 	if (pthread_mutex_init(&context->frame_mutex, NULL) != 0) {
 		C64U_LOG_ERROR("Failed to initialize frame mutex");
-		bfree(context->frame_buffer);
+		bfree(context->frame_buffer_front);
+		bfree(context->frame_buffer_back);
+		bfree(context);
+		return NULL;
+	}
+	if (pthread_mutex_init(&context->assembly_mutex, NULL) != 0) {
+		C64U_LOG_ERROR("Failed to initialize assembly mutex");
+		pthread_mutex_destroy(&context->frame_mutex);
+		bfree(context->frame_buffer_front);
+		bfree(context->frame_buffer_back);
 		bfree(context);
 		return NULL;
 	}
@@ -691,8 +950,12 @@ static void c64u_destroy(void *data)
 
 	// Cleanup resources
 	pthread_mutex_destroy(&context->frame_mutex);
-	if (context->frame_buffer) {
-		bfree(context->frame_buffer);
+	pthread_mutex_destroy(&context->assembly_mutex);
+	if (context->frame_buffer_front) {
+		bfree(context->frame_buffer_front);
+	}
+	if (context->frame_buffer_back) {
+		bfree(context->frame_buffer_back);
 	}
 
 	bfree(context);
@@ -863,6 +1126,13 @@ static void c64u_render(void *data, gs_effect_t *effect)
 	struct c64u_source *context = data;
 	UNUSED_PARAMETER(effect);
 
+	// Track render timing for diagnostic purposes
+	static uint64_t last_render_time = 0;
+	static uint32_t render_calls = 0;
+	uint64_t render_start = os_gettime_ns();
+
+	render_calls++;
+
 	// Auto-start streaming on first render (when source is truly active)
 	if (!context->auto_start_attempted) {
 		context->auto_start_attempted = true;
@@ -873,15 +1143,14 @@ static void c64u_render(void *data, gs_effect_t *effect)
 	}
 
 	// Check if we have streaming data and frame ready
-	if (context->streaming && context->frame_ready && context->frame_buffer) {
-		// Render actual C64U video frame from frame buffer
+	if (context->streaming && context->frame_ready && context->frame_buffer_front) {
+		// Render actual C64U video frame from front buffer
 
 		// Lock the frame buffer to ensure thread safety
 		if (pthread_mutex_lock(&context->frame_mutex) == 0) {
-			// Create texture from frame buffer data
+			// Create texture from front buffer data
 			gs_texture_t *texture = gs_texture_create(context->width, context->height, GS_RGBA, 1,
-								  (const uint8_t **)&context->frame_buffer, 0);
-
+								  (const uint8_t **)&context->frame_buffer_front, 0);
 			if (texture) {
 				// Use default effect for texture rendering
 				gs_effect_t *default_effect = obs_get_base_effect(OBS_EFFECT_DEFAULT);
@@ -935,6 +1204,37 @@ static void c64u_render(void *data, gs_effect_t *effect)
 			}
 		}
 	}
+
+	// Log render timing diagnostics every 5 seconds
+	if (last_render_time > 0) {
+		uint64_t render_end = os_gettime_ns();
+		uint64_t render_duration = render_end - render_start;
+		static uint64_t last_render_log = 0;
+		static uint32_t total_render_calls = 0;
+		static uint64_t total_render_time = 0;
+
+		total_render_calls++;
+		total_render_time += render_duration;
+
+		if (last_render_log == 0)
+			last_render_log = render_end;
+
+		uint64_t log_diff = render_end - last_render_log;
+		if (log_diff >= 5000000000ULL) { // Every 5 seconds
+			double duration = log_diff / 1000000000.0;
+			double render_fps = total_render_calls / duration;
+			double avg_render_time_ms = total_render_time / (total_render_calls * 1000000.0);
+
+			C64U_LOG_INFO("🎨 RENDER: %.1f fps | %.2f ms avg render time | %u total calls", render_fps,
+				      avg_render_time_ms, render_calls);
+
+			// Reset counters
+			total_render_calls = 0;
+			total_render_time = 0;
+			last_render_log = render_end;
+		}
+	}
+	last_render_time = render_start;
 }
 
 static uint32_t c64u_get_width(void *data)

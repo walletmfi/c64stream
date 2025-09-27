@@ -66,14 +66,32 @@ sudo dpkg -i c64u-obs-plugin-linux.deb
 
 ### Ultimate Device Setup
 
+**Important:** The C64 Ultimate device must be configured to stream to your OBS server.
+
 Access the Ultimate's menu (typically F2) and navigate to:
 ```
-Network → Data Streaming → Enable
-Video Port: 11000
-Audio Port: 11001  
+F2 → Data Streams
 ```
 
-The plugin will automatically send start/stop commands to the Ultimate device when the OBS source is activated.
+Configure the following settings:
+- **Stream VIC to**: `192.168.1.185:11000` (replace with your OBS server IP and video port)
+- **Stream Audio to**: `192.168.1.185:11001` (replace with your OBS server IP and audio port)
+
+**Examples:**
+- Using IP address: `192.168.1.185:11000`
+- Using hostname: `obs-server:11000`
+
+**Configuration Steps:**
+1. Press F2 to enter the Ultimate menu
+2. Navigate to "Data Streams"
+3. Set "Stream VIC to" field to your OBS server IP:port (e.g., `192.168.1.185:11000`)
+4. Set "Stream Audio to" field to your OBS server IP:port (e.g., `192.168.1.185:11001`)
+5. Save the configuration
+6. Enable streaming when ready to capture
+
+For complete configuration details, see the [official C64 Ultimate documentation](https://1541u-documentation.readthedocs.io/en/latest/data_streams.html).
+
+The plugin can optionally send start/stop commands to the Ultimate device when the OBS source is activated (if IP address is configured in OBS).
 
 ## Troubleshooting
 
