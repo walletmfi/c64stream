@@ -2,6 +2,8 @@
 
 [OBS Studio](https://obsproject.com/) source plugin for streaming video and audio from Commodore 64 Ultimate devices over a network connection.
 
+Please note that this plugin is work in progress. Currently, only the Ubuntu version works.
+
 ## Overview
 
 This plugin implements a native OBS source that receives video and audio streams from C64 Ultimate devices (Commodore 64 Ultimate, Ultimate 64, Ultimate II+, etc.) via the Ultimate's built-in data streaming capability. 
