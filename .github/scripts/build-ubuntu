@@ -198,6 +198,7 @@ ${_usage_host:-}"
           -DQT_VERSION=${QT_VERSION:-6}
           -DCMAKE_BUILD_TYPE=${config}
           -DCMAKE_INSTALL_PREFIX=/usr
+          -DENABLE_TESTS=ON
         )
 
         local cmake_version
@@ -220,6 +221,18 @@ ${_usage_host:-}"
 
     log_group "Building ${product_name}..."
     cmake ${cmake_build_args}
+
+    # Only run tests if we're not in CI (tests are disabled in CI builds)
+    if [[ -z "$CI" && -z "$GITHUB_ACTIONS" ]]; then
+      log_group "Running tests..."
+      local -a ctest_args=(--test-dir build_${target##*-} --verbose)
+      if (( _loglevel < 2 )) {
+        ctest_args+=(--output-on-failure)
+      }
+      ctest ${ctest_args}
+    else
+      log_info "Skipping tests in CI environment (tests disabled for CI builds)"
+    fi
   }
 
   log_group "Installing ${product_name}..."

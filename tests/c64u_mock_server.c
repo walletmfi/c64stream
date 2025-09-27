@@ -28,6 +28,7 @@ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 GNU General Public License for more details.
 */
 
+#define _GNU_SOURCE // Enable usleep and other GNU extensions
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -162,125 +163,122 @@ static void *video_thread_func(void *data)
 static void *audio_thread_func(void *data)
 {
 	(void)data; // Suppress unused parameter warning
-			struct sockaddr_in client_addr;
-			socklen_t client_len = sizeof(client_addr);
-			uint8_t packet[C64U_AUDIO_PACKET_SIZE];
-			uint16_t seq_num = 0;
+	struct sockaddr_in client_addr;
+	socklen_t client_len = sizeof(client_addr);
+	uint8_t packet[C64U_AUDIO_PACKET_SIZE];
+	uint16_t seq_num = 0;
 
-			memset(&client_addr, 0, sizeof(client_addr));
-			client_addr.sin_family = AF_INET;
-			client_addr.sin_port = htons(C64U_AUDIO_PORT);
-			inet_pton(AF_INET, server.client_ip, &client_addr.sin_addr);
+	memset(&client_addr, 0, sizeof(client_addr));
+	client_addr.sin_family = AF_INET;
+	client_addr.sin_port = htons(C64U_AUDIO_PORT);
+	inet_pton(AF_INET, server.client_ip, &client_addr.sin_addr);
 
-			printf("Audio thread started, sending to %s:%d\n", server.client_ip, C64U_AUDIO_PORT);
+	printf("Audio thread started, sending to %s:%d\n", server.client_ip, C64U_AUDIO_PORT);
 
-			while (server.running) {
-				if (!server.audio_streaming) {
-					usleep(10000); // 10ms
-					continue;
-				}
+	while (server.running) {
+		if (!server.audio_streaming) {
+			usleep(10000); // 10ms
+			continue;
+		}
 
-				// Build packet header
-				*(uint16_t *)(packet) = seq_num++;
+		// Build packet header
+		*(uint16_t *)(packet) = seq_num++;
 
-				// Generate test audio (simple sine wave)
-				int16_t *audio_data = (int16_t *)(packet + C64U_AUDIO_HEADER_SIZE);
-				for (int i = 0; i < 192; i++) { // 192 stereo samples
-					float t = (seq_num * 192 + i) / 48000.0f;
-					int16_t sample = (int16_t)(sin(t * 2 * 3.14159 * 440) * 8000); // 440Hz tone
-					audio_data[i * 2] = sample;                                    // Left channel
-					audio_data[i * 2 + 1] = sample;                                // Right channel
-				}
+		// Generate test audio (simple sine wave)
+		int16_t *audio_data = (int16_t *)(packet + C64U_AUDIO_HEADER_SIZE);
+		for (int i = 0; i < 192; i++) { // 192 stereo samples
+			float t = (seq_num * 192 + i) / 48000.0f;
+			int16_t sample = (int16_t)(sin(t * 2 * 3.14159 * 440) * 8000); // 440Hz tone
+			audio_data[i * 2] = sample;                                    // Left channel
+			audio_data[i * 2 + 1] = sample;                                // Right channel
+		}
 
-				// Send packet
-				ssize_t sent = sendto(server.audio_socket, packet, C64U_AUDIO_PACKET_SIZE, 0,
-						      (struct sockaddr *)&client_addr, client_len);
-				if (sent < 0) {
-					printf("Audio send error: %s\n", strerror(errno));
-				}
+		// Send packet
+		ssize_t sent = sendto(server.audio_socket, packet, C64U_AUDIO_PACKET_SIZE, 0,
+				      (struct sockaddr *)&client_addr, client_len);
+		if (sent < 0) {
+			printf("Audio send error: %s\n", strerror(errno));
+		}
 
-				usleep(4000); // ~250Hz packet rate (4ms per packet for 192 samples at 48kHz)
-			}
+		usleep(4000); // ~250Hz packet rate (4ms per packet for 192 samples at 48kHz)
+	}
 
-		printf("Audio thread stopped\n");
-		return NULL;
+	printf("Audio thread stopped\n");
+	return NULL;
 }
 
 // Control server thread
 static void *control_thread_func(void *data)
 {
 	(void)data; // Suppress unused parameter warning
-				struct sockaddr_in server_addr, client_addr;
-				socklen_t client_len = sizeof(client_addr);
+	struct sockaddr_in server_addr, client_addr;
+	socklen_t client_len = sizeof(client_addr);
 
-				// Setup server socket
-				memset(&server_addr, 0, sizeof(server_addr));
-				server_addr.sin_family = AF_INET;
-				server_addr.sin_addr.s_addr = INADDR_ANY;
-				server_addr.sin_port = htons(C64U_CONTROL_PORT);
+	// Setup server socket
+	memset(&server_addr, 0, sizeof(server_addr));
+	server_addr.sin_family = AF_INET;
+	server_addr.sin_addr.s_addr = INADDR_ANY;
+	server_addr.sin_port = htons(C64U_CONTROL_PORT);
 
-				if (bind(server.control_socket, (struct sockaddr *)&server_addr, sizeof(server_addr)) <
-				    0) {
-					printf("Control bind failed: %s\n", strerror(errno));
-					return NULL;
+	if (bind(server.control_socket, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0) {
+		printf("Control bind failed: %s\n", strerror(errno));
+		return NULL;
+	}
+
+	if (listen(server.control_socket, 5) < 0) {
+		printf("Control listen failed: %s\n", strerror(errno));
+		return NULL;
+	}
+
+	printf("Control server listening on port %d\n", C64U_CONTROL_PORT);
+
+	while (server.running) {
+		int client_sock = accept(server.control_socket, (struct sockaddr *)&client_addr, &client_len);
+		if (client_sock < 0) {
+			if (server.running) {
+				printf("Control accept failed: %s\n", strerror(errno));
+			}
+			continue;
+		}
+
+		// Store client IP for streaming
+		inet_ntop(AF_INET, &client_addr.sin_addr, server.client_ip, sizeof(server.client_ip));
+		printf("Control connection from %s\n", server.client_ip);
+
+		uint8_t cmd[6];
+		ssize_t received = recv(client_sock, cmd, sizeof(cmd), 0);
+
+		if (received >= 4) {
+			printf("Received command: ");
+			for (int i = 0; i < received; i++) {
+				printf("%02X ", cmd[i]);
+			}
+			printf("\n");
+
+			// Parse command
+			if (cmd[0] == 0x20 && cmd[1] == 0xFF) {
+				// Start stream command
+				uint8_t stream_id = cmd[2] - 0x02;
+				if (stream_id == 0) {
+					server.video_streaming = 1;
+					printf("Video streaming started\n");
+				} else if (stream_id == 1) {
+					server.audio_streaming = 1;
+					printf("Audio streaming started\n");
 				}
-
-				if (listen(server.control_socket, 5) < 0) {
-					printf("Control listen failed: %s\n", strerror(errno));
-					return NULL;
+			} else if (cmd[0] == 0x30 && cmd[1] == 0xFF) {
+				// Stop stream command
+				uint8_t stream_id = cmd[2] - 0x03;
+				if (stream_id == 0) {
+					server.video_streaming = 0;
+					printf("Video streaming stopped\n");
+				} else if (stream_id == 1) {
+					server.audio_streaming = 0;
+					printf("Audio streaming stopped\n");
 				}
-
-				printf("Control server listening on port %d\n", C64U_CONTROL_PORT);
-
-				while (server.running) {
-					int client_sock = accept(server.control_socket, (struct sockaddr *)&client_addr,
-								 &client_len);
-					if (client_sock < 0) {
-						if (server.running) {
-							printf("Control accept failed: %s\n", strerror(errno));
-						}
-						continue;
-					}
-
-					// Store client IP for streaming
-					inet_ntop(AF_INET, &client_addr.sin_addr, server.client_ip,
-						  sizeof(server.client_ip));
-					printf("Control connection from %s\n", server.client_ip);
-
-					uint8_t cmd[6];
-					ssize_t received = recv(client_sock, cmd, sizeof(cmd), 0);
-
-					if (received >= 4) {
-						printf("Received command: ");
-						for (int i = 0; i < received; i++) {
-							printf("%02X ", cmd[i]);
-						}
-						printf("\n");
-
-						// Parse command
-						if (cmd[0] == 0x20 && cmd[1] == 0xFF) {
-							// Start stream command
-							uint8_t stream_id = cmd[2] - 0x02;
-							if (stream_id == 0) {
-								server.video_streaming = 1;
-								printf("Video streaming started\n");
-							} else if (stream_id == 1) {
-								server.audio_streaming = 1;
-								printf("Audio streaming started\n");
-							}
-						} else if (cmd[0] == 0x30 && cmd[1] == 0xFF) {
-							// Stop stream command
-							uint8_t stream_id = cmd[2] - 0x03;
-							if (stream_id == 0) {
-								server.video_streaming = 0;
-								printf("Video streaming stopped\n");
-							} else if (stream_id == 1) {
-								server.audio_streaming = 0;
-								printf("Audio streaming stopped\n");
-							}
 			}
 		}
-		
+
 		close(client_sock);
 	}
 
@@ -299,64 +297,62 @@ int main(int argc, char *argv[])
 {
 	(void)argc;
 	(void)argv; // Suppress unused parameter warnings
-	
+
 	printf("C64U Mock Server v1.0\n");
 	printf("Simulating C64 Ultimate device for testing\n\n");
 
-					// Setup signal handling
-					signal(SIGINT, signal_handler);
-					signal(SIGTERM, signal_handler);
+	// Setup signal handling
+	signal(SIGINT, signal_handler);
+	signal(SIGTERM, signal_handler);
 
-					// Initialize server
-					server.running = 1;
-					server.video_streaming = 0;
-					server.audio_streaming = 0;
-					strcpy(server.client_ip, "127.0.0.1");
+	// Initialize server
+	server.running = 1;
+	server.video_streaming = 0;
+	server.audio_streaming = 0;
+	strcpy(server.client_ip, "127.0.0.1");
 
-					// Create sockets
-					server.control_socket = socket(AF_INET, SOCK_STREAM, 0);
-					server.video_socket = socket(AF_INET, SOCK_DGRAM, 0);
-					server.audio_socket = socket(AF_INET, SOCK_DGRAM, 0);
+	// Create sockets
+	server.control_socket = socket(AF_INET, SOCK_STREAM, 0);
+	server.video_socket = socket(AF_INET, SOCK_DGRAM, 0);
+	server.audio_socket = socket(AF_INET, SOCK_DGRAM, 0);
 
-					if (server.control_socket < 0 || server.video_socket < 0 ||
-					    server.audio_socket < 0) {
-						printf("Failed to create sockets: %s\n", strerror(errno));
-						return 1;
-					}
+	if (server.control_socket < 0 || server.video_socket < 0 || server.audio_socket < 0) {
+		printf("Failed to create sockets: %s\n", strerror(errno));
+		return 1;
+	}
 
-					// Allow port reuse
-					int opt = 1;
-					setsockopt(server.control_socket, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+	// Allow port reuse
+	int opt = 1;
+	setsockopt(server.control_socket, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
 
-					// Start threads
-					if (pthread_create(&server.control_thread, NULL, control_thread_func, NULL) !=
-					    0) {
-						printf("Failed to create control thread\n");
-						return 1;
-					}
+	// Start threads
+	if (pthread_create(&server.control_thread, NULL, control_thread_func, NULL) != 0) {
+		printf("Failed to create control thread\n");
+		return 1;
+	}
 
-					if (pthread_create(&server.video_thread, NULL, video_thread_func, NULL) != 0) {
-						printf("Failed to create video thread\n");
-						return 1;
-					}
+	if (pthread_create(&server.video_thread, NULL, video_thread_func, NULL) != 0) {
+		printf("Failed to create video thread\n");
+		return 1;
+	}
 
-					if (pthread_create(&server.audio_thread, NULL, audio_thread_func, NULL) != 0) {
-						printf("Failed to create audio thread\n");
-						return 1;
-					}
+	if (pthread_create(&server.audio_thread, NULL, audio_thread_func, NULL) != 0) {
+		printf("Failed to create audio thread\n");
+		return 1;
+	}
 
-					printf("Mock server started. Press Ctrl+C to stop.\n");
-					printf("Configure OBS plugin to connect to: 127.0.0.1\n\n");
+	printf("Mock server started. Press Ctrl+C to stop.\n");
+	printf("Configure OBS plugin to connect to: 127.0.0.1\n\n");
 
-					// Wait for threads to finish
-					pthread_join(server.control_thread, NULL);
-					pthread_join(server.video_thread, NULL);
-					pthread_join(server.audio_thread, NULL);
+	// Wait for threads to finish
+	pthread_join(server.control_thread, NULL);
+	pthread_join(server.video_thread, NULL);
+	pthread_join(server.audio_thread, NULL);
 
-					// Cleanup
-					close(server.control_socket);
-					close(server.video_socket);
-					close(server.audio_socket);
+	// Cleanup
+	close(server.control_socket);
+	close(server.video_socket);
+	close(server.audio_socket);
 
 	printf("Mock server stopped.\n");
 	return 0;

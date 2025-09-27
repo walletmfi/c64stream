@@ -133,6 +133,12 @@ void test_packet_header()
 	uint8_t bits_per_pixel = header[9];
 	uint16_t encoding = *(uint16_t *)(header + 10);
 
+	// Mark unused variables to prevent warnings
+	(void)pixels_per_line;
+	(void)lines_per_packet;
+	(void)bits_per_pixel;
+	(void)encoding;
+
 	bool last_packet = (line_num & 0x8000) != 0;
 	line_num &= 0x7FFF;
 

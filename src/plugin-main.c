@@ -17,7 +17,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 */
 
 #include <obs-module.h>
-#include <plugin-support.h>
+#include "plugin-support.h"
 #include <graphics/graphics.h>
 #include <media-io/video-io.h>
 #include <media-io/audio-io.h>
@@ -76,6 +76,7 @@ typedef int socket_t;
 #define C64U_NTSC_WIDTH 384
 #define C64U_NTSC_HEIGHT 240
 #define C64U_PIXELS_PER_LINE 384
+#define C64U_BYTES_PER_LINE 192 // 384 pixels / 2 (4-bit per pixel) - keeping original
 #define C64U_LINES_PER_PACKET 4
 
 // Logging control
@@ -106,24 +107,24 @@ static bool c64u_debug_logging = true;
 	} while (0)
 #define C64U_LINES_PER_PACKET 4
 
-// VIC color palette (RGB values)
+// VIC color palette (BGRA values for OBS) - converted from grab.py RGB values
 static const uint32_t vic_colors[16] = {
-	0xFF000000, // Black
-	0xFFFFFFFF, // White
-	0xFF9F4E44, // Red
-	0xFF6ABFC6, // Cyan
-	0xFFA057A3, // Purple
-	0xFF5CAB5E, // Green
-	0xFF50459B, // Blue
-	0xFFC9D487, // Yellow
-	0xFFA1683C, // Orange
-	0xFF6D5412, // Brown
-	0xFFCB7E75, // Light Red
-	0xFF626262, // Dark Grey
-	0xFF898989, // Mid Grey
-	0xFF9AE29B, // Light Green
-	0xFF887ECB, // Light Blue
-	0xFFADADAD  // Light Grey
+	0xFF000000, // 0: Black
+	0xFFEFEFEF, // 1: White
+	0xFF342F8D, // 2: Red
+	0xFFCDD46A, // 3: Cyan
+	0xFFA43598, // 4: Purple/Magenta
+	0xFF42B44C, // 5: Green
+	0xFFB1292C, // 6: Blue
+	0xFF5DEFEF, // 7: Yellow
+	0xFF204E98, // 8: Orange
+	0xFF00385B, // 9: Brown
+	0xFF6D67D1, // 10: Light Red
+	0xFF4A4A4A, // 11: Dark Grey
+	0xFF7B7B7B, // 12: Mid Grey
+	0xFF93EF9F, // 13: Light Green
+	0xFFEF6A6D, // 14: Light Blue
+	0xFFB2B2B2  // 15: Light Grey
 };
 
 struct c64u_source {
@@ -157,6 +158,9 @@ struct c64u_source {
 
 	// Synchronization
 	pthread_mutex_t frame_mutex;
+
+	// Auto-start control
+	bool auto_start_attempted;
 };
 
 // Forward declarations
@@ -335,8 +339,11 @@ static void *video_thread_func(void *data)
 {
 	struct c64u_source *context = data;
 	uint8_t packet[C64U_VIDEO_PACKET_SIZE];
+	static int packet_count = 0;
 
 	C64U_LOG_INFO("Video receiver thread started on port %u", context->video_port);
+	// Video receiver thread initialized
+	C64U_LOG_INFO("🔥 VIDEO THREAD FUNCTION STARTED - Our custom statistics code will run here!");
 
 	while (context->thread_active) {
 		ssize_t received = recv(context->video_socket, (char *)packet, (int)sizeof(packet), 0);
@@ -361,6 +368,17 @@ static void *video_thread_func(void *data)
 			continue;
 		}
 
+		// Debug: Count received packets
+		packet_count++;
+		// Technical statistics tracking - Video
+		static uint64_t last_video_log = 0;
+		static uint32_t video_bytes_period = 0;
+		static uint32_t video_packets_period = 0;
+		static uint16_t last_video_seq = 0;
+		static uint32_t video_drops = 0;
+		static uint32_t video_frames = 0;
+		static bool first_video = true;
+
 		// Parse packet header
 		uint16_t seq_num = *(uint16_t *)(packet + 0);
 		uint16_t frame_num = *(uint16_t *)(packet + 2);
@@ -370,7 +388,6 @@ static void *video_thread_func(void *data)
 		uint8_t bits_per_pixel = packet[9];
 		uint16_t encoding = *(uint16_t *)(packet + 10);
 
-		UNUSED_PARAMETER(seq_num);
 		UNUSED_PARAMETER(frame_num);
 		UNUSED_PARAMETER(pixels_per_line);
 		UNUSED_PARAMETER(bits_per_pixel);
@@ -378,6 +395,46 @@ static void *video_thread_func(void *data)
 
 		bool last_packet = (line_num & 0x8000) != 0;
 		line_num &= 0x7FFF;
+
+		// Update video statistics
+		video_bytes_period += (uint32_t)received; // Cast ssize_t to uint32_t for Windows
+		video_packets_period++;
+
+		uint64_t now = os_gettime_ns();
+		if (last_video_log == 0) {
+			last_video_log = now;
+			C64U_LOG_INFO("� Video statistics tracking initialized");
+		}
+
+		// Track packet drops (seq_num should increment by 1)
+		if (!first_video && seq_num != (uint16_t)(last_video_seq + 1)) {
+			video_drops++;
+		}
+		last_video_seq = seq_num;
+		first_video = false;
+
+		// Count frames (last packet of frame)
+		if (last_packet)
+			video_frames++;
+
+		// Log comprehensive video statistics every 5 seconds
+		uint64_t time_diff = now - last_video_log;
+		if (time_diff >= 5000000000ULL) {
+			double duration = time_diff / 1000000000.0;
+			double bandwidth_mbps = (video_bytes_period * 8.0) / (duration * 1000000.0);
+			double pps = video_packets_period / duration;
+			double fps = video_frames / duration;
+			double loss_pct = video_packets_period > 0 ? (100.0 * video_drops) / video_packets_period : 0.0;
+
+			C64U_LOG_INFO("📺 VIDEO: %.1f fps | %.2f Mbps | %.0f pps | Loss: %.1f%% | Frames: %u", fps,
+				      bandwidth_mbps, pps, loss_pct, video_frames);
+
+			// Reset period counters
+			video_bytes_period = 0;
+			video_packets_period = 0;
+			video_frames = 0;
+			last_video_log = now;
+		}
 
 		// Validate packet data
 		if (lines_per_packet != C64U_LINES_PER_PACKET || pixels_per_line != C64U_PIXELS_PER_LINE ||
@@ -394,13 +451,16 @@ static void *video_thread_func(void *data)
 			for (int line = 0;
 			     line < (int)lines_per_packet && (int)(line_num + line) < (int)context->height; line++) {
 				uint32_t *dst_line = context->frame_buffer + ((line_num + line) * C64U_PIXELS_PER_LINE);
-				uint8_t *src_line = pixel_data + (line * C64U_PIXELS_PER_LINE / 2);
+				uint8_t *src_line = pixel_data + (line * C64U_BYTES_PER_LINE);
 
 				// Convert 4-bit VIC colors to 32-bit RGBA
-				for (int x = 0; x < C64U_PIXELS_PER_LINE / 2; x++) {
+				// Each byte contains 2 pixels - LOW NIBBLE FIRST (matches grab.py)
+				for (int x = 0; x < C64U_BYTES_PER_LINE; x++) {
 					uint8_t pixel_pair = src_line[x];
-					uint8_t color1 = pixel_pair & 0x0F;
-					uint8_t color2 = (pixel_pair >> 4) & 0x0F;
+					uint8_t color1 = pixel_pair & 0x0F; // Low nibble first pixel
+					uint8_t color2 = pixel_pair >> 4;   // High nibble second pixel
+
+					// Pixel processing (debug logging removed for performance)
 
 					dst_line[x * 2] = vic_colors[color1];
 					dst_line[x * 2 + 1] = vic_colors[color2];
@@ -409,7 +469,7 @@ static void *video_thread_func(void *data)
 
 			if (last_packet) {
 				context->frame_ready = true;
-				C64U_LOG_DEBUG("Frame %u completed", frame_num);
+				// Frame completed (logged periodically in statistics)
 			}
 
 			pthread_mutex_unlock(&context->frame_mutex);
@@ -453,8 +513,51 @@ static void *audio_thread_func(void *data)
 
 		// Parse audio packet
 		uint16_t seq_num = *(uint16_t *)(packet);
-		UNUSED_PARAMETER(seq_num);
 		int16_t *audio_data = (int16_t *)(packet + C64U_AUDIO_HEADER_SIZE);
+
+		// Technical statistics tracking - Audio
+		static int audio_packet_count = 0;
+		static uint64_t last_audio_log = 0;
+		static uint32_t audio_bytes_period = 0;
+		static uint32_t audio_packets_period = 0;
+		static uint16_t last_audio_seq = 0;
+		static uint32_t audio_drops = 0;
+		static bool first_audio = true;
+
+		audio_packet_count++;
+		audio_bytes_period += (uint32_t)received; // Cast ssize_t to uint32_t for Windows
+		audio_packets_period++;
+
+		uint64_t audio_now = os_gettime_ns();
+		if (last_audio_log == 0) {
+			last_audio_log = audio_now;
+			C64U_LOG_INFO("🎵 Audio statistics tracking initialized");
+		}
+
+		// Track audio packet drops
+		if (!first_audio && seq_num != (uint16_t)(last_audio_seq + 1)) {
+			audio_drops++;
+		}
+		last_audio_seq = seq_num;
+		first_audio = false;
+
+		// Log comprehensive audio statistics every 5 seconds
+		uint64_t audio_time_diff = audio_now - last_audio_log;
+		if (audio_time_diff >= 5000000000ULL) {
+			double duration = audio_time_diff / 1000000000.0;
+			double bandwidth_mbps = (audio_bytes_period * 8.0) / (duration * 1000000.0);
+			double pps = audio_packets_period / duration;
+			double loss_pct = audio_packets_period > 0 ? (100.0 * audio_drops) / audio_packets_period : 0.0;
+			double sample_rate = audio_packets_period * 192.0 / duration; // 192 samples per packet
+
+			C64U_LOG_INFO("🔊 AUDIO: %.0f Hz | %.2f Mbps | %.0f pps | Loss: %.1f%% | Packets: %u",
+				      sample_rate, bandwidth_mbps, pps, loss_pct, audio_packet_count);
+
+			// Reset period counters
+			audio_bytes_period = 0;
+			audio_packets_period = 0;
+			last_audio_log = audio_now;
+		}
 
 		// Send audio to OBS (192 stereo samples = 384 16-bit values)
 		struct obs_source_audio audio_frame = {0};
@@ -475,6 +578,8 @@ static void *audio_thread_func(void *data)
 static void *c64u_create(obs_data_t *settings, obs_source_t *source)
 {
 	C64U_LOG_INFO("Creating C64U source");
+
+	// C64U source creation
 
 	// Initialize networking on first use
 	static bool networking_initialized = false;
@@ -537,6 +642,7 @@ static void *c64u_create(obs_data_t *settings, obs_source_t *source)
 	context->thread_active = false;
 	context->video_thread_active = false;
 	context->audio_thread_active = false;
+	context->auto_start_attempted = false;
 
 	C64U_LOG_INFO("C64U source created - IP: %s, Video: %u, Audio: %u", context->ip_address, context->video_port,
 		      context->audio_port);
@@ -757,40 +863,78 @@ static void c64u_render(void *data, gs_effect_t *effect)
 	struct c64u_source *context = data;
 	UNUSED_PARAMETER(effect);
 
-	// For now, always show a simple colored background to prove the plugin works
-	// This will be replaced with actual video rendering when streaming is active
-	gs_effect_t *solid = obs_get_base_effect(OBS_EFFECT_SOLID);
-	gs_eparam_t *color = gs_effect_get_param_by_name(solid, "color");
-
-	if (!solid || !color) {
-		// Fallback if effects aren't available
-		return;
+	// Auto-start streaming on first render (when source is truly active)
+	if (!context->auto_start_attempted) {
+		context->auto_start_attempted = true;
+		if (!context->streaming) {
+			C64U_LOG_INFO("🚀 Auto-starting C64U streaming (source now active)...");
+			c64u_start_streaming(context);
+		}
 	}
 
-	gs_technique_t *tech = gs_effect_get_technique(solid, "Solid");
-	if (!tech) {
-		return;
-	}
-
-	gs_technique_begin(tech);
-	gs_technique_begin_pass(tech, 0);
-
-	// Check if we have streaming data
+	// Check if we have streaming data and frame ready
 	if (context->streaming && context->frame_ready && context->frame_buffer) {
-		// TODO: Render actual C64U video frame
-		// For now, show green to indicate streaming is active
-		struct vec4 green = {0.2f, 0.6f, 0.2f, 1.0f};
-		gs_effect_set_vec4(color, &green);
+		// Render actual C64U video frame from frame buffer
+
+		// Lock the frame buffer to ensure thread safety
+		if (pthread_mutex_lock(&context->frame_mutex) == 0) {
+			// Create texture from frame buffer data
+			gs_texture_t *texture = gs_texture_create(context->width, context->height, GS_RGBA, 1,
+								  (const uint8_t **)&context->frame_buffer, 0);
+
+			if (texture) {
+				// Use default effect for texture rendering
+				gs_effect_t *default_effect = obs_get_base_effect(OBS_EFFECT_DEFAULT);
+				if (default_effect) {
+					gs_eparam_t *image_param = gs_effect_get_param_by_name(default_effect, "image");
+					if (image_param) {
+						gs_effect_set_texture(image_param, texture);
+
+						gs_technique_t *tech = gs_effect_get_technique(default_effect, "Draw");
+						if (tech) {
+							gs_technique_begin(tech);
+							gs_technique_begin_pass(tech, 0);
+							gs_draw_sprite(texture, 0, context->width, context->height);
+							gs_technique_end_pass(tech);
+							gs_technique_end(tech);
+						}
+					}
+				}
+
+				// Clean up texture
+				gs_texture_destroy(texture);
+			}
+
+			pthread_mutex_unlock(&context->frame_mutex);
+		}
 	} else {
-		// Show dark blue to indicate plugin loaded but no streaming
-		struct vec4 dark_blue = {0.1f, 0.2f, 0.4f, 1.0f};
-		gs_effect_set_vec4(color, &dark_blue);
+		// Show colored background to indicate plugin state
+		gs_effect_t *solid = obs_get_base_effect(OBS_EFFECT_SOLID);
+		gs_eparam_t *color = gs_effect_get_param_by_name(solid, "color");
+
+		if (solid && color) {
+			gs_technique_t *tech = gs_effect_get_technique(solid, "Solid");
+			if (tech) {
+				gs_technique_begin(tech);
+				gs_technique_begin_pass(tech, 0);
+
+				if (context->streaming) {
+					// Show yellow if streaming but no frame ready yet
+					struct vec4 yellow = {0.8f, 0.8f, 0.2f, 1.0f};
+					gs_effect_set_vec4(color, &yellow);
+				} else {
+					// Show dark blue to indicate plugin loaded but no streaming
+					struct vec4 dark_blue = {0.1f, 0.2f, 0.4f, 1.0f};
+					gs_effect_set_vec4(color, &dark_blue);
+				}
+
+				gs_draw_sprite(NULL, 0, context->width, context->height);
+
+				gs_technique_end_pass(tech);
+				gs_technique_end(tech);
+			}
+		}
 	}
-
-	gs_draw_sprite(NULL, 0, context->width, context->height);
-
-	gs_technique_end_pass(tech);
-	gs_technique_end(tech);
 }
 
 static uint32_t c64u_get_width(void *data)
@@ -831,6 +975,8 @@ static bool start_stop_clicked(obs_properties_t *props, obs_property_t *property
 
 static obs_properties_t *c64u_properties(void *data)
 {
+	// C64U properties setup
+
 	struct c64u_source *context = data;
 	obs_properties_t *props = obs_properties_create();
 
@@ -862,6 +1008,8 @@ static obs_properties_t *c64u_properties(void *data)
 
 static void c64u_defaults(obs_data_t *settings)
 {
+	// C64U defaults initialization
+
 	obs_data_set_default_bool(settings, "debug_logging", true);
 	obs_data_set_default_string(settings, "ip_address", C64U_DEFAULT_IP);
 	obs_data_set_default_int(settings, "video_port", C64U_DEFAULT_VIDEO_PORT);
@@ -874,6 +1022,9 @@ OBS_MODULE_USE_DEFAULT_LOCALE(PLUGIN_NAME, "en-US")
 bool obs_module_load(void)
 {
 	C64U_LOG_INFO("Loading C64U plugin (version %s)", PLUGIN_VERSION);
+
+	// DEBUG: This will always be hit when the plugin loads
+	// Module loading
 
 	struct obs_source_info c64u_info = {.id = "c64u_source",
 					    .type = OBS_SOURCE_TYPE_INPUT,

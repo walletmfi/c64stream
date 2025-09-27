@@ -5,6 +5,9 @@
     "git.enableSmartCommit": true,
     "git.autoStageFilePattern": "**/*",
     "git.autoAddNewFolders": true,
+    "cmake.configureOnOpen": true,
+    "cmake.buildDirectory": "${workspaceFolder}/build_x86_64",
+    "C_Cpp.default.configurationProvider": "ms-vscode.cmake-tools",
     "[c]": {
         "editor.defaultFormatter": "xaver.clang-format",
         "editor.formatOnSave": true

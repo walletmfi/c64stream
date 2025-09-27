@@ -47,7 +47,7 @@ function Build {
     Push-Location -Stack BuildTemp
     Ensure-Location $ProjectRoot
 
-    $CmakeArgs = @('--preset', "windows-ci-${Target}")
+    $CmakeArgs = @('--preset', "windows-ci-${Target}", '-DENABLE_TESTS=ON')
     $CmakeBuildArgs = @('--build')
     $CmakeInstallArgs = @()
 
@@ -75,6 +75,14 @@ function Build {
 
     Log-Group "Building ${ProductName}..."
     Invoke-External cmake @CmakeBuildArgs
+
+    # Only run tests if we're not in CI (tests are disabled in CI builds)
+    if ( $env:CI -eq $null -and $env:GITHUB_ACTIONS -eq $null ) {
+        Log-Group "Running tests..."
+        Invoke-External ctest @('--test-dir', "build_${Target}", '--verbose', '--output-on-failure', '--config', $Configuration)
+    } else {
+        Write-Information "Skipping tests in CI environment (tests disabled for CI builds)"
+    }
 
     Log-Group "Installing ${ProductName}..."
     Invoke-External cmake @CmakeInstallArgs

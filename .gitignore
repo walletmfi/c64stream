@@ -9,6 +9,7 @@
 !/doc
 !/src
 !/tests
+!/tools
 !/.mcp
 !.clang-format
 !.gersemirc
@@ -20,14 +21,63 @@
 !README.md
 !build-docker.sh
 
+# Include development helper files
+!local-build.sh
+!local-act.sh
+!install-ubuntu-deps.sh
+!LOCAL-DEVELOPMENT.md
+
+# Include private folder (for private repo only - excluded in public sync)
+!private
+
 # Exclude Visual Code settings
 !.vscode
 
 # Exclude lock files
 *.lock.json
 
+# Exclude compile commands (machine-specific paths)
+compile_commands.json
+
 # Exclude macOS legacy resource forks
 .DS_Store
 
+# Exclude backup files and logs
+*.backup
+*.log
+*.tmp
+obs_log.txt
+
 # Exclude CMake build number cache
 /cmake/.CMakeBuildNumber
+
+# Build directories and artifacts
+build_*/
+tests/build*
+
+# CMake generated files (everywhere)
+CMakeFiles/
+CMakeCache.txt
+CTestTestfile.cmake
+Makefile
+cmake_install.cmake
+Testing/
+
+# Test executables and build artifacts
+tests/CMakeFiles/
+tests/Testing/
+tests/CMakeCache.txt
+tests/CTestTestfile.cmake
+tests/Makefile
+tests/cmake_install.cmake
+tests/test_integration
+tests/c64u_mock_server
+tests/test_vic_colors
+
+# Security - exclude secrets
+.secrets
+
+# Only track source files in tests
+!/tests/*.c
+!/tests/*.h
+!/tests/CMakeLists.txt
