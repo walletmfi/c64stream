@@ -1,0 +1,28 @@
+{
+    "editor.formatOnSave": true,
+    "editor.defaultFormatter": "xaver.clang-format",
+    "C_Cpp.formatting": "clangFormat",
+    "git.enableSmartCommit": true,
+    "git.autoStageFilePattern": "**/*",
+    "git.autoAddNewFolders": true,
+    "[c]": {
+        "editor.defaultFormatter": "xaver.clang-format",
+        "editor.formatOnSave": true
+    },
+    "[cpp]": {
+        "editor.defaultFormatter": "xaver.clang-format",
+        "editor.formatOnSave": true
+    },
+    "github.copilot.advanced": {
+        "mcp": {
+            "enabled": true,
+            "servers": {
+                "github": {
+                    "type": "http",
+                    "url": "https://api.githubcopilot.com/mcp/",
+                    "authProvider": "github"
+                }
+            }
+        }
+    }
+}
