@@ -31,7 +31,9 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <ws2tcpip.h>
 #include <io.h>
 #include <windows.h>
+#include <iphlpapi.h>
 #pragma comment(lib, "ws2_32.lib")
+#pragma comment(lib, "iphlpapi.lib")
 #define close(s) closesocket(s)
 #define SHUT_RDWR SD_BOTH
 typedef int socklen_t;
@@ -51,6 +53,18 @@ typedef long long ssize_t;
 #include <unistd.h>
 #include <fcntl.h>
 #include <errno.h>
+#ifdef __APPLE__
+#include <ifaddrs.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <netdb.h>
+#elif __linux__
+#include <ifaddrs.h>
+#include <netinet/in.h>
+#include <sys/types.h>
+#include <netdb.h>
+#endif
 typedef int socket_t;
 #define INVALID_SOCKET_VALUE -1
 // Format specifier for ssize_t on POSIX (typically 32-bit or 64-bit depending on platform)
@@ -155,7 +169,10 @@ struct c64u_source {
 	obs_source_t *source;
 
 	// Configuration
-	char ip_address[64];
+	char ip_address[64];     // C64 IP Address (C64 Ultimate device)
+	char obs_ip_address[64]; // OBS IP Address (this machine)
+	bool auto_detect_ip;
+	bool initial_ip_detected; // Flag to track if initial IP detection was done
 	uint32_t video_port;
 	uint32_t audio_port;
 	bool streaming;
@@ -234,6 +251,108 @@ static bool c64u_init_networking(void)
 	C64U_LOG_DEBUG("Windows networking initialized");
 #endif
 	return true;
+}
+
+// Function to detect local machine's IP address
+static bool c64u_detect_local_ip(char *ip_buffer, size_t buffer_size)
+{
+	if (!ip_buffer || buffer_size < 16) {
+		return false;
+	}
+
+	// Initialize buffer
+	strncpy(ip_buffer, "127.0.0.1", buffer_size - 1);
+	ip_buffer[buffer_size - 1] = '\0';
+
+#ifdef _WIN32
+	// Windows implementation using GetAdaptersInfo
+	PIP_ADAPTER_INFO adapter_info = NULL;
+	ULONG out_buf_len = 0;
+	DWORD ret_val = 0;
+
+	// Get buffer size needed
+	ret_val = GetAdaptersInfo(adapter_info, &out_buf_len);
+	if (ret_val == ERROR_BUFFER_OVERFLOW) {
+		adapter_info = (IP_ADAPTER_INFO *)malloc(out_buf_len);
+		if (adapter_info != NULL) {
+			ret_val = GetAdaptersInfo(adapter_info, &out_buf_len);
+			if (ret_val == NO_ERROR) {
+				PIP_ADAPTER_INFO adapter = adapter_info;
+				while (adapter) {
+					// Skip loopback and inactive adapters
+					if (adapter->Type != MIB_IF_TYPE_LOOPBACK &&
+					    strcmp(adapter->IpAddressList.IpAddress.String, "0.0.0.0") != 0) {
+						strncpy(ip_buffer, adapter->IpAddressList.IpAddress.String,
+							buffer_size - 1);
+						ip_buffer[buffer_size - 1] = '\0';
+						C64U_LOG_INFO("Detected Windows IP address: %s (adapter: %s)",
+							      ip_buffer, adapter->AdapterName);
+						free(adapter_info);
+						return true;
+					}
+					adapter = adapter->Next;
+				}
+			}
+			free(adapter_info);
+		}
+	}
+	C64U_LOG_WARNING("Failed to detect Windows IP address, using fallback");
+	return false;
+
+#elif defined(__APPLE__) || defined(__linux__)
+	// Unix/Linux/macOS implementation using getifaddrs
+	struct ifaddrs *ifaddrs_ptr, *ifa;
+	char host[NI_MAXHOST];
+
+	if (getifaddrs(&ifaddrs_ptr) == -1) {
+		C64U_LOG_WARNING("getifaddrs failed: %s", strerror(errno));
+		return false;
+	}
+
+	for (ifa = ifaddrs_ptr; ifa != NULL; ifa = ifa->ifa_next) {
+		if (ifa->ifa_addr == NULL || ifa->ifa_addr->sa_family != AF_INET) {
+			continue;
+		}
+
+		// Skip loopback interface
+		if (strcmp(ifa->ifa_name, "lo") == 0 || strcmp(ifa->ifa_name, "lo0") == 0) {
+			continue;
+		}
+
+		int result = getnameinfo(ifa->ifa_addr, sizeof(struct sockaddr_in), host, NI_MAXHOST, NULL, 0,
+					 NI_NUMERICHOST);
+		if (result != 0) {
+			continue;
+		}
+
+		// Skip if it's a localhost address
+		if (strcmp(host, "127.0.0.1") == 0) {
+			continue;
+		}
+
+		// We found a valid IP address
+		strncpy(ip_buffer, host, buffer_size - 1);
+		ip_buffer[buffer_size - 1] = '\0';
+		C64U_LOG_INFO("Detected %s IP address: %s (interface: %s)",
+#ifdef __APPLE__
+			      "macOS",
+#else
+			      "Linux",
+#endif
+			      ip_buffer, ifa->ifa_name);
+		freeifaddrs(ifaddrs_ptr);
+		return true;
+	}
+
+	freeifaddrs(ifaddrs_ptr);
+	C64U_LOG_WARNING("No suitable network interface found, using fallback");
+	return false;
+
+#else
+	// Fallback for other platforms
+	C64U_LOG_WARNING("IP detection not implemented for this platform, using fallback");
+	return false;
+#endif
 }
 
 static void c64u_cleanup_networking(void)
@@ -412,35 +531,51 @@ static void send_control_command(struct c64u_source *context, bool enable, uint8
 		return; // Error already logged in create_tcp_socket
 	}
 
-	uint8_t cmd[6];
-	int cmd_len;
-
 	if (enable) {
-		// Enable stream command: 20 FF 02+stream_id 00 00 00
-		cmd[0] = 0x20;
-		cmd[1] = 0xFF;
-		cmd[2] = 0x02 + stream_id;
-		cmd[3] = 0x00;
-		cmd[4] = 0x00;
-		cmd[5] = 0x00;
-		cmd_len = 6;
-		C64U_LOG_INFO("Sending start command for stream %u to %s", stream_id, context->ip_address);
-	} else {
-		// Disable stream command: 30 FF 03+stream_id 00
-		cmd[0] = 0x30;
-		cmd[1] = 0xFF;
-		cmd[2] = 0x03 + stream_id;
-		cmd[3] = 0x00;
-		cmd_len = 4;
-		C64U_LOG_INFO("Sending stop command for stream %u to %s", stream_id, context->ip_address);
-	}
+		// Get the OBS IP to send as destination
+		const char *client_ip = context->auto_detect_ip ? context->obs_ip_address : "192.168.1.100";
+		size_t ip_len = strlen(client_ip);
 
-	ssize_t sent = send(sock, (const char *)cmd, cmd_len, 0);
-	if (sent != (ssize_t)cmd_len) {
-		int error = c64u_get_socket_error();
-		C64U_LOG_ERROR("Failed to send control command: %s", c64u_get_socket_error_string(error));
+		// Enable stream command with destination IP
+		// Command structure: <command word LE> <param length LE> <duration LE> <IP string>
+		// According to docs: FF2n where n is stream ID (0=video, 1=audio)
+		uint8_t cmd[64];           // Large enough buffer for IP string
+		cmd[0] = 0x20 + stream_id; // 0x20 for video (stream 0), 0x21 for audio (stream 1)
+		cmd[1] = 0xFF;
+		cmd[2] = (uint8_t)(2 + ip_len); // Parameter length: 2 bytes duration + IP string length
+		cmd[3] = 0x00;
+		cmd[4] = 0x00; // Duration: 0 = forever (little endian)
+		cmd[5] = 0x00;
+		memcpy(&cmd[6], client_ip, ip_len); // Copy IP string
+
+		int cmd_len = 6 + (int)ip_len;
+		C64U_LOG_INFO("Sending start command for stream %u to %s with client IP: %s", stream_id,
+			      context->ip_address, client_ip);
+
+		ssize_t sent = send(sock, (const char *)cmd, cmd_len, 0);
+		if (sent != (ssize_t)cmd_len) {
+			int error = c64u_get_socket_error();
+			C64U_LOG_ERROR("Failed to send start control command: %s", c64u_get_socket_error_string(error));
+		} else {
+			C64U_LOG_DEBUG("Start control command sent successfully");
+		}
 	} else {
-		C64U_LOG_DEBUG("Control command sent successfully");
+		// Disable stream command: FF3n where n is stream ID
+		uint8_t cmd[4];
+		cmd[0] = 0x30 + stream_id; // 0x30 for video (stream 0), 0x31 for audio (stream 1)
+		cmd[1] = 0xFF;
+		cmd[2] = 0x00; // No parameters
+		cmd[3] = 0x00;
+		int cmd_len = 4;
+		C64U_LOG_INFO("Sending stop command for stream %u to C64 %s", stream_id, context->ip_address);
+
+		ssize_t sent = send(sock, (const char *)cmd, cmd_len, 0);
+		if (sent != (ssize_t)cmd_len) {
+			int error = c64u_get_socket_error();
+			C64U_LOG_ERROR("Failed to send stop control command: %s", c64u_get_socket_error_string(error));
+		} else {
+			C64U_LOG_DEBUG("Stop control command sent successfully");
+		}
 	}
 
 	close(sock);
@@ -841,9 +976,34 @@ static void *c64u_create(obs_data_t *settings, obs_source_t *source)
 	// Initialize configuration from settings
 	const char *ip = obs_data_get_string(settings, "ip_address");
 	strncpy(context->ip_address, ip ? ip : C64U_DEFAULT_IP, sizeof(context->ip_address) - 1);
+	context->auto_detect_ip = obs_data_get_bool(settings, "auto_detect_ip");
 	context->video_port = (uint32_t)obs_data_get_int(settings, "video_port");
 	context->audio_port = (uint32_t)obs_data_get_int(settings, "audio_port");
 	context->streaming = false;
+
+	// Initialize OBS IP address from settings or auto-detect on first run
+	memset(context->obs_ip_address, 0, sizeof(context->obs_ip_address));
+	const char *saved_obs_ip = obs_data_get_string(settings, "obs_ip_address");
+
+	if (saved_obs_ip && strlen(saved_obs_ip) > 0) {
+		// Use previously saved/configured OBS IP address
+		strncpy(context->obs_ip_address, saved_obs_ip, sizeof(context->obs_ip_address) - 1);
+		context->initial_ip_detected = true;
+		C64U_LOG_INFO("Using saved OBS IP address: %s", context->obs_ip_address);
+	} else {
+		// First time - detect local IP address
+		if (c64u_detect_local_ip(context->obs_ip_address, sizeof(context->obs_ip_address))) {
+			C64U_LOG_INFO("Successfully detected OBS IP address: %s", context->obs_ip_address);
+			context->initial_ip_detected = true;
+			// Save the detected IP to settings for future use
+			obs_data_set_string(settings, "obs_ip_address", context->obs_ip_address);
+		} else {
+			C64U_LOG_WARNING("Failed to detect OBS IP address, using fallback");
+			strncpy(context->obs_ip_address, "192.168.1.100", sizeof(context->obs_ip_address) - 1);
+			context->initial_ip_detected = false;
+			obs_data_set_string(settings, "obs_ip_address", context->obs_ip_address);
+		}
+	}
 
 	// Set default ports if not configured
 	if (context->video_port == 0)
@@ -903,8 +1063,13 @@ static void *c64u_create(obs_data_t *settings, obs_source_t *source)
 	context->audio_thread_active = false;
 	context->auto_start_attempted = false;
 
-	C64U_LOG_INFO("C64U source created - IP: %s, Video: %u, Audio: %u", context->ip_address, context->video_port,
-		      context->audio_port);
+	C64U_LOG_INFO("C64U source created - C64 IP: %s, OBS IP: %s, Video: %u, Audio: %u", context->ip_address,
+		      context->obs_ip_address, context->video_port, context->audio_port);
+
+	// Auto-start streaming after plugin initialization
+	C64U_LOG_INFO("🚀 Auto-starting C64U streaming after plugin initialization...");
+	c64u_start_streaming(context);
+	context->auto_start_attempted = true;
 
 	return context;
 }
@@ -970,10 +1135,25 @@ static void c64u_update(void *data, obs_data_t *settings)
 
 	// Update debug logging setting
 	c64u_debug_logging = obs_data_get_bool(settings, "debug_logging");
-	C64U_LOG_DEBUG("Debug logging %s", c64u_debug_logging ? "enabled" : "disabled");
+	C64U_LOG_DEBUG("Debug logging %s", c64u_debug_logging ? "enabled" : "disabled"); // Update IP detection setting
+	bool new_auto_detect = obs_data_get_bool(settings, "auto_detect_ip");
+	if (new_auto_detect != context->auto_detect_ip || new_auto_detect) {
+		context->auto_detect_ip = new_auto_detect;
+		if (new_auto_detect) {
+			// Re-detect IP address
+			if (c64u_detect_local_ip(context->obs_ip_address, sizeof(context->obs_ip_address))) {
+				C64U_LOG_INFO("Updated OBS IP address: %s", context->obs_ip_address);
+				// Save the updated IP to settings
+				obs_data_set_string(settings, "obs_ip_address", context->obs_ip_address);
+			} else {
+				C64U_LOG_WARNING("Failed to update OBS IP address");
+			}
+		}
+	}
 
 	// Update configuration
 	const char *new_ip = obs_data_get_string(settings, "ip_address");
+	const char *new_obs_ip = obs_data_get_string(settings, "obs_ip_address");
 	uint32_t new_video_port = (uint32_t)obs_data_get_int(settings, "video_port");
 	uint32_t new_audio_port = (uint32_t)obs_data_get_int(settings, "audio_port");
 
@@ -985,37 +1165,38 @@ static void c64u_update(void *data, obs_data_t *settings)
 	if (new_audio_port == 0)
 		new_audio_port = C64U_DEFAULT_AUDIO_PORT;
 
-	// Check if we need to restart streaming
-	bool restart_needed = context->streaming &&
-			      (strcmp(context->ip_address, new_ip) != 0 || context->video_port != new_video_port ||
-			       context->audio_port != new_audio_port);
-
-	if (restart_needed) {
-		C64U_LOG_INFO("Restarting streaming due to configuration change");
-		c64u_stop_streaming(context);
-	}
-
 	// Update configuration
 	strncpy(context->ip_address, new_ip, sizeof(context->ip_address) - 1);
 	context->ip_address[sizeof(context->ip_address) - 1] = '\0';
+	if (new_obs_ip) {
+		strncpy(context->obs_ip_address, new_obs_ip, sizeof(context->obs_ip_address) - 1);
+		context->obs_ip_address[sizeof(context->obs_ip_address) - 1] = '\0';
+	}
 	context->video_port = new_video_port;
 	context->audio_port = new_audio_port;
 
-	if (restart_needed) {
-		// Restart streaming with new settings
-		c64u_start_streaming(context);
-	}
+	// Always start streaming with current configuration (no stop/restart)
+	C64U_LOG_INFO("Applying configuration and starting streaming");
+	c64u_start_streaming(context);
 }
 
 static void c64u_start_streaming(struct c64u_source *context)
 {
-	if (!context || context->streaming) {
-		C64U_LOG_WARNING("Cannot start streaming - invalid context or already streaming");
+	if (!context) {
+		C64U_LOG_WARNING("Cannot start streaming - invalid context");
 		return;
 	}
 
-	C64U_LOG_INFO("Starting C64U streaming to %s (video:%u, audio:%u)...", context->ip_address, context->video_port,
-		      context->audio_port);
+	// If already streaming, just send start commands again (no need to recreate sockets/threads)
+	if (context->streaming) {
+		C64U_LOG_INFO("Already streaming - sending start commands with current config");
+		send_control_command(context, true, 0); // Start video
+		send_control_command(context, true, 1); // Start audio
+		return;
+	}
+
+	C64U_LOG_INFO("Starting C64U streaming to C64 %s (OBS IP: %s, video:%u, audio:%u)...", context->ip_address,
+		      context->obs_ip_address, context->video_port, context->audio_port);
 
 	// Create UDP sockets
 	context->video_socket = create_udp_socket(context->video_port);
@@ -1133,14 +1314,7 @@ static void c64u_render(void *data, gs_effect_t *effect)
 
 	render_calls++;
 
-	// Auto-start streaming on first render (when source is truly active)
-	if (!context->auto_start_attempted) {
-		context->auto_start_attempted = true;
-		if (!context->streaming) {
-			C64U_LOG_INFO("🚀 Auto-starting C64U streaming (source now active)...");
-			c64u_start_streaming(context);
-		}
-	}
+	// Note: Auto-start streaming now happens in c64u_create, not on first render
 
 	// Check if we have streaming data and frame ready
 	if (context->streaming && context->frame_ready && context->frame_buffer_front) {
@@ -1255,39 +1429,33 @@ static const char *c64u_get_name(void *unused)
 	return "C64U Display";
 }
 
-static bool start_stop_clicked(obs_properties_t *props, obs_property_t *property, void *data)
-{
-	UNUSED_PARAMETER(props);
-	UNUSED_PARAMETER(property);
-
-	struct c64u_source *context = data;
-
-	if (context->streaming) {
-		c64u_stop_streaming(context);
-		obs_property_set_description(property, "Start Streaming");
-	} else {
-		c64u_start_streaming(context);
-		obs_property_set_description(property, "Stop Streaming");
-	}
-
-	return true; // Refresh properties
-}
-
 static obs_properties_t *c64u_properties(void *data)
 {
 	// C64U properties setup
+	UNUSED_PARAMETER(data);
 
-	struct c64u_source *context = data;
 	obs_properties_t *props = obs_properties_create();
 
 	// Debug logging toggle
 	obs_property_t *debug_prop = obs_properties_add_bool(props, "debug_logging", "Enable Debug Logging");
 	obs_property_set_long_description(debug_prop, "Enable detailed logging for debugging C64U connection issues");
 
-	// IP Address
-	obs_property_t *ip_prop = obs_properties_add_text(props, "ip_address", "C64U IP Address", OBS_TEXT_DEFAULT);
+	// C64 IP Address
+	obs_property_t *ip_prop = obs_properties_add_text(props, "ip_address", "C64 IP Address", OBS_TEXT_DEFAULT);
 	obs_property_set_long_description(
-		ip_prop, "IP address of the C64 Ultimate device. Leave as 0.0.0.0 to skip control commands.");
+		ip_prop,
+		"IP address or DNS name of the C64 Ultimate device. Leave as 0.0.0.0 to skip control commands.");
+
+	// OBS IP Address (editable)
+	obs_property_t *obs_ip_prop =
+		obs_properties_add_text(props, "obs_ip_address", "OBS IP Address", OBS_TEXT_DEFAULT);
+	obs_property_set_long_description(
+		obs_ip_prop, "IP address of this OBS machine. C64 Ultimate will stream video/audio to this address.");
+
+	// Auto-detect IP toggle
+	obs_property_t *auto_ip_prop = obs_properties_add_bool(props, "auto_detect_ip", "Use Auto-detected OBS IP");
+	obs_property_set_long_description(auto_ip_prop,
+					  "Use the automatically detected OBS IP address in streaming commands");
 
 	// Video Port
 	obs_property_t *video_port_prop = obs_properties_add_int(props, "video_port", "Video Port", 1024, 65535, 1);
@@ -1297,12 +1465,6 @@ static obs_properties_t *c64u_properties(void *data)
 	obs_property_t *audio_port_prop = obs_properties_add_int(props, "audio_port", "Audio Port", 1024, 65535, 1);
 	obs_property_set_long_description(audio_port_prop, "UDP port for audio stream (default: 11001)");
 
-	// Start/Stop button
-	obs_property_t *button_prop = obs_properties_add_button(
-		props, "start_stop", context && context->streaming ? "Stop Streaming" : "Start Streaming",
-		start_stop_clicked);
-	obs_property_set_long_description(button_prop, "Start or stop streaming from the C64 Ultimate device");
-
 	return props;
 }
 
@@ -1311,7 +1473,9 @@ static void c64u_defaults(obs_data_t *settings)
 	// C64U defaults initialization
 
 	obs_data_set_default_bool(settings, "debug_logging", true);
+	obs_data_set_default_bool(settings, "auto_detect_ip", true);
 	obs_data_set_default_string(settings, "ip_address", C64U_DEFAULT_IP);
+	obs_data_set_default_string(settings, "obs_ip_address", ""); // Empty by default, will be auto-detected
 	obs_data_set_default_int(settings, "video_port", C64U_DEFAULT_VIDEO_PORT);
 	obs_data_set_default_int(settings, "audio_port", C64U_DEFAULT_AUDIO_PORT);
 }
