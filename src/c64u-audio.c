@@ -5,6 +5,7 @@
 #include "c64u-types.h"
 #include "c64u-protocol.h"
 #include "c64u-network.h"
+#include "c64u-record.h" // For recording functions
 
 // Audio thread function
 void *audio_thread_func(void *data)
@@ -93,6 +94,12 @@ void *audio_thread_func(void *data)
         audio_frame.format = AUDIO_FORMAT_16BIT;
         audio_frame.samples_per_sec = 48000; // Will be adjusted for PAL/NTSC
         audio_frame.timestamp = os_gettime_ns();
+
+        // Record audio data if recording is enabled
+        if (context->record_video) {
+            record_audio_data(context, (const uint8_t *)audio_data,
+                              192 * 2 * 2); // 192 stereo samples * 2 bytes per sample
+        }
 
         obs_source_output_audio(context->source, &audio_frame);
     }

@@ -7,8 +7,11 @@
 #include "c64u-types.h"
 #include "c64u-protocol.h"
 #include "c64u-network.h"
+#include "c64u-record.h"
 
-// VIC color palette (BGRA values for OBS) - converted from grab.py RGB values
+#include "c64u-protocol.h"
+
+// VIC-II color palette (16 colors) in RGBA format
 const uint32_t vic_colors[16] = {
     0xFF000000, // 0: Black
     0xFFEFEFEF, // 1: White
@@ -49,6 +52,16 @@ bool is_frame_timeout(struct frame_assembly *frame)
 
 void swap_frame_buffers(struct c64u_source *context)
 {
+    // Save frame to disk if enabled (before swap to avoid race conditions)
+    if (context->save_frames) {
+        save_frame_as_bmp(context, context->frame_buffer_back);
+    }
+
+    // Record frame to video file if recording is enabled
+    if (context->record_video) {
+        record_video_frame(context, context->frame_buffer_back);
+    }
+
     // Atomically swap front and back buffers
     uint32_t *temp = context->frame_buffer_front;
     context->frame_buffer_front = context->frame_buffer_back;
@@ -82,6 +95,157 @@ void assemble_frame_to_buffer(struct c64u_source *context, struct frame_assembly
                 dst_line[x * 2 + 1] = vic_colors[color2];
             }
         }
+    }
+}
+
+// Delay queue management functions
+void init_delay_queue(struct c64u_source *context)
+{
+    if (pthread_mutex_lock(&context->delay_mutex) == 0) {
+        // Allocate delay queue buffers if needed (max delay + buffer)
+        uint32_t needed_size = context->render_delay_frames + 10; // Extra buffer for safety
+
+        if (context->delayed_frame_queue == NULL || needed_size > 110) { // Current max allocated
+            if (context->delayed_frame_queue) {
+                bfree(context->delayed_frame_queue);
+            }
+            if (context->delay_sequence_queue) {
+                bfree(context->delay_sequence_queue);
+            }
+
+            size_t frame_size = context->width * context->height * 4; // RGBA
+            context->delayed_frame_queue = bmalloc(frame_size * needed_size);
+            context->delay_sequence_queue = bmalloc(sizeof(uint16_t) * needed_size);
+
+            if (!context->delayed_frame_queue || !context->delay_sequence_queue) {
+                C64U_LOG_ERROR("Failed to allocate delay queue buffers");
+                if (context->delayed_frame_queue) {
+                    bfree(context->delayed_frame_queue);
+                    context->delayed_frame_queue = NULL;
+                }
+                if (context->delay_sequence_queue) {
+                    bfree(context->delay_sequence_queue);
+                    context->delay_sequence_queue = NULL;
+                }
+                pthread_mutex_unlock(&context->delay_mutex);
+                return;
+            }
+        }
+
+        context->delay_queue_size = 0;
+        context->delay_queue_head = 0;
+        context->delay_queue_tail = 0;
+
+        pthread_mutex_unlock(&context->delay_mutex);
+    }
+}
+
+bool enqueue_delayed_frame(struct c64u_source *context, struct frame_assembly *frame, uint16_t sequence_num)
+{
+    if (pthread_mutex_lock(&context->delay_mutex) != 0) {
+        return false;
+    }
+
+    // Initialize delay queue if not already done
+    if (context->delayed_frame_queue == NULL) {
+        pthread_mutex_unlock(&context->delay_mutex);
+        init_delay_queue(context);
+        if (pthread_mutex_lock(&context->delay_mutex) != 0) {
+            return false;
+        }
+    }
+
+    uint32_t max_queue_size = context->render_delay_frames + 10;
+
+    // If queue is full, remove oldest frame
+    if (context->delay_queue_size >= max_queue_size) {
+        context->delay_queue_head = (context->delay_queue_head + 1) % max_queue_size;
+        context->delay_queue_size--;
+    }
+
+    // Add frame to tail of queue
+    size_t frame_size = context->width * context->height * 4;
+    uint32_t tail_index = context->delay_queue_tail;
+
+    // Assemble frame into delay queue slot
+    uint32_t *queue_frame = context->delayed_frame_queue + (tail_index * context->width * context->height);
+
+    // Clear the slot first
+    memset(queue_frame, 0, frame_size);
+
+    // Assemble frame data into queue slot
+    for (int i = 0; i < C64U_MAX_PACKETS_PER_FRAME; i++) {
+        struct frame_packet *packet = &frame->packets[i];
+        if (!packet->received)
+            continue;
+
+        uint16_t line_num = packet->line_num;
+        uint8_t lines_per_packet = packet->lines_per_packet;
+
+        for (int line = 0; line < (int)lines_per_packet && (int)(line_num + line) < (int)context->height; line++) {
+            uint32_t *dst_line = queue_frame + ((line_num + line) * C64U_PIXELS_PER_LINE);
+            uint8_t *src_line = packet->packet_data + (line * C64U_BYTES_PER_LINE);
+
+            // Convert 4-bit VIC colors to 32-bit RGBA
+            for (int x = 0; x < C64U_BYTES_PER_LINE; x++) {
+                uint8_t pixel_pair = src_line[x];
+                uint8_t color1 = pixel_pair & 0x0F;
+                uint8_t color2 = pixel_pair >> 4;
+
+                dst_line[x * 2] = vic_colors[color1];
+                dst_line[x * 2 + 1] = vic_colors[color2];
+            }
+        }
+    }
+
+    context->delay_sequence_queue[tail_index] = sequence_num;
+    context->delay_queue_tail = (context->delay_queue_tail + 1) % max_queue_size;
+    context->delay_queue_size++;
+
+    pthread_mutex_unlock(&context->delay_mutex);
+    return true;
+}
+
+bool dequeue_delayed_frame(struct c64u_source *context)
+{
+    if (pthread_mutex_lock(&context->delay_mutex) != 0) {
+        return false;
+    }
+
+    // Check if we have enough frames in queue to satisfy delay
+    if (context->delay_queue_size < context->render_delay_frames) {
+        pthread_mutex_unlock(&context->delay_mutex);
+        return false;
+    }
+
+    // Copy frame from queue head to back buffer
+    size_t frame_size = context->width * context->height * 4;
+    uint32_t *queue_frame =
+        context->delayed_frame_queue + (context->delay_queue_head * context->width * context->height);
+
+    if (pthread_mutex_lock(&context->frame_mutex) == 0) {
+        memcpy(context->frame_buffer_back, queue_frame, frame_size);
+        pthread_mutex_unlock(&context->frame_mutex);
+
+        // Remove frame from queue
+        context->delay_queue_head = (context->delay_queue_head + 1) % (context->render_delay_frames + 10);
+        context->delay_queue_size--;
+
+        pthread_mutex_unlock(&context->delay_mutex);
+        return true;
+    }
+
+    pthread_mutex_unlock(&context->delay_mutex);
+    return false;
+}
+
+void clear_delay_queue(struct c64u_source *context)
+{
+    if (pthread_mutex_lock(&context->delay_mutex) == 0) {
+        context->delay_queue_size = 0;
+        context->delay_queue_head = 0;
+        context->delay_queue_tail = 0;
+        pthread_mutex_unlock(&context->delay_mutex);
     }
 }
 
@@ -159,7 +323,21 @@ void *video_thread_func(void *data)
 
         // Track packet drops (seq_num should increment by 1)
         if (!first_video && seq_num != (uint16_t)(last_video_seq + 1)) {
+            uint16_t expected_seq = (uint16_t)(last_video_seq + 1);
+            int16_t seq_diff = (int16_t)(seq_num - expected_seq);
+
             video_drops++;
+
+            if (seq_diff > 0) {
+                // Packets skipped - likely packet loss
+                C64U_LOG_WARNING(
+                    "🔴 UDP OUT-OF-SEQUENCE: Expected seq %u, got %u (skipped %d packets) - Frame %u, Line %u",
+                    expected_seq, seq_num, seq_diff, frame_num, line_num);
+            } else {
+                // Negative difference - likely duplicate or severely reordered packet
+                C64U_LOG_WARNING("🔄 UDP OUT-OF-ORDER: Expected seq %u, got %u (reorder offset %d) - Frame %u, Line %u",
+                                 expected_seq, seq_num, seq_diff, frame_num, line_num);
+            }
         }
         last_video_seq = seq_num;
         first_video = false;
@@ -232,6 +410,20 @@ void *video_thread_func(void *data)
 
             // Check if this is a new frame
             if (context->current_frame.frame_num != frame_num) {
+                // Log frame transitions to detect skips and duplicates
+                if (context->current_frame.frame_num != 0) {
+                    uint16_t expected_next = context->current_frame.frame_num + 1;
+                    int16_t frame_diff = (int16_t)(frame_num - expected_next);
+
+                    if (frame_diff > 0) {
+                        C64U_LOG_WARNING("📽️ FRAME SKIP: Expected frame %u, got %u (skipped %d frames)", expected_next,
+                                         frame_num, frame_diff);
+                    } else if (frame_diff < 0) {
+                        C64U_LOG_WARNING("🔄 FRAME REVERT: Expected frame %u, got %u (went back %d frames)",
+                                         expected_next, frame_num, -frame_diff);
+                    }
+                }
+
                 // Count expected and captured frames only on new frame start
                 if (context->last_capture_time > 0) {
                     context->frames_expected++;
@@ -242,23 +434,76 @@ void *video_thread_func(void *data)
                 if (context->current_frame.received_packets > 0) {
                     if (is_frame_complete(&context->current_frame) || is_frame_timeout(&context->current_frame)) {
                         if (is_frame_complete(&context->current_frame)) {
-                            // Assemble complete frame and swap buffers (only if not already completed)
-                            if (pthread_mutex_lock(&context->frame_mutex) == 0) {
-                                if (context->last_completed_frame != context->current_frame.frame_num) {
-                                    assemble_frame_to_buffer(context, &context->current_frame);
-                                    swap_frame_buffers(context);
-                                    context->last_completed_frame = context->current_frame.frame_num;
-                                    // Track diagnostics consistently
-                                    context->frames_completed++;
-                                    context->buffer_swaps++;
-                                    context->frames_delivered_to_obs++;
-                                    context->total_pipeline_latency += (os_gettime_ns() - capture_time);
-                                    // video_frames++ removed - counted in main completion section
+                            // Handle frame completion with delay queue for timeout case
+                            if (context->last_completed_frame != context->current_frame.frame_num) {
+                                C64U_LOG_DEBUG(
+                                    "✅ FRAME COMPLETE: Frame %u assembled with %u/%u packets (%.1f%% complete)",
+                                    context->current_frame.frame_num, context->current_frame.received_packets,
+                                    context->current_frame.expected_packets,
+                                    (context->current_frame.received_packets * 100.0f) /
+                                        context->current_frame.expected_packets);
+
+                                // If no delay configured, process frame immediately
+                                if (context->render_delay_frames == 0) {
+                                    if (pthread_mutex_lock(&context->frame_mutex) == 0) {
+                                        assemble_frame_to_buffer(context, &context->current_frame);
+                                        swap_frame_buffers(context);
+                                        context->last_completed_frame = context->current_frame.frame_num;
+                                        // Track diagnostics consistently
+                                        context->frames_completed++;
+                                        context->buffer_swaps++;
+                                        context->frames_delivered_to_obs++;
+                                        context->total_pipeline_latency += (os_gettime_ns() - capture_time);
+
+                                        C64U_LOG_DEBUG(
+                                            "🚀 IMMEDIATE DELIVERY: Frame %u delivered to OBS (latency: %llu ms)",
+                                            context->current_frame.frame_num,
+                                            (unsigned long long)((os_gettime_ns() - capture_time) / 1000000));
+                                        pthread_mutex_unlock(&context->frame_mutex);
+                                    }
+                                } else {
+                                    // Add frame to delay queue
+                                    if (enqueue_delayed_frame(context, &context->current_frame, seq_num)) {
+                                        context->last_completed_frame = context->current_frame.frame_num;
+                                        context->frames_completed++;
+
+                                        C64U_LOG_DEBUG("⏳ DELAY QUEUE: Frame %u enqueued (queue size: %u/%u)",
+                                                       context->current_frame.frame_num, context->delay_queue_size,
+                                                       context->render_delay_frames);
+
+                                        // Try to dequeue a delayed frame if queue has enough frames
+                                        if (dequeue_delayed_frame(context)) {
+                                            // Successfully dequeued a frame, make it available to OBS
+                                            if (pthread_mutex_lock(&context->frame_mutex) == 0) {
+                                                swap_frame_buffers(context);
+                                                context->buffer_swaps++;
+                                                context->frames_delivered_to_obs++;
+                                                context->total_pipeline_latency += (os_gettime_ns() - capture_time);
+
+                                                C64U_LOG_DEBUG(
+                                                    "📺 DELAYED DELIVERY: Frame delivered from delay queue to OBS");
+                                                pthread_mutex_unlock(&context->frame_mutex);
+                                            }
+                                        } else {
+                                            C64U_LOG_DEBUG("⏸️ DELAY WAIT: Queue not full yet, waiting for more frames");
+                                        }
+                                    } else {
+                                        C64U_LOG_WARNING("❌ DELAY QUEUE FULL: Failed to enqueue frame %u",
+                                                         context->current_frame.frame_num);
+                                    }
                                 }
-                                pthread_mutex_unlock(&context->frame_mutex);
                             }
                         } else {
                             // Frame timeout - log drop and continue
+                            C64U_LOG_WARNING(
+                                "⏰ FRAME TIMEOUT: Frame %u dropped with %u/%u packets (%.1f%% complete, age: %llu ms)",
+                                context->current_frame.frame_num, context->current_frame.received_packets,
+                                context->current_frame.expected_packets,
+                                context->current_frame.expected_packets > 0
+                                    ? (context->current_frame.received_packets * 100.0f) /
+                                          context->current_frame.expected_packets
+                                    : 0.0f,
+                                (unsigned long long)((os_gettime_ns() - context->current_frame.start_time) / 1000000));
                             context->frame_drops++;
                         }
                     }
@@ -279,47 +524,59 @@ void *video_thread_func(void *data)
                     memcpy(fp->packet_data, packet + C64U_VIDEO_HEADER_SIZE,
                            C64U_VIDEO_PACKET_SIZE - C64U_VIDEO_HEADER_SIZE);
                     context->current_frame.received_packets++;
+                } else {
+                    // Duplicate packet within same frame - indicates severe packet reordering or duplication
+                    C64U_LOG_WARNING("📦 DUPLICATE PACKET: Frame %u, Line %u (packet_index %u) - seq %u", frame_num,
+                                     line_num, packet_index, seq_num);
+                    context->packet_drops++; // Count as a drop since we can't use it
                 }
+            } else {
+                // Invalid packet index - packet line number is out of range
+                C64U_LOG_WARNING("❌ INVALID PACKET: Frame %u, Line %u out of range (packet_index %u >= %d) - seq %u",
+                                 frame_num, line_num, packet_index, C64U_MAX_PACKETS_PER_FRAME, seq_num);
+                context->packet_drops++;
+            }
 
-                // Update expected packet count and detect video format based on last packet
-                if (last_packet && context->current_frame.expected_packets == 0) {
-                    context->current_frame.expected_packets = packet_index + 1;
+            // Update expected packet count and detect video format based on last packet
+            if (last_packet && context->current_frame.expected_packets == 0) {
+                context->current_frame.expected_packets = packet_index + 1;
 
-                    // Detect PAL vs NTSC format from frame height
-                    uint32_t frame_height = line_num + lines_per_packet;
-                    if (!context->format_detected || context->detected_frame_height != frame_height) {
-                        context->detected_frame_height = frame_height;
-                        context->format_detected = true;
+                // Detect PAL vs NTSC format from frame height
+                uint32_t frame_height = line_num + lines_per_packet;
+                if (!context->format_detected || context->detected_frame_height != frame_height) {
+                    context->detected_frame_height = frame_height;
+                    context->format_detected = true;
 
-                        // Calculate expected FPS based on detected format
-                        if (frame_height == C64U_PAL_HEIGHT) {
-                            context->expected_fps = 50.125; // PAL: 50.125 Hz (actual C64 timing)
-                            C64U_LOG_INFO("🎥 Detected PAL format: 384x%u @ %.3f Hz", frame_height,
-                                          context->expected_fps);
-                        } else if (frame_height == C64U_NTSC_HEIGHT) {
-                            context->expected_fps = 59.826; // NTSC: 59.826 Hz (actual C64 timing)
-                            C64U_LOG_INFO("🎥 Detected NTSC format: 384x%u @ %.3f Hz", frame_height,
-                                          context->expected_fps);
-                        } else {
-                            // Unknown format, estimate based on packet count
-                            context->expected_fps = (frame_height <= 250) ? 59.826 : 50.125;
-                            C64U_LOG_WARNING("⚠️ Unknown video format: 384x%u, assuming %.3f Hz", frame_height,
-                                             context->expected_fps);
-                        }
+                    // Calculate expected FPS based on detected format
+                    if (frame_height == C64U_PAL_HEIGHT) {
+                        context->expected_fps = 50.125; // PAL: 50.125 Hz (actual C64 timing)
+                        C64U_LOG_INFO("🎥 Detected PAL format: 384x%u @ %.3f Hz", frame_height, context->expected_fps);
+                    } else if (frame_height == C64U_NTSC_HEIGHT) {
+                        context->expected_fps = 59.826; // NTSC: 59.826 Hz (actual C64 timing)
+                        C64U_LOG_INFO("🎥 Detected NTSC format: 384x%u @ %.3f Hz", frame_height, context->expected_fps);
+                    } else {
+                        // Unknown format, estimate based on packet count
+                        context->expected_fps = (frame_height <= 250) ? 59.826 : 50.125;
+                        C64U_LOG_WARNING("⚠️ Unknown video format: 384x%u, assuming %.3f Hz", frame_height,
+                                         context->expected_fps);
+                    }
 
-                        // Update context dimensions if they changed
-                        if (context->height != frame_height) {
-                            context->height = frame_height;
-                            context->width = C64U_PIXELS_PER_LINE; // Always 384
-                        }
+                    // Update context dimensions if they changed
+                    if (context->height != frame_height) {
+                        context->height = frame_height;
+                        context->width = C64U_PIXELS_PER_LINE; // Always 384
                     }
                 }
+            }
 
-                // Check if frame is complete
-                if (is_frame_complete(&context->current_frame)) {
-                    // Assemble complete frame and swap buffers (only if not already completed)
-                    if (pthread_mutex_lock(&context->frame_mutex) == 0) {
-                        if (context->last_completed_frame != context->current_frame.frame_num) {
+            // Check if frame is complete
+            if (is_frame_complete(&context->current_frame)) {
+                // Handle frame completion with delay queue
+                if (context->last_completed_frame != context->current_frame.frame_num) {
+
+                    // If no delay configured, process frame immediately
+                    if (context->render_delay_frames == 0) {
+                        if (pthread_mutex_lock(&context->frame_mutex) == 0) {
                             assemble_frame_to_buffer(context, &context->current_frame);
                             swap_frame_buffers(context);
                             context->last_completed_frame = context->current_frame.frame_num;
@@ -329,17 +586,36 @@ void *video_thread_func(void *data)
                             context->frames_delivered_to_obs++;
                             context->total_pipeline_latency += (os_gettime_ns() - capture_time);
                             video_frames++; // Count completed frames for statistics (primary location)
+                            pthread_mutex_unlock(&context->frame_mutex);
                         }
-                        pthread_mutex_unlock(&context->frame_mutex);
+                    } else {
+                        // Add frame to delay queue
+                        if (enqueue_delayed_frame(context, &context->current_frame, seq_num)) {
+                            context->last_completed_frame = context->current_frame.frame_num;
+                            context->frames_completed++;
+                            video_frames++;
+
+                            // Try to dequeue a delayed frame if queue has enough frames
+                            if (dequeue_delayed_frame(context)) {
+                                // Successfully dequeued a frame, make it available to OBS
+                                if (pthread_mutex_lock(&context->frame_mutex) == 0) {
+                                    swap_frame_buffers(context);
+                                    context->buffer_swaps++;
+                                    context->frames_delivered_to_obs++;
+                                    context->total_pipeline_latency += (os_gettime_ns() - capture_time);
+                                    pthread_mutex_unlock(&context->frame_mutex);
+                                }
+                            }
+                        }
                     }
-
-                    // Reset for next frame
-                    init_frame_assembly(&context->current_frame, 0);
                 }
-            }
 
-            pthread_mutex_unlock(&context->assembly_mutex);
+                // Reset for next frame
+                init_frame_assembly(&context->current_frame, 0);
+            }
         }
+
+        pthread_mutex_unlock(&context->assembly_mutex);
     }
 
     C64U_LOG_INFO("Video receiver thread stopped");

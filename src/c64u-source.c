@@ -8,9 +8,10 @@
 #include "c64u-source.h"
 #include "c64u-types.h"
 #include "c64u-protocol.h"
-#include "c64u-network.h"
 #include "c64u-video.h"
+#include "c64u-network.h"
 #include "c64u-audio.h"
+#include "c64u-record.h"
 #include "plugin-support.h"
 
 void *c64u_create(obs_data_t *settings, obs_source_t *source)
@@ -118,6 +119,32 @@ void *c64u_create(obs_data_t *settings, obs_source_t *source)
         return NULL;
     }
 
+    // Initialize delay queue mutex
+    if (pthread_mutex_init(&context->delay_mutex, NULL) != 0) {
+        C64U_LOG_ERROR("Failed to initialize delay mutex");
+        pthread_mutex_destroy(&context->frame_mutex);
+        pthread_mutex_destroy(&context->assembly_mutex);
+        bfree(context->frame_buffer_front);
+        bfree(context->frame_buffer_back);
+        bfree(context);
+        return NULL;
+    }
+
+    // Initialize rendering delay from settings
+    context->render_delay_frames = (uint32_t)obs_data_get_int(settings, "render_delay_frames");
+    if (context->render_delay_frames == 0) {
+        context->render_delay_frames = 10; // Default value
+    }
+
+    // Initialize delay queue - allocate for maximum delay + some extra buffer
+    context->delay_queue_size = 0;
+    context->delay_queue_head = 0;
+    context->delay_queue_tail = 0;
+    context->delayed_frame_queue = NULL;
+    context->delay_sequence_queue = NULL;
+
+    C64U_LOG_INFO("Rendering delay initialized: %u frames", context->render_delay_frames);
+
     // Initialize sockets to invalid
     context->video_socket = INVALID_SOCKET_VALUE;
     context->audio_socket = INVALID_SOCKET_VALUE;
@@ -126,6 +153,12 @@ void *c64u_create(obs_data_t *settings, obs_source_t *source)
     context->video_thread_active = false;
     context->audio_thread_active = false;
     context->auto_start_attempted = false;
+
+    // Initialize recording module
+    c64u_record_init(context);
+
+    // Apply recording settings from OBS
+    c64u_record_update_settings(context, settings);
 
     C64U_LOG_INFO("C64U source created - C64 IP: %s, OBS IP: %s, Video: %u, Audio: %u", context->ip_address,
                   context->obs_ip_address, context->video_port, context->audio_port);
@@ -177,14 +210,24 @@ void c64u_destroy(void *data)
         }
     }
 
+    // Cleanup recording module
+    c64u_record_cleanup(context);
+
     // Cleanup resources
     pthread_mutex_destroy(&context->frame_mutex);
     pthread_mutex_destroy(&context->assembly_mutex);
+    pthread_mutex_destroy(&context->delay_mutex);
     if (context->frame_buffer_front) {
         bfree(context->frame_buffer_front);
     }
     if (context->frame_buffer_back) {
         bfree(context->frame_buffer_back);
+    }
+    if (context->delayed_frame_queue) {
+        bfree(context->delayed_frame_queue);
+    }
+    if (context->delay_sequence_queue) {
+        bfree(context->delay_sequence_queue);
     }
 
     bfree(context);
@@ -252,6 +295,36 @@ void c64u_update(void *data, obs_data_t *settings)
     }
     context->video_port = new_video_port;
     context->audio_port = new_audio_port;
+
+    // Update rendering delay setting
+    uint32_t new_delay_frames = (uint32_t)obs_data_get_int(settings, "render_delay_frames");
+    if (new_delay_frames != context->render_delay_frames) {
+        C64U_LOG_INFO("Rendering delay changed from %u to %u frames", context->render_delay_frames, new_delay_frames);
+
+        if (pthread_mutex_lock(&context->delay_mutex) == 0) {
+            context->render_delay_frames = new_delay_frames;
+
+            // Reset delay queue when delay changes
+            context->delay_queue_size = 0;
+            context->delay_queue_head = 0;
+            context->delay_queue_tail = 0;
+
+            // Force reallocation of delay buffers on next frame
+            if (context->delayed_frame_queue) {
+                bfree(context->delayed_frame_queue);
+                context->delayed_frame_queue = NULL;
+            }
+            if (context->delay_sequence_queue) {
+                bfree(context->delay_sequence_queue);
+                context->delay_sequence_queue = NULL;
+            }
+
+            pthread_mutex_unlock(&context->delay_mutex);
+        }
+    }
+
+    // Update recording settings
+    c64u_record_update_settings(context, settings);
 
     // Start streaming with current configuration (will create new sockets if needed)
     C64U_LOG_INFO("Applying configuration and starting streaming");
@@ -331,6 +404,9 @@ void c64u_start_streaming(struct c64u_source *context)
     }
     context->audio_thread_active = true;
 
+    // Initialize delay queue for rendering delay
+    init_delay_queue(context);
+
     C64U_LOG_INFO("C64U streaming started successfully");
 }
 
@@ -399,6 +475,9 @@ void c64u_stop_streaming(struct c64u_source *context)
         pthread_mutex_unlock(&context->assembly_mutex);
     }
 
+    // Clear delay queue
+    clear_delay_queue(context);
+
     C64U_LOG_INFO("C64U streaming stopped");
 }
 
@@ -451,6 +530,22 @@ void c64u_render(void *data, gs_effect_t *effect)
             pthread_mutex_unlock(&context->frame_mutex);
         }
     } else {
+        // Log render starvation - OBS is requesting frames but we have none
+        static uint64_t last_starvation_log = 0;
+        static uint32_t starvation_count = 0;
+        uint64_t now = os_gettime_ns();
+
+        if (context->streaming && !context->frame_ready) {
+            starvation_count++;
+            if (last_starvation_log == 0 || (now - last_starvation_log) >= 1000000000ULL) { // Log every second
+                C64U_LOG_WARNING(
+                    "🍽️ RENDER STARVATION: OBS requesting frames but none ready (%u starved renders in last period)",
+                    starvation_count);
+                starvation_count = 0;
+                last_starvation_log = now;
+            }
+        }
+
         // Show colored background to indicate plugin state
         gs_effect_t *solid = obs_get_base_effect(OBS_EFFECT_SOLID);
         gs_eparam_t *color = gs_effect_get_param_by_name(solid, "color");
@@ -483,12 +578,35 @@ void c64u_render(void *data, gs_effect_t *effect)
     if (last_render_time > 0) {
         uint64_t render_end = os_gettime_ns();
         uint64_t render_duration = render_end - render_start;
+        uint64_t render_interval = render_start - last_render_time;
+
         static uint64_t last_render_log = 0;
         static uint32_t total_render_calls = 0;
         static uint64_t total_render_time = 0;
+        static uint64_t min_render_interval = UINT64_MAX;
+        static uint64_t max_render_interval = 0;
+        static uint32_t irregular_renders = 0;
 
         total_render_calls++;
         total_render_time += render_duration;
+
+        // Track render call timing irregularities
+        if (render_interval > 0) {
+            uint64_t expected_render_interval = 16666667; // ~60Hz display refresh
+
+            min_render_interval = (render_interval < min_render_interval) ? render_interval : min_render_interval;
+            max_render_interval = (render_interval > max_render_interval) ? render_interval : max_render_interval;
+
+            // Detect irregular render calls that could cause perceived choppiness
+            if (render_interval < expected_render_interval * 0.5 || render_interval > expected_render_interval * 1.5) {
+                irregular_renders++;
+                if (irregular_renders % 10 == 1) { // Log every 10th irregular call to avoid spam
+                    double interval_ms = render_interval / 1000000.0;
+                    C64U_LOG_WARNING("🎭 RENDER IRREGULAR: %.2f ms interval (expected ~16.7ms for 60Hz display)",
+                                     interval_ms);
+                }
+            }
+        }
 
         if (last_render_log == 0)
             last_render_log = render_end;
@@ -498,13 +616,20 @@ void c64u_render(void *data, gs_effect_t *effect)
             double duration = log_diff / 1000000000.0;
             double render_fps = total_render_calls / duration;
             double avg_render_time_ms = total_render_time / (total_render_calls * 1000000.0);
+            double min_interval_ms = min_render_interval / 1000000.0;
+            double max_interval_ms = max_render_interval / 1000000.0;
 
             C64U_LOG_INFO("🎨 RENDER: %.1f fps | %.2f ms avg render time | %u total calls", render_fps,
                           avg_render_time_ms, render_calls);
+            C64U_LOG_INFO("🎭 RENDER TIMING: Min interval %.2f ms | Max interval %.2f ms | Irregular calls: %u",
+                          min_interval_ms, max_interval_ms, irregular_renders);
 
             // Reset counters
             total_render_calls = 0;
             total_render_time = 0;
+            min_render_interval = UINT64_MAX;
+            max_render_interval = 0;
+            irregular_renders = 0;
             last_render_log = render_end;
         }
     }
@@ -537,31 +662,59 @@ obs_properties_t *c64u_properties(void *data)
     obs_properties_t *props = obs_properties_create();
 
     // Debug logging toggle
-    obs_property_t *debug_prop = obs_properties_add_bool(props, "debug_logging", "Enable Debug Logging");
-    obs_property_set_long_description(debug_prop, "Enable detailed logging for debugging C64U connection issues");
+    obs_property_t *debug_prop = obs_properties_add_bool(props, "debug_logging", "Debug Logging");
+    obs_property_set_long_description(debug_prop, "Enable detailed logging for debugging connection issues");
 
     // C64 IP Address
-    obs_property_t *ip_prop = obs_properties_add_text(props, "ip_address", "C64 IP Address", OBS_TEXT_DEFAULT);
+    obs_property_t *ip_prop = obs_properties_add_text(props, "ip_address", "C64 Ultimate IP", OBS_TEXT_DEFAULT);
     obs_property_set_long_description(
-        ip_prop, "IP address or DNS name of the C64 Ultimate device. Leave as 0.0.0.0 to skip control commands.");
+        ip_prop, "IP address or DNS name of C64 Ultimate device (use 0.0.0.0 to skip control commands)");
 
     // OBS IP Address (editable)
-    obs_property_t *obs_ip_prop = obs_properties_add_text(props, "obs_ip_address", "OBS IP Address", OBS_TEXT_DEFAULT);
-    obs_property_set_long_description(
-        obs_ip_prop, "IP address of this OBS machine. C64 Ultimate will stream video/audio to this address.");
+    obs_property_t *obs_ip_prop = obs_properties_add_text(props, "obs_ip_address", "OBS Machine IP", OBS_TEXT_DEFAULT);
+    obs_property_set_long_description(obs_ip_prop, "IP address of this OBS machine (where C64 Ultimate sends streams)");
 
     // Auto-detect IP toggle
-    obs_property_t *auto_ip_prop = obs_properties_add_bool(props, "auto_detect_ip", "Use Auto-detected OBS IP");
+    obs_property_t *auto_ip_prop = obs_properties_add_bool(props, "auto_detect_ip", "Auto-detect OBS IP");
     obs_property_set_long_description(auto_ip_prop,
-                                      "Use the automatically detected OBS IP address in streaming commands");
+                                      "Automatically detect and use OBS machine IP in streaming commands");
 
-    // Video Port
-    obs_property_t *video_port_prop = obs_properties_add_int(props, "video_port", "Video Port", 1024, 65535, 1);
-    obs_property_set_long_description(video_port_prop, "UDP port for video stream (default: 11000)");
+    // UDP Ports Group (compact layout)
+    obs_property_t *port_group =
+        obs_properties_add_group(props, "port_group", "UDP Ports", OBS_GROUP_NORMAL, obs_properties_create());
+    obs_properties_t *port_props = obs_property_group_content(port_group);
 
-    // Audio Port
-    obs_property_t *audio_port_prop = obs_properties_add_int(props, "audio_port", "Audio Port", 1024, 65535, 1);
-    obs_property_set_long_description(audio_port_prop, "UDP port for audio stream (default: 11001)");
+    obs_property_t *video_port_prop = obs_properties_add_int(port_props, "video_port", "Video (11000)", 1024, 65535, 1);
+    obs_property_set_long_description(video_port_prop, "UDP port for video stream from C64 Ultimate");
+
+    obs_property_t *audio_port_prop = obs_properties_add_int(port_props, "audio_port", "Audio (11001)", 1024, 65535, 1);
+    obs_property_set_long_description(audio_port_prop, "UDP port for audio stream from C64 Ultimate");
+
+    // Rendering Delay
+    obs_property_t *delay_prop =
+        obs_properties_add_int_slider(props, "render_delay_frames", "Render Delay (frames)", 0, 100, 1);
+    obs_property_set_long_description(
+        delay_prop, "Delay frames before rendering to smooth UDP packet loss/reordering (default: 10)");
+
+    // Recording Group (compact layout)
+    obs_property_t *recording_group =
+        obs_properties_add_group(props, "recording_group", "Recording", OBS_GROUP_NORMAL, obs_properties_create());
+    obs_properties_t *recording_props = obs_property_group_content(recording_group);
+
+    obs_property_t *save_frames_prop = obs_properties_add_bool(recording_props, "save_frames", "☐ Save BMP Frames");
+    obs_property_set_long_description(
+        save_frames_prop, "Save each frame as BMP in frames/ subfolder (for debugging - impacts performance)");
+
+    obs_property_t *record_video_prop = obs_properties_add_bool(recording_props, "record_video", "☐ Record AVI + WAV");
+    obs_property_set_long_description(record_video_prop,
+                                      "Record uncompressed AVI video + WAV audio (for debugging - high disk usage)");
+
+    // Save Folder (applies to both frame saving and video recording)
+    obs_property_t *save_folder_prop =
+        obs_properties_add_path(props, "save_folder", "Output Folder", OBS_PATH_DIRECTORY, NULL, NULL);
+    obs_property_set_long_description(
+        save_folder_prop,
+        "Directory where session folders with frames, video, audio, and timing files will be created");
 
     return props;
 }
@@ -576,4 +729,12 @@ void c64u_defaults(obs_data_t *settings)
     obs_data_set_default_string(settings, "obs_ip_address", ""); // Empty by default, will be auto-detected
     obs_data_set_default_int(settings, "video_port", C64U_DEFAULT_VIDEO_PORT);
     obs_data_set_default_int(settings, "audio_port", C64U_DEFAULT_AUDIO_PORT);
+    obs_data_set_default_int(settings, "render_delay_frames", 10); // Default 10 frames delay
+
+    // Frame saving defaults
+    obs_data_set_default_bool(settings, "save_frames", false);            // Disabled by default
+    obs_data_set_default_string(settings, "save_folder", "./recordings"); // Default folder
+
+    // Video recording defaults
+    obs_data_set_default_bool(settings, "record_video", false); // Disabled by default
 }

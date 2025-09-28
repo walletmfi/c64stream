@@ -252,6 +252,7 @@ The C64 Ultimate device streams video and audio data over network connections. K
 4. **Plugin logic goes in modular source files** - Use focused modules in src/
 5. **Use C64U_LOG_*() macros** for logging (defined in c64u-logging.h)
 6. **Verify all files end with newline** - Critical for macOS builds
+7. **DO NOT create markdown documentation files during development** - Keep workspace clean, document in existing files only
 
 ### Common Plugin Tasks:
 - **Add new source type:** Implement in plugin-main.c, register with OBS
