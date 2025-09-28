@@ -70,15 +70,16 @@ static void write_avi_header(FILE *file, uint32_t width, uint32_t height, double
     uint16_t priority = 0;
     fwrite(&priority, 2, 1, file); // wPriority
     uint16_t language = 0;
-    fwrite(&language, 2, 1, file);             // wLanguage
-    fwrite(&zero, 4, 1, file);                 // dwInitialFrames
-    uint32_t scale = 1000000;                  // Scale for microseconds
-    fwrite(&scale, 4, 1, file);                // dwScale
-    uint32_t rate = (uint32_t)(fps * 1000000); // Rate in scale units
-    fwrite(&rate, 4, 1, file);                 // dwRate
-    fwrite(&zero, 4, 1, file);                 // dwStart
-    fwrite(&zero, 4, 1, file);                 // dwLength (update later)
-    fwrite(&frame_size, 4, 1, file);           // dwSuggestedBufferSize
+    fwrite(&language, 2, 1, file); // wLanguage
+    fwrite(&zero, 4, 1, file);     // dwInitialFrames
+    // Use detected refresh rate for scale/rate
+    uint32_t scale = 1000000;
+    fwrite(&scale, 4, 1, file);                        // dwScale
+    uint32_t rate = (uint32_t)(fps * 1000000.0 + 0.5); // Rate in scale units, rounded
+    fwrite(&rate, 4, 1, file);                         // dwRate
+    fwrite(&zero, 4, 1, file);                         // dwStart
+    fwrite(&zero, 4, 1, file);                         // dwLength (update later)
+    fwrite(&frame_size, 4, 1, file);                   // dwSuggestedBufferSize
     uint32_t quality = 0xFFFFFFFF;
     fwrite(&quality, 4, 1, file); // dwQuality (-1 = default)
     fwrite(&zero, 4, 1, file);    // dwSampleSize (0 for video)
