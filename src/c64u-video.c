@@ -293,17 +293,17 @@ void *video_thread_func(void *data)
 
                         // Calculate expected FPS based on detected format
                         if (frame_height == C64U_PAL_HEIGHT) {
-                            context->expected_fps = 50.0; // PAL: 50 Hz
-                            C64U_LOG_INFO("🎥 Detected PAL format: 384x%u @ %.0f Hz", frame_height,
+                            context->expected_fps = 50.125; // PAL: 50.125 Hz (actual C64 timing)
+                            C64U_LOG_INFO("🎥 Detected PAL format: 384x%u @ %.3f Hz", frame_height,
                                           context->expected_fps);
                         } else if (frame_height == C64U_NTSC_HEIGHT) {
-                            context->expected_fps = 60.0; // NTSC: 60 Hz
-                            C64U_LOG_INFO("🎥 Detected NTSC format: 384x%u @ %.0f Hz", frame_height,
+                            context->expected_fps = 59.826; // NTSC: 59.826 Hz (actual C64 timing)
+                            C64U_LOG_INFO("🎥 Detected NTSC format: 384x%u @ %.3f Hz", frame_height,
                                           context->expected_fps);
                         } else {
                             // Unknown format, estimate based on packet count
-                            context->expected_fps = (frame_height <= 250) ? 60.0 : 50.0;
-                            C64U_LOG_WARNING("⚠️ Unknown video format: 384x%u, assuming %.0f Hz", frame_height,
+                            context->expected_fps = (frame_height <= 250) ? 59.826 : 50.125;
+                            C64U_LOG_WARNING("⚠️ Unknown video format: 384x%u, assuming %.3f Hz", frame_height,
                                              context->expected_fps);
                         }
 

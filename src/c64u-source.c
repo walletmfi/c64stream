@@ -99,7 +99,7 @@ void *c64u_create(obs_data_t *settings, obs_source_t *source)
     // Initialize video format detection
     context->detected_frame_height = 0;
     context->format_detected = false;
-    context->expected_fps = 50.0; // Default to PAL until detected
+    context->expected_fps = 50.125; // Default to PAL timing until detected
 
     // Initialize mutexes
     if (pthread_mutex_init(&context->frame_mutex, NULL) != 0) {

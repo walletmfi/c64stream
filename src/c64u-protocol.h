@@ -26,8 +26,8 @@
 // Frame assembly constants
 #define C64U_MAX_PACKETS_PER_FRAME 68           // PAL: 272 lines ÷ 4 lines/packet = 68 packets
 #define C64U_FRAME_TIMEOUT_MS 100               // Timeout for incomplete frames
-#define C64U_PAL_FRAME_INTERVAL_NS 20000000ULL  // 20ms for 50Hz PAL
-#define C64U_NTSC_FRAME_INTERVAL_NS 16666667ULL // 16.67ms for 60Hz NTSC
+#define C64U_PAL_FRAME_INTERVAL_NS 19950124ULL  // 19.95ms for 50.125Hz PAL (actual C64 timing)
+#define C64U_NTSC_FRAME_INTERVAL_NS 16710875ULL // 16.71ms for 59.826Hz NTSC (actual C64 timing)
 
 // Forward declaration
 struct c64u_source;
