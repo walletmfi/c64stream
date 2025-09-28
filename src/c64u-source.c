@@ -117,6 +117,32 @@ void *c64u_create(obs_data_t *settings, obs_source_t *source)
         bfree(context);
         return NULL;
     }
+    
+    // Initialize delay queue mutex
+    if (pthread_mutex_init(&context->delay_mutex, NULL) != 0) {
+        C64U_LOG_ERROR("Failed to initialize delay mutex");
+        pthread_mutex_destroy(&context->frame_mutex);
+        pthread_mutex_destroy(&context->assembly_mutex);
+        bfree(context->frame_buffer_front);
+        bfree(context->frame_buffer_back);
+        bfree(context);
+        return NULL;
+    }
+
+    // Initialize rendering delay from settings
+    context->render_delay_frames = (uint32_t)obs_data_get_int(settings, "render_delay_frames");
+    if (context->render_delay_frames == 0) {
+        context->render_delay_frames = 10; // Default value
+    }
+    
+    // Initialize delay queue - allocate for maximum delay + some extra buffer
+    context->delay_queue_size = 0;
+    context->delay_queue_head = 0;
+    context->delay_queue_tail = 0;
+    context->delayed_frame_queue = NULL;
+    context->delay_sequence_queue = NULL;
+
+    C64U_LOG_INFO("Rendering delay initialized: %u frames", context->render_delay_frames);
 
     // Initialize sockets to invalid
     context->video_socket = INVALID_SOCKET_VALUE;
@@ -180,11 +206,18 @@ void c64u_destroy(void *data)
     // Cleanup resources
     pthread_mutex_destroy(&context->frame_mutex);
     pthread_mutex_destroy(&context->assembly_mutex);
+    pthread_mutex_destroy(&context->delay_mutex);
     if (context->frame_buffer_front) {
         bfree(context->frame_buffer_front);
     }
     if (context->frame_buffer_back) {
         bfree(context->frame_buffer_back);
+    }
+    if (context->delayed_frame_queue) {
+        bfree(context->delayed_frame_queue);
+    }
+    if (context->delay_sequence_queue) {
+        bfree(context->delay_sequence_queue);
     }
 
     bfree(context);
@@ -252,6 +285,23 @@ void c64u_update(void *data, obs_data_t *settings)
     }
     context->video_port = new_video_port;
     context->audio_port = new_audio_port;
+
+    // Update rendering delay setting
+    uint32_t new_delay_frames = (uint32_t)obs_data_get_int(settings, "render_delay_frames");
+    if (new_delay_frames != context->render_delay_frames) {
+        C64U_LOG_INFO("Rendering delay changed from %u to %u frames", context->render_delay_frames, new_delay_frames);
+        
+        if (pthread_mutex_lock(&context->delay_mutex) == 0) {
+            context->render_delay_frames = new_delay_frames;
+            
+            // Reset delay queue when delay changes
+            context->delay_queue_size = 0;
+            context->delay_queue_head = 0;
+            context->delay_queue_tail = 0;
+            
+            pthread_mutex_unlock(&context->delay_mutex);
+        }
+    }
 
     // Start streaming with current configuration (will create new sockets if needed)
     C64U_LOG_INFO("Applying configuration and starting streaming");
@@ -331,6 +381,9 @@ void c64u_start_streaming(struct c64u_source *context)
     }
     context->audio_thread_active = true;
 
+    // Initialize delay queue for rendering delay
+    init_delay_queue(context);
+
     C64U_LOG_INFO("C64U streaming started successfully");
 }
 
@@ -398,6 +451,9 @@ void c64u_stop_streaming(struct c64u_source *context)
         context->frames_completed = 0;
         pthread_mutex_unlock(&context->assembly_mutex);
     }
+
+    // Clear delay queue
+    clear_delay_queue(context);
 
     C64U_LOG_INFO("C64U streaming stopped");
 }
@@ -563,6 +619,10 @@ obs_properties_t *c64u_properties(void *data)
     obs_property_t *audio_port_prop = obs_properties_add_int(props, "audio_port", "Audio Port", 1024, 65535, 1);
     obs_property_set_long_description(audio_port_prop, "UDP port for audio stream (default: 11001)");
 
+    // Rendering Delay
+    obs_property_t *delay_prop = obs_properties_add_int_slider(props, "render_delay_frames", "Rendering Delay (frames)", 0, 100, 1);
+    obs_property_set_long_description(delay_prop, "Delay between packet arrival and OBS rendering to smooth out UDP packet loss/reordering (default: 10 frames)");
+
     return props;
 }
 
@@ -576,4 +636,5 @@ void c64u_defaults(obs_data_t *settings)
     obs_data_set_default_string(settings, "obs_ip_address", ""); // Empty by default, will be auto-detected
     obs_data_set_default_int(settings, "video_port", C64U_DEFAULT_VIDEO_PORT);
     obs_data_set_default_int(settings, "audio_port", C64U_DEFAULT_AUDIO_PORT);
+    obs_data_set_default_int(settings, "render_delay_frames", 10); // Default 10 frames delay
 }

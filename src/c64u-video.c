@@ -85,6 +85,156 @@ void assemble_frame_to_buffer(struct c64u_source *context, struct frame_assembly
     }
 }
 
+// Delay queue management functions
+void init_delay_queue(struct c64u_source *context)
+{
+    if (pthread_mutex_lock(&context->delay_mutex) == 0) {
+        // Allocate delay queue buffers if needed (max delay + buffer)
+        uint32_t needed_size = context->render_delay_frames + 10; // Extra buffer for safety
+        
+        if (context->delayed_frame_queue == NULL || needed_size > 110) { // Current max allocated
+            if (context->delayed_frame_queue) {
+                bfree(context->delayed_frame_queue);
+            }
+            if (context->delay_sequence_queue) {
+                bfree(context->delay_sequence_queue);
+            }
+            
+            size_t frame_size = context->width * context->height * 4; // RGBA
+            context->delayed_frame_queue = bmalloc(frame_size * needed_size);
+            context->delay_sequence_queue = bmalloc(sizeof(uint16_t) * needed_size);
+            
+            if (!context->delayed_frame_queue || !context->delay_sequence_queue) {
+                C64U_LOG_ERROR("Failed to allocate delay queue buffers");
+                if (context->delayed_frame_queue) {
+                    bfree(context->delayed_frame_queue);
+                    context->delayed_frame_queue = NULL;
+                }
+                if (context->delay_sequence_queue) {
+                    bfree(context->delay_sequence_queue);
+                    context->delay_sequence_queue = NULL;
+                }
+                pthread_mutex_unlock(&context->delay_mutex);
+                return;
+            }
+        }
+        
+        context->delay_queue_size = 0;
+        context->delay_queue_head = 0;
+        context->delay_queue_tail = 0;
+        
+        pthread_mutex_unlock(&context->delay_mutex);
+    }
+}
+
+bool enqueue_delayed_frame(struct c64u_source *context, struct frame_assembly *frame, uint16_t sequence_num)
+{
+    if (pthread_mutex_lock(&context->delay_mutex) != 0) {
+        return false;
+    }
+    
+    // Initialize delay queue if not already done
+    if (context->delayed_frame_queue == NULL) {
+        pthread_mutex_unlock(&context->delay_mutex);
+        init_delay_queue(context);
+        if (pthread_mutex_lock(&context->delay_mutex) != 0) {
+            return false;
+        }
+    }
+    
+    uint32_t max_queue_size = context->render_delay_frames + 10;
+    
+    // If queue is full, remove oldest frame
+    if (context->delay_queue_size >= max_queue_size) {
+        context->delay_queue_head = (context->delay_queue_head + 1) % max_queue_size;
+        context->delay_queue_size--;
+    }
+    
+    // Add frame to tail of queue
+    size_t frame_size = context->width * context->height * 4;
+    uint32_t tail_index = context->delay_queue_tail;
+    
+    // Assemble frame into delay queue slot
+    uint32_t *queue_frame = context->delayed_frame_queue + (tail_index * context->width * context->height);
+    
+    // Clear the slot first
+    memset(queue_frame, 0, frame_size);
+    
+    // Assemble frame data into queue slot
+    for (int i = 0; i < C64U_MAX_PACKETS_PER_FRAME; i++) {
+        struct frame_packet *packet = &frame->packets[i];
+        if (!packet->received)
+            continue;
+
+        uint16_t line_num = packet->line_num;
+        uint8_t lines_per_packet = packet->lines_per_packet;
+
+        for (int line = 0; line < (int)lines_per_packet && (int)(line_num + line) < (int)context->height; line++) {
+            uint32_t *dst_line = queue_frame + ((line_num + line) * C64U_PIXELS_PER_LINE);
+            uint8_t *src_line = packet->packet_data + (line * C64U_BYTES_PER_LINE);
+
+            // Convert 4-bit VIC colors to 32-bit RGBA
+            for (int x = 0; x < C64U_BYTES_PER_LINE; x++) {
+                uint8_t pixel_pair = src_line[x];
+                uint8_t color1 = pixel_pair & 0x0F;
+                uint8_t color2 = pixel_pair >> 4;
+
+                dst_line[x * 2] = vic_colors[color1];
+                dst_line[x * 2 + 1] = vic_colors[color2];
+            }
+        }
+    }
+    
+    context->delay_sequence_queue[tail_index] = sequence_num;
+    context->delay_queue_tail = (context->delay_queue_tail + 1) % max_queue_size;
+    context->delay_queue_size++;
+    
+    pthread_mutex_unlock(&context->delay_mutex);
+    return true;
+}
+
+bool dequeue_delayed_frame(struct c64u_source *context)
+{
+    if (pthread_mutex_lock(&context->delay_mutex) != 0) {
+        return false;
+    }
+    
+    // Check if we have enough frames in queue to satisfy delay
+    if (context->delay_queue_size < context->render_delay_frames) {
+        pthread_mutex_unlock(&context->delay_mutex);
+        return false;
+    }
+    
+    // Copy frame from queue head to back buffer
+    size_t frame_size = context->width * context->height * 4;
+    uint32_t *queue_frame = context->delayed_frame_queue + (context->delay_queue_head * context->width * context->height);
+    
+    if (pthread_mutex_lock(&context->frame_mutex) == 0) {
+        memcpy(context->frame_buffer_back, queue_frame, frame_size);
+        pthread_mutex_unlock(&context->frame_mutex);
+        
+        // Remove frame from queue
+        context->delay_queue_head = (context->delay_queue_head + 1) % (context->render_delay_frames + 10);
+        context->delay_queue_size--;
+        
+        pthread_mutex_unlock(&context->delay_mutex);
+        return true;
+    }
+    
+    pthread_mutex_unlock(&context->delay_mutex);
+    return false;
+}
+
+void clear_delay_queue(struct c64u_source *context)
+{
+    if (pthread_mutex_lock(&context->delay_mutex) == 0) {
+        context->delay_queue_size = 0;
+        context->delay_queue_head = 0;
+        context->delay_queue_tail = 0;
+        pthread_mutex_unlock(&context->delay_mutex);
+    }
+}
+
 // Video thread function
 void *video_thread_func(void *data)
 {
@@ -242,20 +392,41 @@ void *video_thread_func(void *data)
                 if (context->current_frame.received_packets > 0) {
                     if (is_frame_complete(&context->current_frame) || is_frame_timeout(&context->current_frame)) {
                         if (is_frame_complete(&context->current_frame)) {
-                            // Assemble complete frame and swap buffers (only if not already completed)
-                            if (pthread_mutex_lock(&context->frame_mutex) == 0) {
-                                if (context->last_completed_frame != context->current_frame.frame_num) {
-                                    assemble_frame_to_buffer(context, &context->current_frame);
-                                    swap_frame_buffers(context);
-                                    context->last_completed_frame = context->current_frame.frame_num;
-                                    // Track diagnostics consistently
-                                    context->frames_completed++;
-                                    context->buffer_swaps++;
-                                    context->frames_delivered_to_obs++;
-                                    context->total_pipeline_latency += (os_gettime_ns() - capture_time);
-                                    // video_frames++ removed - counted in main completion section
+                            // Handle frame completion with delay queue for timeout case
+                            if (context->last_completed_frame != context->current_frame.frame_num) {
+                                
+                                // If no delay configured, process frame immediately
+                                if (context->render_delay_frames == 0) {
+                                    if (pthread_mutex_lock(&context->frame_mutex) == 0) {
+                                        assemble_frame_to_buffer(context, &context->current_frame);
+                                        swap_frame_buffers(context);
+                                        context->last_completed_frame = context->current_frame.frame_num;
+                                        // Track diagnostics consistently
+                                        context->frames_completed++;
+                                        context->buffer_swaps++;
+                                        context->frames_delivered_to_obs++;
+                                        context->total_pipeline_latency += (os_gettime_ns() - capture_time);
+                                        pthread_mutex_unlock(&context->frame_mutex);
+                                    }
+                                } else {
+                                    // Add frame to delay queue
+                                    if (enqueue_delayed_frame(context, &context->current_frame, seq_num)) {
+                                        context->last_completed_frame = context->current_frame.frame_num;
+                                        context->frames_completed++;
+                                        
+                                        // Try to dequeue a delayed frame if queue has enough frames
+                                        if (dequeue_delayed_frame(context)) {
+                                            // Successfully dequeued a frame, make it available to OBS
+                                            if (pthread_mutex_lock(&context->frame_mutex) == 0) {
+                                                swap_frame_buffers(context);
+                                                context->buffer_swaps++;
+                                                context->frames_delivered_to_obs++;
+                                                context->total_pipeline_latency += (os_gettime_ns() - capture_time);
+                                                pthread_mutex_unlock(&context->frame_mutex);
+                                            }
+                                        }
+                                    }
                                 }
-                                pthread_mutex_unlock(&context->frame_mutex);
                             }
                         } else {
                             // Frame timeout - log drop and continue
@@ -317,20 +488,43 @@ void *video_thread_func(void *data)
 
                 // Check if frame is complete
                 if (is_frame_complete(&context->current_frame)) {
-                    // Assemble complete frame and swap buffers (only if not already completed)
-                    if (pthread_mutex_lock(&context->frame_mutex) == 0) {
-                        if (context->last_completed_frame != context->current_frame.frame_num) {
-                            assemble_frame_to_buffer(context, &context->current_frame);
-                            swap_frame_buffers(context);
-                            context->last_completed_frame = context->current_frame.frame_num;
-                            // Track diagnostics (only once per completed frame!)
-                            context->frames_completed++;
-                            context->buffer_swaps++;
-                            context->frames_delivered_to_obs++;
-                            context->total_pipeline_latency += (os_gettime_ns() - capture_time);
-                            video_frames++; // Count completed frames for statistics (primary location)
+                    // Handle frame completion with delay queue
+                    if (context->last_completed_frame != context->current_frame.frame_num) {
+                        
+                        // If no delay configured, process frame immediately
+                        if (context->render_delay_frames == 0) {
+                            if (pthread_mutex_lock(&context->frame_mutex) == 0) {
+                                assemble_frame_to_buffer(context, &context->current_frame);
+                                swap_frame_buffers(context);
+                                context->last_completed_frame = context->current_frame.frame_num;
+                                // Track diagnostics (only once per completed frame!)
+                                context->frames_completed++;
+                                context->buffer_swaps++;
+                                context->frames_delivered_to_obs++;
+                                context->total_pipeline_latency += (os_gettime_ns() - capture_time);
+                                video_frames++; // Count completed frames for statistics (primary location)
+                                pthread_mutex_unlock(&context->frame_mutex);
+                            }
+                        } else {
+                            // Add frame to delay queue
+                            if (enqueue_delayed_frame(context, &context->current_frame, seq_num)) {
+                                context->last_completed_frame = context->current_frame.frame_num;
+                                context->frames_completed++;
+                                video_frames++;
+                                
+                                // Try to dequeue a delayed frame if queue has enough frames
+                                if (dequeue_delayed_frame(context)) {
+                                    // Successfully dequeued a frame, make it available to OBS
+                                    if (pthread_mutex_lock(&context->frame_mutex) == 0) {
+                                        swap_frame_buffers(context);
+                                        context->buffer_swaps++;
+                                        context->frames_delivered_to_obs++;
+                                        context->total_pipeline_latency += (os_gettime_ns() - capture_time);
+                                        pthread_mutex_unlock(&context->frame_mutex);
+                                    }
+                                }
+                            }
                         }
-                        pthread_mutex_unlock(&context->frame_mutex);
                     }
 
                     // Reset for next frame

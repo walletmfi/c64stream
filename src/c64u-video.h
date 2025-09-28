@@ -18,6 +18,12 @@ bool is_frame_timeout(struct frame_assembly *frame);
 void swap_frame_buffers(struct c64u_source *context);
 void assemble_frame_to_buffer(struct c64u_source *context, struct frame_assembly *frame);
 
+// Delay queue management
+void init_delay_queue(struct c64u_source *context);
+bool enqueue_delayed_frame(struct c64u_source *context, struct frame_assembly *frame, uint16_t sequence_num);
+bool dequeue_delayed_frame(struct c64u_source *context);
+void clear_delay_queue(struct c64u_source *context);
+
 // Video thread function
 void *video_thread_func(void *data);
 

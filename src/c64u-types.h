@@ -91,6 +91,15 @@ struct c64u_source {
     uint64_t last_frame_time;
     uint64_t frame_interval_ns; // Target frame interval (20ms for 50Hz PAL)
 
+    // Rendering delay
+    uint32_t render_delay_frames; // Delay in frames before making buffer available to OBS
+    uint32_t *delayed_frame_queue; // Circular buffer for delayed frames
+    uint32_t delay_queue_size;     // Current size of delay queue 
+    uint32_t delay_queue_head;     // Head position in delay queue
+    uint32_t delay_queue_tail;     // Tail position in delay queue
+    uint16_t *delay_sequence_queue; // Sequence numbers for delayed frames
+    pthread_mutex_t delay_mutex;    // Mutex for delay queue access
+
     // Auto-start control
     bool auto_start_attempted;
 };
