@@ -299,6 +299,16 @@ void c64u_update(void *data, obs_data_t *settings)
             context->delay_queue_head = 0;
             context->delay_queue_tail = 0;
 
+            // Force reallocation of delay buffers on next frame
+            if (context->delayed_frame_queue) {
+                bfree(context->delayed_frame_queue);
+                context->delayed_frame_queue = NULL;
+            }
+            if (context->delay_sequence_queue) {
+                bfree(context->delay_sequence_queue);
+                context->delay_sequence_queue = NULL;
+            }
+
             pthread_mutex_unlock(&context->delay_mutex);
         }
     }
@@ -507,6 +517,22 @@ void c64u_render(void *data, gs_effect_t *effect)
             pthread_mutex_unlock(&context->frame_mutex);
         }
     } else {
+        // Log render starvation - OBS is requesting frames but we have none
+        static uint64_t last_starvation_log = 0;
+        static uint32_t starvation_count = 0;
+        uint64_t now = os_gettime_ns();
+
+        if (context->streaming && !context->frame_ready) {
+            starvation_count++;
+            if (last_starvation_log == 0 || (now - last_starvation_log) >= 1000000000ULL) { // Log every second
+                C64U_LOG_WARNING(
+                    "🍽️ RENDER STARVATION: OBS requesting frames but none ready (%u starved renders in last period)",
+                    starvation_count);
+                starvation_count = 0;
+                last_starvation_log = now;
+            }
+        }
+
         // Show colored background to indicate plugin state
         gs_effect_t *solid = obs_get_base_effect(OBS_EFFECT_SOLID);
         gs_eparam_t *color = gs_effect_get_param_by_name(solid, "color");
