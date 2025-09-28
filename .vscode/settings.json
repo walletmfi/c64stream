@@ -29,6 +29,11 @@
     "editor.rulers": [120],
     "editor.renderWhitespace": "boundary",
     
+    // Global indentation settings
+    "editor.tabSize": 4,
+    "editor.insertSpaces": true,
+    "editor.detectIndentation": false,
+    
     // File associations
     "files.associations": {
         "*.c": "c",
@@ -41,15 +46,15 @@
     "[c]": {
         "editor.defaultFormatter": "xaver.clang-format",
         "editor.formatOnSave": true,
-        "editor.tabSize": 8,
-        "editor.insertSpaces": false,
+        "editor.tabSize": 4,
+        "editor.insertSpaces": true,
         "editor.detectIndentation": false
     },
     "[cpp]": {
         "editor.defaultFormatter": "xaver.clang-format",
         "editor.formatOnSave": true,
-        "editor.tabSize": 8,
-        "editor.insertSpaces": false,
+        "editor.tabSize": 4,
+        "editor.insertSpaces": true,
         "editor.detectIndentation": false
     },
     "github.copilot.advanced": {

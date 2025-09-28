@@ -29,8 +29,6 @@
 #define C64U_PAL_FRAME_INTERVAL_NS 20000000ULL  // 20ms for 50Hz PAL
 #define C64U_NTSC_FRAME_INTERVAL_NS 16666667ULL // 16.67ms for 60Hz NTSC
 
-
-
 // Forward declaration
 struct c64u_source;
 

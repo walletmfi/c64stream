@@ -31,31 +31,31 @@ OBS_MODULE_USE_DEFAULT_LOCALE(PLUGIN_NAME, "en-US")
 
 bool obs_module_load(void)
 {
-	C64U_LOG_INFO("Loading C64U plugin (version %s)", PLUGIN_VERSION);
+    C64U_LOG_INFO("Loading C64U plugin (version %s)", PLUGIN_VERSION);
 
-	// DEBUG: This will always be hit when the plugin loads
-	// Module loading
+    // DEBUG: This will always be hit when the plugin loads
+    // Module loading
 
-	struct obs_source_info c64u_info = {.id = "c64u_source",
-					    .type = OBS_SOURCE_TYPE_INPUT,
-					    .output_flags = OBS_SOURCE_VIDEO | OBS_SOURCE_AUDIO,
-					    .get_name = c64u_get_name,
-					    .create = c64u_create,
-					    .destroy = c64u_destroy,
-					    .update = c64u_update,
-					    .get_defaults = c64u_defaults,
-					    .video_render = c64u_render,
-					    .get_properties = c64u_properties,
-					    .get_width = c64u_get_width,
-					    .get_height = c64u_get_height};
+    struct obs_source_info c64u_info = {.id = "c64u_source",
+                                        .type = OBS_SOURCE_TYPE_INPUT,
+                                        .output_flags = OBS_SOURCE_VIDEO | OBS_SOURCE_AUDIO,
+                                        .get_name = c64u_get_name,
+                                        .create = c64u_create,
+                                        .destroy = c64u_destroy,
+                                        .update = c64u_update,
+                                        .get_defaults = c64u_defaults,
+                                        .video_render = c64u_render,
+                                        .get_properties = c64u_properties,
+                                        .get_width = c64u_get_width,
+                                        .get_height = c64u_get_height};
 
-	obs_register_source(&c64u_info);
-	C64U_LOG_INFO("C64U plugin loaded successfully");
-	return true;
+    obs_register_source(&c64u_info);
+    C64U_LOG_INFO("C64U plugin loaded successfully");
+    return true;
 }
 
 void obs_module_unload(void)
 {
-	C64U_LOG_INFO("Unloading C64U plugin");
-	c64u_cleanup_networking();
+    C64U_LOG_INFO("Unloading C64U plugin");
+    c64u_cleanup_networking();
 }
