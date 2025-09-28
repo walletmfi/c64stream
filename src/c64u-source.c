@@ -10,8 +10,8 @@
 #include "c64u-protocol.h"
 #include "c64u-video.h"
 #include "c64u-network.h"
-#include "c64u-video.h"
 #include "c64u-audio.h"
+#include "c64u-record.h"
 #include "plugin-support.h"
 
 void *c64u_create(obs_data_t *settings, obs_source_t *source)
@@ -154,37 +154,11 @@ void *c64u_create(obs_data_t *settings, obs_source_t *source)
     context->audio_thread_active = false;
     context->auto_start_attempted = false;
 
-    // Initialize frame saving
-    context->save_frames = obs_data_get_bool(settings, "save_frames");
-    const char *save_folder = obs_data_get_string(settings, "save_folder");
-    if (save_folder && strlen(save_folder) > 0) {
-        strncpy(context->save_folder, save_folder, sizeof(context->save_folder) - 1);
-        context->save_folder[sizeof(context->save_folder) - 1] = '\0';
-    } else {
-        strcpy(context->save_folder, "./c64u_frames"); // Default folder
-    }
-    context->saved_frame_count = 0;
+    // Initialize recording module
+    c64u_record_init(context);
 
-    // Initialize video recording
-    context->record_video = obs_data_get_bool(settings, "record_video");
-    context->video_file = NULL;
-    context->audio_file = NULL;
-    context->timing_file = NULL;
-    context->recording_start_time = 0;
-    context->recorded_frames = 0;
-    context->recorded_audio_samples = 0;
-
-    // Initialize recording mutex
-    if (pthread_mutex_init(&context->recording_mutex, NULL) != 0) {
-        C64U_LOG_ERROR("Failed to initialize recording mutex");
-        pthread_mutex_destroy(&context->frame_mutex);
-        pthread_mutex_destroy(&context->assembly_mutex);
-        pthread_mutex_destroy(&context->delay_mutex);
-        bfree(context->frame_buffer_front);
-        bfree(context->frame_buffer_back);
-        bfree(context);
-        return NULL;
-    }
+    // Apply recording settings from OBS
+    c64u_record_update_settings(context, settings);
 
     C64U_LOG_INFO("C64U source created - C64 IP: %s, OBS IP: %s, Video: %u, Audio: %u", context->ip_address,
                   context->obs_ip_address, context->video_port, context->audio_port);
@@ -236,30 +210,13 @@ void c64u_destroy(void *data)
         }
     }
 
-    // Stop recording if active
-    if (context->record_video) {
-        if (pthread_mutex_lock(&context->recording_mutex) == 0) {
-            if (context->video_file) {
-                fclose(context->video_file);
-                context->video_file = NULL;
-            }
-            if (context->audio_file) {
-                fclose(context->audio_file);
-                context->audio_file = NULL;
-            }
-            if (context->timing_file) {
-                fclose(context->timing_file);
-                context->timing_file = NULL;
-            }
-            pthread_mutex_unlock(&context->recording_mutex);
-        }
-    }
+    // Cleanup recording module
+    c64u_record_cleanup(context);
 
     // Cleanup resources
     pthread_mutex_destroy(&context->frame_mutex);
     pthread_mutex_destroy(&context->assembly_mutex);
     pthread_mutex_destroy(&context->delay_mutex);
-    pthread_mutex_destroy(&context->recording_mutex);
     if (context->frame_buffer_front) {
         bfree(context->frame_buffer_front);
     }
@@ -366,32 +323,8 @@ void c64u_update(void *data, obs_data_t *settings)
         }
     }
 
-    // Update frame saving settings
-    context->save_frames = obs_data_get_bool(settings, "save_frames");
-    const char *new_save_folder = obs_data_get_string(settings, "save_folder");
-    if (new_save_folder && strlen(new_save_folder) > 0) {
-        if (strcmp(context->save_folder, new_save_folder) != 0) {
-            strncpy(context->save_folder, new_save_folder, sizeof(context->save_folder) - 1);
-            context->save_folder[sizeof(context->save_folder) - 1] = '\0';
-            context->saved_frame_count = 0; // Reset counter for new folder
-            C64U_LOG_INFO("Frame save folder updated: %s", context->save_folder);
-        }
-    }
-
-    // Update video recording settings
-    bool new_record_video = obs_data_get_bool(settings, "record_video");
-    if (new_record_video != context->record_video) {
-        context->record_video = new_record_video;
-
-        if (new_record_video) {
-            // Start recording
-            start_video_recording(context);
-            C64U_LOG_INFO("Video recording started");
-        } else {
-            // Stop recording
-            stop_video_recording(context);
-        }
-    }
+    // Update recording settings
+    c64u_record_update_settings(context, settings);
 
     // Start streaming with current configuration (will create new sockets if needed)
     C64U_LOG_INFO("Applying configuration and starting streaming");

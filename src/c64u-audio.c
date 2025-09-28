@@ -5,7 +5,7 @@
 #include "c64u-types.h"
 #include "c64u-protocol.h"
 #include "c64u-network.h"
-#include "c64u-video.h" // For recording functions
+#include "c64u-record.h" // For recording functions
 
 // Audio thread function
 void *audio_thread_func(void *data)

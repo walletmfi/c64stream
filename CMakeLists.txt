@@ -42,6 +42,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
   src/c64u-video.c
   src/c64u-audio.c
   src/c64u-source.c
+  src/c64u-record.c
 )
 
 set_target_properties_plugin(${CMAKE_PROJECT_NAME} PROPERTIES OUTPUT_NAME ${_name})
