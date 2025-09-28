@@ -471,9 +471,17 @@ void record_video_frame(struct c64u_source *context, uint32_t *frame_buffer)
         C64U_LOG_DEBUG("Recording frame %u: %ux%u, non_zero=%u/100, fps=%.3f", context->recorded_frames, context->width,
                        context->height, non_zero_pixels, context->expected_fps);
 
-        // Use actual C64 video data (no test pattern modification)
-
         convert_rgba_to_bgr24(frame_buffer, bgr_buffer, context->width, context->height);
+
+        // For 60Hz sessions, dump first 16 bytes of BGR frame data for debugging
+        if ((int)(context->expected_fps + 0.5) == 60) {
+            char hexbuf[49]; // 16 bytes * 3 chars + null
+            for (int i = 0; i < 16; i++) {
+                sprintf(hexbuf + i * 3, "%02X ", bgr_buffer[i]);
+            }
+            hexbuf[48] = '\0';
+            C64U_LOG_DEBUG("Frame %u BGR[0..15]: %s", context->recorded_frames, hexbuf);
+        }
 
         // Write AVI frame chunk header ("00db" = stream 0, uncompressed DIB)
         fwrite("00db", 1, 4, context->video_file);
