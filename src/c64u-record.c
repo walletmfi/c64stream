@@ -1,3 +1,4 @@
+
 #include <obs-module.h>
 #include <util/platform.h>
 #include <string.h>
@@ -9,6 +10,12 @@
 #include "c64u-logging.h"
 #include "c64u-record.h"
 #include "c64u-types.h"
+
+#ifndef S_ISDIR
+#ifdef _WIN32
+#define S_ISDIR(m) (((m) & S_IFMT) == S_IFDIR)
+#endif
+#endif
 
 // Helper function to write minimal, standard-compliant AVI header
 static void write_avi_header(FILE *file, uint32_t width, uint32_t height, double fps)
@@ -540,7 +547,7 @@ void record_audio_data(struct c64u_source *context, const uint8_t *audio_data, s
     // Note: Audio is only written to separate WAV file, not to AVI (video-only AVI)
 
     if (wav_written == data_size) {
-        context->recorded_audio_samples += data_size / 4; // 16-bit stereo = 4 bytes per sample
+        context->recorded_audio_samples += (uint32_t)(data_size / 4); // 16-bit stereo = 4 bytes per sample
         // Note: No AVI header update needed since audio is not in AVI file
     } else {
         C64U_LOG_WARNING("Failed to write audio data to WAV recording");
