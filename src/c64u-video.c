@@ -20,8 +20,8 @@ void save_frame_as_bmp(struct c64u_source *context, uint32_t *frame_buffer)
     // Create timestamped filename
     uint64_t timestamp_ms = os_gettime_ns() / 1000000; // Convert to milliseconds
     char filename[768];
-    snprintf(filename, sizeof(filename), "%s/frame_%llu_%05u.bmp", 
-             context->save_folder, (unsigned long long)timestamp_ms, context->saved_frame_count++);
+    snprintf(filename, sizeof(filename), "%s/frame_%llu_%05u.bmp", context->save_folder,
+             (unsigned long long)timestamp_ms, context->saved_frame_count++);
 
     // Create directory if it doesn't exist (simple approach)
     char mkdir_cmd[800];
@@ -45,21 +45,60 @@ void save_frame_as_bmp(struct c64u_source *context, uint32_t *frame_buffer)
 
     // BMP Header (54 bytes total)
     uint8_t header[54] = {
-        'B', 'M',                           // Signature
-        file_size & 0xFF, (file_size >> 8) & 0xFF, (file_size >> 16) & 0xFF, (file_size >> 24) & 0xFF, // File size
-        0, 0, 0, 0,                         // Reserved
-        54, 0, 0, 0,                        // Data offset
-        40, 0, 0, 0,                        // Header size
-        width & 0xFF, (width >> 8) & 0xFF, (width >> 16) & 0xFF, (width >> 24) & 0xFF, // Width
-        height & 0xFF, (height >> 8) & 0xFF, (height >> 16) & 0xFF, (height >> 24) & 0xFF, // Height
-        1, 0,                               // Planes
-        24, 0,                              // Bits per pixel
-        0, 0, 0, 0,                         // Compression
-        image_size & 0xFF, (image_size >> 8) & 0xFF, (image_size >> 16) & 0xFF, (image_size >> 24) & 0xFF, // Image size
-        0, 0, 0, 0,                         // X pixels per meter
-        0, 0, 0, 0,                         // Y pixels per meter  
-        0, 0, 0, 0,                         // Colors used
-        0, 0, 0, 0                          // Colors important
+        'B',
+        'M', // Signature
+        file_size & 0xFF,
+        (file_size >> 8) & 0xFF,
+        (file_size >> 16) & 0xFF,
+        (file_size >> 24) & 0xFF, // File size
+        0,
+        0,
+        0,
+        0, // Reserved
+        54,
+        0,
+        0,
+        0, // Data offset
+        40,
+        0,
+        0,
+        0, // Header size
+        width & 0xFF,
+        (width >> 8) & 0xFF,
+        (width >> 16) & 0xFF,
+        (width >> 24) & 0xFF, // Width
+        height & 0xFF,
+        (height >> 8) & 0xFF,
+        (height >> 16) & 0xFF,
+        (height >> 24) & 0xFF, // Height
+        1,
+        0, // Planes
+        24,
+        0, // Bits per pixel
+        0,
+        0,
+        0,
+        0, // Compression
+        image_size & 0xFF,
+        (image_size >> 8) & 0xFF,
+        (image_size >> 16) & 0xFF,
+        (image_size >> 24) & 0xFF, // Image size
+        0,
+        0,
+        0,
+        0, // X pixels per meter
+        0,
+        0,
+        0,
+        0, // Y pixels per meter
+        0,
+        0,
+        0,
+        0, // Colors used
+        0,
+        0,
+        0,
+        0 // Colors important
     };
 
     fwrite(header, 1, 54, file);
@@ -70,19 +109,19 @@ void save_frame_as_bmp(struct c64u_source *context, uint32_t *frame_buffer)
         for (int y = height - 1; y >= 0; y--) { // Bottom-to-top
             uint32_t *src_row = frame_buffer + (y * width);
             uint8_t *dst = row_buffer;
-            
+
             for (uint32_t x = 0; x < width; x++) {
                 uint32_t pixel = src_row[x];
                 *dst++ = (pixel >> 16) & 0xFF; // B
-                *dst++ = (pixel >> 8) & 0xFF;  // G  
+                *dst++ = (pixel >> 8) & 0xFF;  // G
                 *dst++ = pixel & 0xFF;         // R
             }
-            
+
             // Pad to 4-byte boundary
             while ((dst - row_buffer) % 4 != 0) {
                 *dst++ = 0;
             }
-            
+
             fwrite(row_buffer, 1, row_padded, file);
         }
         free(row_buffer);
