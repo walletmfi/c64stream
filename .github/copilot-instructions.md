@@ -32,6 +32,14 @@ This repository provides an OBS Studio source plugin for streaming video and aud
    - Make code easy to modify without breaking other parts
    - Design clear interfaces between components
 
+5. **Code Formatting (MANDATORY)**
+   - **ALWAYS run `./build-aux/run-clang-format` after ANY code changes**
+   - All C/C++ code must pass clang-format 19.1.1+ validation
+   - All files must end with a single newline character
+   - Use 4 spaces for indentation, 120 character line limit
+   - VS Code is configured to auto-format on save
+   - **Never commit code that fails clang-format checks**
+
 ### Review Focus Areas
 - Architecture and design issues
 - Performance implications
@@ -67,7 +75,7 @@ This repository provides an OBS Studio source plugin for streaming video and aud
    - Linux: `build-essential`, `ninja-build`, `pkg-config`
 3. **Shell environment:**
    - Linux/macOS: `zsh` (required for build scripts)
-   - Windows: PowerShell 5.1+ 
+   - Windows: PowerShell 5.1+
 4. **Formatting tools:**
    - `clang-format` version 19.1.1+ (critical requirement)
    - `gersemi` for CMake formatting (install via: `pip install gersemi`)
@@ -102,7 +110,7 @@ cmake --build build_x86_64    # or build_macos/build_x64
 # Linux
 cmake --preset ubuntu-x86_64
 
-# macOS  
+# macOS
 cmake --preset macos
 
 # Windows
@@ -126,7 +134,7 @@ export CI=1
 
 **macOS:**
 ```bash
-# Note: macOS build script requires CI environment 
+# Note: macOS build script requires CI environment
 export CI=1
 .github/scripts/build-macos --config RelWithDebInfo --codesign
 ```
@@ -157,7 +165,7 @@ export CI=1
 # Check C/C++ formatting
 ./build-aux/run-clang-format --check
 
-# Check CMake formatting  
+# Check CMake formatting
 ./build-aux/run-gersemi --check
 
 # Fix formatting automatically
@@ -223,7 +231,7 @@ cmake --build --preset <preset> --target package
 
 ### Validation Checks:
 1. **clang-format** - C/C++ code style compliance
-2. **gersemi** - CMake formatting compliance  
+2. **gersemi** - CMake formatting compliance
 3. **Multi-platform builds** - Ensures cross-platform compatibility
 4. **Codesigning** - macOS binaries signed for distribution
 
@@ -233,16 +241,17 @@ cmake --build --preset <preset> --target package
 The C64 Ultimate device streams video and audio data over network connections. Key implementation areas:
 - **Network streaming:** Implement UDP/TCP clients to receive C64U data streams
 - **Video format conversion:** Convert C64U video format to OBS-compatible frames
-- **Audio handling:** Process C64U audio streams for OBS audio sources  
+- **Audio handling:** Process C64U audio streams for OBS audio sources
 - **Configuration UI:** Allow users to specify C64U device IP/connection settings
 - **Error handling:** Robust connection management and fallback behavior
 
 ### Making Changes:
-1. **Always run format checks before committing**
+1. **MANDATORY: Run `./build-aux/run-clang-format` after every code change**
 2. **Test on target platform** - Use appropriate preset
 3. **Update buildspec.json** if adding dependencies
-4. **Plugin logic goes in src/plugin-main.c** - This is the core implementation file
-5. **Use obs_log()** for logging instead of printf()
+4. **Plugin logic goes in modular source files** - Use focused modules in src/
+5. **Use C64U_LOG_*() macros** for logging (defined in c64u-logging.h)
+6. **Verify all files end with newline** - Critical for macOS builds
 
 ### Common Plugin Tasks:
 - **Add new source type:** Implement in plugin-main.c, register with OBS
@@ -259,7 +268,7 @@ The C64 Ultimate device streams video and audio data over network connections. K
 
 These instructions are comprehensive and tested. Only search for additional information if:
 1. Build fails with error not covered in "Common Build Issues"
-2. Instructions appear outdated (e.g., tool versions changed significantly)  
+2. Instructions appear outdated (e.g., tool versions changed significantly)
 3. New platform support is needed beyond Windows/macOS/Linux
 
 For C64 Ultimate streaming implementation details, refer to the official documentation at https://1541u-documentation.readthedocs.io/en/latest/data_streams.html#data_streams.
