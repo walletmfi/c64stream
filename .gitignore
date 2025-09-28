@@ -81,3 +81,7 @@ tests/test_vic_colors
 !/tests/*.c
 !/tests/*.h
 !/tests/CMakeLists.txt
+
+# C64 build artifacts (generated from .asm source files)
+*.prg
+*.lst
