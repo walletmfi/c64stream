@@ -36,11 +36,10 @@ This will:
 
 ## What the Program Does
 
-The program sets up a raster interrupt that triggers at the bottom of the screen (raster line 255). Each time the interrupt fires, it:
+The program waits for raster line 255. Then it:
 
 1. Fills the entire screen with the current digit (0-9)
 2. Increments to the next digit (wrapping from 9 back to 0)
-3. Re-arms the interrupt for the next frame
 
 This creates a visual effect where the screen cycles through digits continuously.
 
@@ -48,6 +47,5 @@ This creates a visual effect where the screen cycles through digits continuously
 
 - Uses BASIC stub starting at $0801 to auto-run with SYS 2064
 - Machine code starts at $0810
-- Uses raster interrupts for timing
 - Converts digits to PETSCII for display
 - Fills screen memory at $0400-$07E7
