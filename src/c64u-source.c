@@ -680,12 +680,15 @@ obs_properties_t *c64u_properties(void *data)
     obs_property_set_long_description(auto_ip_prop,
                                       "Use the automatically detected OBS IP address in streaming commands");
 
-    // Video Port
-    obs_property_t *video_port_prop = obs_properties_add_int(props, "video_port", "Video Port", 1024, 65535, 1);
+    // Port Configuration Group (side-by-side layout)
+    obs_property_t *port_group =
+        obs_properties_add_group(props, "port_group", "Port Configuration", OBS_GROUP_NORMAL, obs_properties_create());
+    obs_properties_t *port_props = obs_property_group_content(port_group);
+
+    obs_property_t *video_port_prop = obs_properties_add_int(port_props, "video_port", "Video Port", 1024, 65535, 1);
     obs_property_set_long_description(video_port_prop, "UDP port for video stream (default: 11000)");
 
-    // Audio Port
-    obs_property_t *audio_port_prop = obs_properties_add_int(props, "audio_port", "Audio Port", 1024, 65535, 1);
+    obs_property_t *audio_port_prop = obs_properties_add_int(port_props, "audio_port", "Audio Port", 1024, 65535, 1);
     obs_property_set_long_description(audio_port_prop, "UDP port for audio stream (default: 11001)");
 
     // Rendering Delay
@@ -695,22 +698,28 @@ obs_properties_t *c64u_properties(void *data)
         delay_prop,
         "Delay between packet arrival and OBS rendering to smooth out UDP packet loss/reordering (default: 10 frames)");
 
-    // Frame Saving Section
-    obs_property_t *save_frames_prop = obs_properties_add_bool(props, "save_frames", "Save Frames to Disk");
+    // Recording Controls Group (side-by-side layout)
+    obs_property_t *recording_group = obs_properties_add_group(props, "recording_group", "Recording Options",
+                                                               OBS_GROUP_NORMAL, obs_properties_create());
+    obs_properties_t *recording_props = obs_property_group_content(recording_group);
+
+    obs_property_t *save_frames_prop = obs_properties_add_bool(recording_props, "save_frames", "Save Frames to Disk");
     obs_property_set_long_description(
         save_frames_prop,
         "Save each received frame as a BMP image file for analysis (performance impact - use for debugging only)");
 
-    obs_property_t *save_folder_prop =
-        obs_properties_add_path(props, "save_folder", "Frame Save Folder", OBS_PATH_DIRECTORY, NULL, NULL);
-    obs_property_set_long_description(
-        save_folder_prop, "Directory where frame images will be saved (default: current working directory)");
-
-    // Video Recording Section
-    obs_property_t *record_video_prop = obs_properties_add_bool(props, "record_video", "Record Raw Video + Audio");
+    obs_property_t *record_video_prop =
+        obs_properties_add_bool(recording_props, "record_video", "Record Video + Audio");
     obs_property_set_long_description(
         record_video_prop,
         "Record uncompressed video and audio streams to files for analysis (high disk usage - use for debugging only)");
+
+    // Save Folder (applies to both frame saving and video recording)
+    obs_property_t *save_folder_prop =
+        obs_properties_add_path(props, "save_folder", "Output Folder", OBS_PATH_DIRECTORY, NULL, NULL);
+    obs_property_set_long_description(
+        save_folder_prop,
+        "Directory where session folders with frames, video, audio, and timing files will be created");
 
     return props;
 }

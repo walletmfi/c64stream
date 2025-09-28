@@ -113,6 +113,7 @@ struct c64u_source {
     FILE *video_file;
     FILE *audio_file;
     FILE *timing_file;
+    char session_folder[800]; // Current session folder path
     uint64_t recording_start_time;
     uint32_t recorded_frames;
     uint32_t recorded_audio_samples;

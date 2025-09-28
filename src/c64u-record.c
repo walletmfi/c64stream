@@ -10,45 +10,149 @@
 #include "c64u-types.h"
 
 // Helper function to write AVI header
-static void write_avi_header(FILE *file, uint32_t width, uint32_t height, uint32_t fps)
+static void write_avi_header(FILE *file, uint32_t width, uint32_t height, double fps)
 {
-    // Simple AVI header - we'll write a minimal structure for uncompressed BGR24
-    // This is a simplified implementation for basic compatibility
-    uint32_t file_size = 4096; // We'll update this later
+    uint32_t frame_size = width * height * 3; // BGR24 bytes per frame
+    uint32_t zero = 0;
+    uint32_t one = 1;
 
-    // RIFF header
+    // Calculate precise frame period in microseconds
+    uint32_t frame_period = (uint32_t)(1000000.0 / fps + 0.5); // Round to nearest microsecond
+
+    // RIFF header (will update file size later)
     fwrite("RIFF", 1, 4, file);
-    fwrite(&file_size, 4, 1, file);
+    uint32_t file_size_placeholder = 0;
+    fwrite(&file_size_placeholder, 4, 1, file);
     fwrite("AVI ", 1, 4, file);
 
-    // AVI header chunk
+    // LIST hdrl chunk
     fwrite("LIST", 1, 4, file);
-    uint32_t hdrl_size = 200;
+    uint32_t hdrl_size = 4 + 56 + (4 + 48 + 4 + 40) + (4 + 48 + 4 + 16); // hdrl + avih + video_strl + audio_strl
     fwrite(&hdrl_size, 4, 1, file);
     fwrite("hdrl", 1, 4, file);
 
-    // Main AVI header
+    // Main AVI header (avih)
     fwrite("avih", 1, 4, file);
     uint32_t avih_size = 56;
     fwrite(&avih_size, 4, 1, file);
 
-    uint32_t frame_period = 1000000 / fps; // microseconds per frame
-    fwrite(&frame_period, 4, 1, file);     // dwMicroSecPerFrame
-    uint32_t zero = 0;
-    fwrite(&zero, 4, 1, file); // dwMaxBytesPerSec
-    fwrite(&zero, 4, 1, file); // dwPaddingGranularity
-    fwrite(&zero, 4, 1, file); // dwFlags
-    fwrite(&zero, 4, 1, file); // dwTotalFrames (update later)
-    fwrite(&zero, 4, 1, file); // dwInitialFrames
-    uint32_t one = 1;
-    fwrite(&one, 4, 1, file);    // dwStreams
-    fwrite(&zero, 4, 1, file);   // dwSuggestedBufferSize
-    fwrite(&width, 4, 1, file);  // dwWidth
-    fwrite(&height, 4, 1, file); // dwHeight
-    fwrite(&zero, 4, 1, file);   // dwReserved[0]
-    fwrite(&zero, 4, 1, file);   // dwReserved[1]
-    fwrite(&zero, 4, 1, file);   // dwReserved[2]
-    fwrite(&zero, 4, 1, file);   // dwReserved[3]
+    uint32_t max_bytes_per_sec = (uint32_t)(frame_size * fps);
+
+    fwrite(&frame_period, 4, 1, file);      // dwMicroSecPerFrame
+    fwrite(&max_bytes_per_sec, 4, 1, file); // dwMaxBytesPerSec
+    fwrite(&zero, 4, 1, file);              // dwPaddingGranularity
+    fwrite(&zero, 4, 1, file);              // dwFlags
+    fwrite(&zero, 4, 1, file);              // dwTotalFrames (update later)
+    fwrite(&zero, 4, 1, file);              // dwInitialFrames
+    uint32_t two = 2;
+    fwrite(&two, 4, 1, file);        // dwStreams (video + audio)
+    fwrite(&frame_size, 4, 1, file); // dwSuggestedBufferSize
+    fwrite(&width, 4, 1, file);      // dwWidth
+    fwrite(&height, 4, 1, file);     // dwHeight
+    fwrite(&zero, 4, 1, file);       // dwReserved[0]
+    fwrite(&zero, 4, 1, file);       // dwReserved[1]
+    fwrite(&zero, 4, 1, file);       // dwReserved[2]
+    fwrite(&zero, 4, 1, file);       // dwReserved[3]
+
+    // LIST strl chunk (stream list)
+    fwrite("LIST", 1, 4, file);
+    uint32_t strl_size = 4 + 48 + 4 + 40; // strl + strh + strf + BITMAPINFOHEADER
+    fwrite(&strl_size, 4, 1, file);
+    fwrite("strl", 1, 4, file);
+
+    // Stream header (strh)
+    fwrite("strh", 1, 4, file);
+    uint32_t strh_size = 48;
+    fwrite(&strh_size, 4, 1, file);
+    fwrite("vids", 1, 4, file);     // fccType (video)
+    fwrite("\0\0\0\0", 1, 4, file); // fccHandler (uncompressed)
+    fwrite(&zero, 4, 1, file);      // dwFlags
+    uint16_t priority = 0;
+    fwrite(&priority, 2, 1, file); // wPriority
+    uint16_t language = 0;
+    fwrite(&language, 2, 1, file); // wLanguage
+    fwrite(&zero, 4, 1, file);     // dwInitialFrames
+    fwrite(
+        &one, 4, 1,
+        file); // dwScale\n    uint32_t rate = (uint32_t)(fps * 1000 + 0.5); // Rate in milliHz for precision\n    fwrite(&rate, 4, 1, file);              // dwRate
+    fwrite(&zero, 4, 1, file);       // dwStart
+    fwrite(&zero, 4, 1, file);       // dwLength (update later)
+    fwrite(&frame_size, 4, 1, file); // dwSuggestedBufferSize
+    uint32_t quality = 0xFFFFFFFF;
+    fwrite(&quality, 4, 1, file); // dwQuality (-1 = default)
+    fwrite(&zero, 4, 1, file);    // dwSampleSize (0 for video)
+
+    // Stream format (strf) - BITMAPINFOHEADER
+    fwrite("strf", 1, 4, file);
+    uint32_t strf_size = 40; // BITMAPINFOHEADER size
+    fwrite(&strf_size, 4, 1, file);
+
+    // BITMAPINFOHEADER
+    fwrite(&strf_size, 4, 1, file); // biSize
+    fwrite(&width, 4, 1, file);     // biWidth
+    fwrite(&height, 4, 1, file);    // biHeight (positive = bottom-up)
+    uint16_t planes = 1;
+    fwrite(&planes, 2, 1, file); // biPlanes
+    uint16_t bit_count = 24;
+    fwrite(&bit_count, 2, 1, file); // biBitCount
+    fwrite(&zero, 4, 1, file);      // biCompression (0 = uncompressed)
+    uint32_t image_size = frame_size;
+    fwrite(&image_size, 4, 1, file); // biSizeImage
+    fwrite(&zero, 4, 1, file);       // biXPelsPerMeter
+    fwrite(&zero, 4, 1, file);       // biYPelsPerMeter
+    fwrite(&zero, 4, 1, file);       // biClrUsed
+    fwrite(&zero, 4, 1, file);       // biClrImportant
+
+    // Audio stream (stream 1)
+    fwrite("LIST", 1, 4, file);
+    uint32_t strl_audio_size = 4 + 48 + 4 + 16; // strl + strh + strf + WAVEFORMATEX
+    fwrite(&strl_audio_size, 4, 1, file);
+    fwrite("strl", 1, 4, file);
+
+    // Audio stream header (strh)
+    fwrite("strh", 1, 4, file);
+    uint32_t strh_audio_size = 48;
+    fwrite(&strh_audio_size, 4, 1, file);
+    fwrite("auds", 1, 4, file);     // fccType (audio)
+    fwrite("\0\0\0\0", 1, 4, file); // fccHandler
+    fwrite(&zero, 4, 1, file);      // dwFlags
+    fwrite(&priority, 2, 1, file);  // wPriority
+    fwrite(&language, 2, 1, file);  // wLanguage
+    fwrite(&zero, 4, 1, file);      // dwInitialFrames
+    uint32_t audio_scale = 1;
+    fwrite(&audio_scale, 4, 1, file); // dwScale
+    uint32_t audio_rate = 48000;      // Sample rate
+    fwrite(&audio_rate, 4, 1, file);  // dwRate
+    fwrite(&zero, 4, 1, file);        // dwStart
+    fwrite(&zero, 4, 1, file);        // dwLength (update later)
+    uint32_t audio_buffer_size = 4096;
+    fwrite(&audio_buffer_size, 4, 1, file); // dwSuggestedBufferSize
+    fwrite(&quality, 4, 1, file);           // dwQuality
+    uint32_t sample_size = 4;               // 16-bit stereo = 4 bytes per sample
+    fwrite(&sample_size, 4, 1, file);       // dwSampleSize
+
+    // Audio stream format (strf) - WAVEFORMATEX
+    fwrite("strf", 1, 4, file);
+    uint32_t strf_audio_size = 16; // WAVEFORMATEX size
+    fwrite(&strf_audio_size, 4, 1, file);
+
+    // WAVEFORMATEX
+    uint16_t audio_format = 1;         // PCM
+    fwrite(&audio_format, 2, 1, file); // wFormatTag
+    uint16_t channels = 2;
+    fwrite(&channels, 2, 1, file);                  // nChannels
+    fwrite(&audio_rate, 4, 1, file);                // nSamplesPerSec
+    uint32_t byte_rate = audio_rate * channels * 2; // 48000 * 2 * 2
+    fwrite(&byte_rate, 4, 1, file);                 // nAvgBytesPerSec
+    uint16_t block_align = channels * 2;            // 2 channels * 2 bytes
+    fwrite(&block_align, 2, 1, file);               // nBlockAlign
+    uint16_t bits_per_sample = 16;
+    fwrite(&bits_per_sample, 2, 1, file); // wBitsPerSample
+
+    // LIST movi chunk (where frame and audio data goes)
+    fwrite("LIST", 1, 4, file);
+    fwrite(&zero, 4, 1, file); // movi size (update later)
+    fwrite("movi", 1, 4, file);
 }
 
 static void finalize_avi_header(FILE *file, uint32_t frame_count)
@@ -56,12 +160,34 @@ static void finalize_avi_header(FILE *file, uint32_t frame_count)
     if (!file)
         return;
 
-    // Update total frames
-    fseek(file, 48, SEEK_SET);
+    long current_pos = ftell(file);
+    uint32_t file_size = current_pos - 8; // Total file size minus RIFF header
+
+    // Update RIFF file size
+    fseek(file, 4, SEEK_SET);
+    fwrite(&file_size, 4, 1, file);
+
+    // Update total frames in avih
+    fseek(file, 48, SEEK_SET); // Position of dwTotalFrames in avih
     fwrite(&frame_count, 4, 1, file);
 
+    // Update video stream length in strh (video is stream 0)
+    fseek(file, 140, SEEK_SET); // Position of dwLength in video strh
+    fwrite(&frame_count, 4, 1, file);
+
+    // Update audio stream length in strh (audio is stream 1)
+    // Audio stream length = total audio samples
+    uint32_t audio_samples = (uint32_t)(frame_count * 48000 / 50); // Approximate for now
+    fseek(file, 212, SEEK_SET); // Position of dwLength in audio strh (140 + 72 bytes)
+    fwrite(&audio_samples, 4, 1, file);
+
+    // Update movi chunk size (now includes both video and audio chunks)
+    uint32_t movi_size = current_pos - 292; // New movi position with 2 streams
+    fseek(file, 288, SEEK_SET);             // Position of movi size with 2 streams
+    fwrite(&movi_size, 4, 1, file);
+
     // Seek back to end
-    fseek(file, 0, SEEK_END);
+    fseek(file, current_pos, SEEK_SET);
 }
 
 // Helper function to convert RGBA to BGR24
@@ -118,25 +244,68 @@ static void finalize_wav_header(FILE *file, uint32_t data_size)
 }
 
 // Fast BMP file saving function (minimal CPU overhead)
+// Session management: Create session folder if none exists
+static void ensure_recording_session(struct c64u_source *context)
+{
+    // If session already exists, do nothing
+    if (context->session_folder[0] != '\0') {
+        return;
+    }
+
+    // Create new session folder with timestamp
+    uint64_t timestamp_ms = os_gettime_ns() / 1000000;
+    time_t rawtime = timestamp_ms / 1000;
+    struct tm *timeinfo = localtime(&rawtime);
+
+    snprintf(context->session_folder, sizeof(context->session_folder), "%s/session_%04d%02d%02d_%02d%02d%02d",
+             context->save_folder, timeinfo->tm_year + 1900, timeinfo->tm_mon + 1, timeinfo->tm_mday, timeinfo->tm_hour,
+             timeinfo->tm_min, timeinfo->tm_sec);
+
+    // Create the session directory
+    char mkdir_cmd[900];
+    snprintf(mkdir_cmd, sizeof(mkdir_cmd), "mkdir -p \"%s\"", context->session_folder);
+    int result = system(mkdir_cmd);
+    if (result != 0) {
+        C64U_LOG_WARNING("Failed to create session directory: %s", context->session_folder);
+        context->session_folder[0] = '\0'; // Clear on failure
+    } else {
+        C64U_LOG_INFO("Created recording session: %s", context->session_folder);
+    }
+}
+
+// Check if any recording is active
+static bool any_recording_active(struct c64u_source *context)
+{
+    return context->save_frames || context->record_video;
+}
+
+// Clear session if no recording is active
+static void cleanup_session_if_needed(struct c64u_source *context)
+{
+    if (!any_recording_active(context)) {
+        context->session_folder[0] = '\0';
+        C64U_LOG_INFO("Recording session ended");
+    }
+}
+
 void save_frame_as_bmp(struct c64u_source *context, uint32_t *frame_buffer)
 {
     if (!context->save_frames || !frame_buffer) {
         return;
     }
 
-    // Create timestamped filename
-    uint64_t timestamp_ms = os_gettime_ns() / 1000000; // Convert to milliseconds
-    char filename[768];
-    snprintf(filename, sizeof(filename), "%s/frame_%llu_%05u.bmp", context->save_folder,
-             (unsigned long long)timestamp_ms, context->saved_frame_count++);
-
-    // Create directory if it doesn't exist (simple approach)
-    char mkdir_cmd[800];
-    snprintf(mkdir_cmd, sizeof(mkdir_cmd), "mkdir -p \"%s\"", context->save_folder);
-    int result = system(mkdir_cmd);
-    if (result != 0) {
-        C64U_LOG_WARNING("Failed to create save directory: %s", context->save_folder);
+    // Ensure we have a recording session
+    ensure_recording_session(context);
+    if (context->session_folder[0] == '\0') {
+        C64U_LOG_WARNING("Failed to create recording session for frame saving");
+        return;
     }
+
+    // Create timestamped filename in session folder
+    uint64_t timestamp_ms = os_gettime_ns() / 1000000;
+    char filename[900];
+    snprintf(filename, sizeof(filename), "%s/frame_%llu_%05u.bmp", context->session_folder,
+             (unsigned long long)timestamp_ms, context->saved_frame_count++);
 
     FILE *file = fopen(filename, "wb");
     if (!file) {
@@ -248,28 +417,19 @@ void start_video_recording(struct c64u_source *context)
         return;
     }
 
-    // Create timestamped session folder and filenames with standard formats
-    uint64_t timestamp_ms = os_gettime_ns() / 1000000;
-    char session_folder[800], video_filename[900], audio_filename[900], timing_filename[900];
-
-    // Create session folder: base_folder/session_YYYYMMDD_HHMMSS/
-    time_t rawtime = timestamp_ms / 1000;
-    struct tm *timeinfo = localtime(&rawtime);
-    snprintf(session_folder, sizeof(session_folder), "%s/session_%04d%02d%02d_%02d%02d%02d", context->save_folder,
-             timeinfo->tm_year + 1900, timeinfo->tm_mon + 1, timeinfo->tm_mday, timeinfo->tm_hour, timeinfo->tm_min,
-             timeinfo->tm_sec);
-
-    snprintf(video_filename, sizeof(video_filename), "%s/video.avi", session_folder);
-    snprintf(audio_filename, sizeof(audio_filename), "%s/audio.wav", session_folder);
-    snprintf(timing_filename, sizeof(timing_filename), "%s/timing.txt", session_folder);
-
-    // Create session directory if it doesn't exist
-    char mkdir_cmd[1000];
-    snprintf(mkdir_cmd, sizeof(mkdir_cmd), "mkdir -p \"%s\"", session_folder);
-    int result = system(mkdir_cmd);
-    if (result != 0) {
-        C64U_LOG_WARNING("Failed to create recording directory: %s", context->save_folder);
+    // Ensure we have a recording session (creates if needed, joins if exists)
+    ensure_recording_session(context);
+    if (context->session_folder[0] == '\0') {
+        C64U_LOG_ERROR("Failed to create recording session for video recording");
+        pthread_mutex_unlock(&context->recording_mutex);
+        return;
     }
+
+    // Create filenames in the session folder
+    char video_filename[950], audio_filename[950], timing_filename[950];
+    snprintf(video_filename, sizeof(video_filename), "%s/video.avi", context->session_folder);
+    snprintf(audio_filename, sizeof(audio_filename), "%s/audio.wav", context->session_folder);
+    snprintf(timing_filename, sizeof(timing_filename), "%s/timing.txt", context->session_folder);
 
     // Open files for recording
     context->video_file = fopen(video_filename, "wb");
@@ -291,19 +451,20 @@ void start_video_recording(struct c64u_source *context)
             context->timing_file = NULL;
         }
     } else {
+        uint64_t timestamp_ms = os_gettime_ns() / 1000000;
         context->recording_start_time = timestamp_ms;
         context->recorded_frames = 0;
         context->recorded_audio_samples = 0;
 
-        // Write AVI header to video file (uncompressed RGB)
-        write_avi_header(context->video_file, context->width, context->height, 50); // 50fps PAL
+        // Write AVI header with detected frame rate
+        write_avi_header(context->video_file, context->width, context->height, context->expected_fps);
 
         // Write WAV header to audio file
         write_wav_header(context->audio_file, 48000, 2, 16); // 48kHz stereo 16-bit
 
         // Write header info to timing file
         fprintf(context->timing_file, "# C64U Video Recording Session\n");
-        fprintf(context->timing_file, "# Session Folder: %s\n", session_folder);
+        fprintf(context->timing_file, "# Session Folder: %s\n", context->session_folder);
         fprintf(context->timing_file, "# Start Time: %llu ms\n", (unsigned long long)timestamp_ms);
         fprintf(context->timing_file, "# Video Format: AVI (Uncompressed BGR24), %ux%u pixels @ 50fps\n",
                 context->width, context->height);
@@ -327,21 +488,41 @@ void record_video_frame(struct c64u_source *context, uint32_t *frame_buffer)
         return;
     }
 
-    // Write AVI frame (convert RGBA to BGR24 for maximum compatibility)
+    // Calculate consistent frame timestamp based on detected FPS
+    // Each frame gets the exact timestamp it should have for perfectly regular timing
+    double frame_interval_ms = 1000.0 / context->expected_fps;
+    uint64_t calculated_timestamp_ms =
+        context->recording_start_time + (uint64_t)(context->recorded_frames * frame_interval_ms);
+
+    // Write AVI frame chunk with proper header
     size_t frame_size = context->width * context->height * 3; // BGR24
     uint8_t *bgr_buffer = malloc(frame_size);
     if (bgr_buffer) {
         convert_rgba_to_bgr24(frame_buffer, bgr_buffer, context->width, context->height);
+
+        // Write AVI frame chunk header ("00db" = stream 0, uncompressed DIB)
+        fwrite("00db", 1, 4, context->video_file);
+        uint32_t chunk_size = (uint32_t)frame_size;
+        fwrite(&chunk_size, 4, 1, context->video_file);
+
+        // Write frame data
         size_t written = fwrite(bgr_buffer, 1, frame_size, context->video_file);
+
+        // Ensure word alignment (AVI requirement)
+        if (frame_size % 2) {
+            uint8_t pad = 0;
+            fwrite(&pad, 1, 1, context->video_file);
+        }
+
         free(bgr_buffer);
 
         if (written == frame_size) {
-            uint64_t timestamp_ms = os_gettime_ns() / 1000000;
-
-            // Log timing information
+            // Log timing information with both actual and calculated timestamps
             if (context->timing_file) {
-                fprintf(context->timing_file, "%u,%llu,%zu\n", context->recorded_frames,
-                        (unsigned long long)timestamp_ms, frame_size);
+                uint64_t actual_timestamp_ms = os_gettime_ns() / 1000000;
+                fprintf(context->timing_file, "%u,%llu,%llu,%zu,%.3f\n", context->recorded_frames,
+                        (unsigned long long)calculated_timestamp_ms, (unsigned long long)actual_timestamp_ms,
+                        frame_size, context->expected_fps);
                 fflush(context->timing_file);
             }
 
@@ -366,13 +547,34 @@ void record_audio_data(struct c64u_source *context, const uint8_t *audio_data, s
         return;
     }
 
-    // Write audio data to WAV file (data is already in correct PCM format)
-    size_t written = fwrite(audio_data, 1, data_size, context->audio_file);
+    // Write audio data to separate WAV file (preserve original behavior)
+    size_t wav_written = fwrite(audio_data, 1, data_size, context->audio_file);
 
-    if (written == data_size) {
-        context->recorded_audio_samples += data_size / 2; // Assuming 16-bit samples
+    // Also write audio chunk to AVI file for interleaved audio/video
+    if (context->video_file) {
+        // Write AVI audio chunk header ("01wb" = stream 1, waveform audio)
+        fwrite("01wb", 1, 4, context->video_file);
+        uint32_t chunk_size = (uint32_t)data_size;
+        fwrite(&chunk_size, 4, 1, context->video_file);
+
+        // Write audio data
+        size_t avi_written = fwrite(audio_data, 1, data_size, context->video_file);
+
+        // Ensure word alignment (AVI requirement)
+        if (data_size % 2) {
+            uint8_t pad = 0;
+            fwrite(&pad, 1, 1, context->video_file);
+        }
+
+        if (avi_written != data_size) {
+            C64U_LOG_WARNING("Failed to write audio chunk to AVI file");
+        }
+    }
+
+    if (wav_written == data_size) {
+        context->recorded_audio_samples += data_size / 4; // 16-bit stereo = 4 bytes per sample
     } else {
-        C64U_LOG_WARNING("Failed to write audio data to recording");
+        C64U_LOG_WARNING("Failed to write audio data to WAV recording");
     }
 
     pthread_mutex_unlock(&context->recording_mutex);
@@ -479,18 +681,27 @@ void c64u_record_update_settings(struct c64u_source *context, void *settings_ptr
         }
     }
 
+    // Update frame saving (check if we need session cleanup)
+    bool old_save_frames = context->save_frames;
+    context->save_frames = obs_data_get_bool(settings, "save_frames");
+    if (old_save_frames && !context->save_frames) {
+        // Frame saving stopped, cleanup session if no other recording active
+        cleanup_session_if_needed(context);
+    }
+
     // Update video recording settings
     bool new_record_video = obs_data_get_bool(settings, "record_video");
     if (new_record_video != context->record_video) {
         context->record_video = new_record_video;
 
         if (new_record_video) {
-            // Start recording
+            // Start recording (will join/create session)
             start_video_recording(context);
             C64U_LOG_INFO("Video recording started");
         } else {
             // Stop recording
             stop_video_recording(context);
+            cleanup_session_if_needed(context);
         }
     }
 }
