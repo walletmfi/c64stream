@@ -117,7 +117,7 @@ void *c64u_create(obs_data_t *settings, obs_source_t *source)
         bfree(context);
         return NULL;
     }
-    
+
     // Initialize delay queue mutex
     if (pthread_mutex_init(&context->delay_mutex, NULL) != 0) {
         C64U_LOG_ERROR("Failed to initialize delay mutex");
@@ -134,7 +134,7 @@ void *c64u_create(obs_data_t *settings, obs_source_t *source)
     if (context->render_delay_frames == 0) {
         context->render_delay_frames = 10; // Default value
     }
-    
+
     // Initialize delay queue - allocate for maximum delay + some extra buffer
     context->delay_queue_size = 0;
     context->delay_queue_head = 0;
@@ -290,15 +290,15 @@ void c64u_update(void *data, obs_data_t *settings)
     uint32_t new_delay_frames = (uint32_t)obs_data_get_int(settings, "render_delay_frames");
     if (new_delay_frames != context->render_delay_frames) {
         C64U_LOG_INFO("Rendering delay changed from %u to %u frames", context->render_delay_frames, new_delay_frames);
-        
+
         if (pthread_mutex_lock(&context->delay_mutex) == 0) {
             context->render_delay_frames = new_delay_frames;
-            
+
             // Reset delay queue when delay changes
             context->delay_queue_size = 0;
             context->delay_queue_head = 0;
             context->delay_queue_tail = 0;
-            
+
             pthread_mutex_unlock(&context->delay_mutex);
         }
     }
@@ -620,8 +620,11 @@ obs_properties_t *c64u_properties(void *data)
     obs_property_set_long_description(audio_port_prop, "UDP port for audio stream (default: 11001)");
 
     // Rendering Delay
-    obs_property_t *delay_prop = obs_properties_add_int_slider(props, "render_delay_frames", "Rendering Delay (frames)", 0, 100, 1);
-    obs_property_set_long_description(delay_prop, "Delay between packet arrival and OBS rendering to smooth out UDP packet loss/reordering (default: 10 frames)");
+    obs_property_t *delay_prop =
+        obs_properties_add_int_slider(props, "render_delay_frames", "Rendering Delay (frames)", 0, 100, 1);
+    obs_property_set_long_description(
+        delay_prop,
+        "Delay between packet arrival and OBS rendering to smooth out UDP packet loss/reordering (default: 10 frames)");
 
     return props;
 }
