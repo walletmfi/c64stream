@@ -662,57 +662,52 @@ obs_properties_t *c64u_properties(void *data)
     obs_properties_t *props = obs_properties_create();
 
     // Debug logging toggle
-    obs_property_t *debug_prop = obs_properties_add_bool(props, "debug_logging", "Enable Debug Logging");
-    obs_property_set_long_description(debug_prop, "Enable detailed logging for debugging C64U connection issues");
+    obs_property_t *debug_prop = obs_properties_add_bool(props, "debug_logging", "Debug Logging");
+    obs_property_set_long_description(debug_prop, "Enable detailed logging for debugging connection issues");
 
     // C64 IP Address
-    obs_property_t *ip_prop = obs_properties_add_text(props, "ip_address", "C64 IP Address", OBS_TEXT_DEFAULT);
+    obs_property_t *ip_prop = obs_properties_add_text(props, "ip_address", "C64 Ultimate IP", OBS_TEXT_DEFAULT);
     obs_property_set_long_description(
-        ip_prop, "IP address or DNS name of the C64 Ultimate device. Leave as 0.0.0.0 to skip control commands.");
+        ip_prop, "IP address or DNS name of C64 Ultimate device (use 0.0.0.0 to skip control commands)");
 
     // OBS IP Address (editable)
-    obs_property_t *obs_ip_prop = obs_properties_add_text(props, "obs_ip_address", "OBS IP Address", OBS_TEXT_DEFAULT);
-    obs_property_set_long_description(
-        obs_ip_prop, "IP address of this OBS machine. C64 Ultimate will stream video/audio to this address.");
+    obs_property_t *obs_ip_prop = obs_properties_add_text(props, "obs_ip_address", "OBS Machine IP", OBS_TEXT_DEFAULT);
+    obs_property_set_long_description(obs_ip_prop, "IP address of this OBS machine (where C64 Ultimate sends streams)");
 
     // Auto-detect IP toggle
-    obs_property_t *auto_ip_prop = obs_properties_add_bool(props, "auto_detect_ip", "Use Auto-detected OBS IP");
+    obs_property_t *auto_ip_prop = obs_properties_add_bool(props, "auto_detect_ip", "Auto-detect OBS IP");
     obs_property_set_long_description(auto_ip_prop,
-                                      "Use the automatically detected OBS IP address in streaming commands");
+                                      "Automatically detect and use OBS machine IP in streaming commands");
 
-    // Port Configuration Group (side-by-side layout)
+    // UDP Ports Group (compact layout)
     obs_property_t *port_group =
-        obs_properties_add_group(props, "port_group", "Port Configuration", OBS_GROUP_NORMAL, obs_properties_create());
+        obs_properties_add_group(props, "port_group", "UDP Ports", OBS_GROUP_NORMAL, obs_properties_create());
     obs_properties_t *port_props = obs_property_group_content(port_group);
 
-    obs_property_t *video_port_prop = obs_properties_add_int(port_props, "video_port", "Video Port", 1024, 65535, 1);
-    obs_property_set_long_description(video_port_prop, "UDP port for video stream (default: 11000)");
+    obs_property_t *video_port_prop = obs_properties_add_int(port_props, "video_port", "Video (11000)", 1024, 65535, 1);
+    obs_property_set_long_description(video_port_prop, "UDP port for video stream from C64 Ultimate");
 
-    obs_property_t *audio_port_prop = obs_properties_add_int(port_props, "audio_port", "Audio Port", 1024, 65535, 1);
-    obs_property_set_long_description(audio_port_prop, "UDP port for audio stream (default: 11001)");
+    obs_property_t *audio_port_prop = obs_properties_add_int(port_props, "audio_port", "Audio (11001)", 1024, 65535, 1);
+    obs_property_set_long_description(audio_port_prop, "UDP port for audio stream from C64 Ultimate");
 
     // Rendering Delay
     obs_property_t *delay_prop =
-        obs_properties_add_int_slider(props, "render_delay_frames", "Rendering Delay (frames)", 0, 100, 1);
+        obs_properties_add_int_slider(props, "render_delay_frames", "Render Delay (frames)", 0, 100, 1);
     obs_property_set_long_description(
-        delay_prop,
-        "Delay between packet arrival and OBS rendering to smooth out UDP packet loss/reordering (default: 10 frames)");
+        delay_prop, "Delay frames before rendering to smooth UDP packet loss/reordering (default: 10)");
 
-    // Recording Controls Group (side-by-side layout)
-    obs_property_t *recording_group = obs_properties_add_group(props, "recording_group", "Recording Options",
-                                                               OBS_GROUP_NORMAL, obs_properties_create());
+    // Recording Group (compact layout)
+    obs_property_t *recording_group =
+        obs_properties_add_group(props, "recording_group", "Recording", OBS_GROUP_NORMAL, obs_properties_create());
     obs_properties_t *recording_props = obs_property_group_content(recording_group);
 
-    obs_property_t *save_frames_prop = obs_properties_add_bool(recording_props, "save_frames", "Save Frames to Disk");
+    obs_property_t *save_frames_prop = obs_properties_add_bool(recording_props, "save_frames", "☐ Save BMP Frames");
     obs_property_set_long_description(
-        save_frames_prop,
-        "Save each received frame as a BMP image file for analysis (performance impact - use for debugging only)");
+        save_frames_prop, "Save each frame as BMP in frames/ subfolder (for debugging - impacts performance)");
 
-    obs_property_t *record_video_prop =
-        obs_properties_add_bool(recording_props, "record_video", "Record Video + Audio");
-    obs_property_set_long_description(
-        record_video_prop,
-        "Record uncompressed video and audio streams to files for analysis (high disk usage - use for debugging only)");
+    obs_property_t *record_video_prop = obs_properties_add_bool(recording_props, "record_video", "☐ Record AVI + WAV");
+    obs_property_set_long_description(record_video_prop,
+                                      "Record uncompressed AVI video + WAV audio (for debugging - high disk usage)");
 
     // Save Folder (applies to both frame saving and video recording)
     obs_property_t *save_folder_prop =
