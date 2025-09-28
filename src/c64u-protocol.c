@@ -21,23 +21,28 @@ void send_control_command(struct c64u_source *context, bool enable, uint8_t stre
     if (enable) {
         // Get the OBS IP to send as destination
         const char *client_ip = context->auto_detect_ip ? context->obs_ip_address : "192.168.1.100";
-        size_t ip_len = strlen(client_ip);
 
-        // Enable stream command with destination IP
-        // Command structure: <command word LE> <param length LE> <duration LE> <IP string>
+        // Create IP:PORT string for the destination
+        char ip_port_str[128]; // Larger buffer to avoid truncation warnings
+        uint32_t port = (stream_id == 0) ? context->video_port : context->audio_port;
+        snprintf(ip_port_str, sizeof(ip_port_str), "%s:%u", client_ip, port);
+        size_t ip_port_len = strlen(ip_port_str);
+
+        // Enable stream command with destination IP:PORT
+        // Command structure: <command word LE> <param length LE> <duration LE> <IP:PORT string>
         // According to docs: FF2n where n is stream ID (0=video, 1=audio)
-        uint8_t cmd[64];           // Large enough buffer for IP string
+        uint8_t cmd[140];          // Large enough buffer for IP:PORT string (128 + header bytes)
         cmd[0] = 0x20 + stream_id; // 0x20 for video (stream 0), 0x21 for audio (stream 1)
         cmd[1] = 0xFF;
-        cmd[2] = (uint8_t)(2 + ip_len); // Parameter length: 2 bytes duration + IP string length
+        cmd[2] = (uint8_t)(2 + ip_port_len); // Parameter length: 2 bytes duration + IP:PORT string length
         cmd[3] = 0x00;
         cmd[4] = 0x00; // Duration: 0 = forever (little endian)
         cmd[5] = 0x00;
-        memcpy(&cmd[6], client_ip, ip_len); // Copy IP string
+        memcpy(&cmd[6], ip_port_str, ip_port_len); // Copy IP:PORT string
 
-        int cmd_len = 6 + (int)ip_len;
-        C64U_LOG_INFO("Sending start command for stream %u to %s with client IP: %s", stream_id, context->ip_address,
-                      client_ip);
+        int cmd_len = 6 + (int)ip_port_len;
+        C64U_LOG_INFO("Sending start command for stream %u to %s with client destination: %s", stream_id,
+                      context->ip_address, ip_port_str);
 
         ssize_t sent = send(sock, (const char *)cmd, cmd_len, 0);
         if (sent != (ssize_t)cmd_len) {
