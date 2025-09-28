@@ -8,7 +8,90 @@
 #include "c64u-protocol.h"
 #include "c64u-network.h"
 
-// VIC color palette (BGRA values for OBS) - converted from grab.py RGB values
+#include "c64u-protocol.h"
+
+// Fast BMP file saving function (minimal CPU overhead)
+void save_frame_as_bmp(struct c64u_source *context, uint32_t *frame_buffer)
+{
+    if (!context->save_frames || !frame_buffer) {
+        return;
+    }
+
+    // Create timestamped filename
+    uint64_t timestamp_ms = os_gettime_ns() / 1000000; // Convert to milliseconds
+    char filename[768];
+    snprintf(filename, sizeof(filename), "%s/frame_%llu_%05u.bmp", 
+             context->save_folder, (unsigned long long)timestamp_ms, context->saved_frame_count++);
+
+    // Create directory if it doesn't exist (simple approach)
+    char mkdir_cmd[800];
+    snprintf(mkdir_cmd, sizeof(mkdir_cmd), "mkdir -p \"%s\"", context->save_folder);
+    int result = system(mkdir_cmd);
+    if (result != 0) {
+        C64U_LOG_WARNING("Failed to create save directory: %s", context->save_folder);
+    }
+
+    FILE *file = fopen(filename, "wb");
+    if (!file) {
+        C64U_LOG_WARNING("Failed to create frame file: %s", filename);
+        return;
+    }
+
+    uint32_t width = context->width;
+    uint32_t height = context->height;
+    uint32_t row_padded = (width * 3 + 3) & (~3); // 4-byte alignment for BMP
+    uint32_t image_size = row_padded * height;
+    uint32_t file_size = 54 + image_size; // BMP header + image data
+
+    // BMP Header (54 bytes total)
+    uint8_t header[54] = {
+        'B', 'M',                           // Signature
+        file_size & 0xFF, (file_size >> 8) & 0xFF, (file_size >> 16) & 0xFF, (file_size >> 24) & 0xFF, // File size
+        0, 0, 0, 0,                         // Reserved
+        54, 0, 0, 0,                        // Data offset
+        40, 0, 0, 0,                        // Header size
+        width & 0xFF, (width >> 8) & 0xFF, (width >> 16) & 0xFF, (width >> 24) & 0xFF, // Width
+        height & 0xFF, (height >> 8) & 0xFF, (height >> 16) & 0xFF, (height >> 24) & 0xFF, // Height
+        1, 0,                               // Planes
+        24, 0,                              // Bits per pixel
+        0, 0, 0, 0,                         // Compression
+        image_size & 0xFF, (image_size >> 8) & 0xFF, (image_size >> 16) & 0xFF, (image_size >> 24) & 0xFF, // Image size
+        0, 0, 0, 0,                         // X pixels per meter
+        0, 0, 0, 0,                         // Y pixels per meter  
+        0, 0, 0, 0,                         // Colors used
+        0, 0, 0, 0                          // Colors important
+    };
+
+    fwrite(header, 1, 54, file);
+
+    // Write image data (BMP stores bottom-to-top, convert RGBA to BGR)
+    uint8_t *row_buffer = malloc(row_padded);
+    if (row_buffer) {
+        for (int y = height - 1; y >= 0; y--) { // Bottom-to-top
+            uint32_t *src_row = frame_buffer + (y * width);
+            uint8_t *dst = row_buffer;
+            
+            for (uint32_t x = 0; x < width; x++) {
+                uint32_t pixel = src_row[x];
+                *dst++ = (pixel >> 16) & 0xFF; // B
+                *dst++ = (pixel >> 8) & 0xFF;  // G  
+                *dst++ = pixel & 0xFF;         // R
+            }
+            
+            // Pad to 4-byte boundary
+            while ((dst - row_buffer) % 4 != 0) {
+                *dst++ = 0;
+            }
+            
+            fwrite(row_buffer, 1, row_padded, file);
+        }
+        free(row_buffer);
+    }
+
+    fclose(file);
+}
+
+// VIC-II color palette (16 colors) in RGBA format
 const uint32_t vic_colors[16] = {
     0xFF000000, // 0: Black
     0xFFEFEFEF, // 1: White
@@ -49,6 +132,11 @@ bool is_frame_timeout(struct frame_assembly *frame)
 
 void swap_frame_buffers(struct c64u_source *context)
 {
+    // Save frame to disk if enabled (before swap to avoid race conditions)
+    if (context->save_frames) {
+        save_frame_as_bmp(context, context->frame_buffer_back);
+    }
+
     // Atomically swap front and back buffers
     uint32_t *temp = context->frame_buffer_front;
     context->frame_buffer_front = context->frame_buffer_back;

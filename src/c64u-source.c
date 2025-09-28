@@ -153,6 +153,17 @@ void *c64u_create(obs_data_t *settings, obs_source_t *source)
     context->audio_thread_active = false;
     context->auto_start_attempted = false;
 
+    // Initialize frame saving
+    context->save_frames = obs_data_get_bool(settings, "save_frames");
+    const char *save_folder = obs_data_get_string(settings, "save_folder");
+    if (save_folder && strlen(save_folder) > 0) {
+        strncpy(context->save_folder, save_folder, sizeof(context->save_folder) - 1);
+        context->save_folder[sizeof(context->save_folder) - 1] = '\0';
+    } else {
+        strcpy(context->save_folder, "./c64u_frames"); // Default folder
+    }
+    context->saved_frame_count = 0;
+
     C64U_LOG_INFO("C64U source created - C64 IP: %s, OBS IP: %s, Video: %u, Audio: %u", context->ip_address,
                   context->obs_ip_address, context->video_port, context->audio_port);
 
@@ -310,6 +321,18 @@ void c64u_update(void *data, obs_data_t *settings)
             }
 
             pthread_mutex_unlock(&context->delay_mutex);
+        }
+    }
+
+    // Update frame saving settings
+    context->save_frames = obs_data_get_bool(settings, "save_frames");
+    const char *new_save_folder = obs_data_get_string(settings, "save_folder");
+    if (new_save_folder && strlen(new_save_folder) > 0) {
+        if (strcmp(context->save_folder, new_save_folder) != 0) {
+            strncpy(context->save_folder, new_save_folder, sizeof(context->save_folder) - 1);
+            context->save_folder[sizeof(context->save_folder) - 1] = '\0';
+            context->saved_frame_count = 0; // Reset counter for new folder
+            C64U_LOG_INFO("Frame save folder updated: %s", context->save_folder);
         }
     }
 
@@ -565,12 +588,35 @@ void c64u_render(void *data, gs_effect_t *effect)
     if (last_render_time > 0) {
         uint64_t render_end = os_gettime_ns();
         uint64_t render_duration = render_end - render_start;
+        uint64_t render_interval = render_start - last_render_time;
+
         static uint64_t last_render_log = 0;
         static uint32_t total_render_calls = 0;
         static uint64_t total_render_time = 0;
+        static uint64_t min_render_interval = UINT64_MAX;
+        static uint64_t max_render_interval = 0;
+        static uint32_t irregular_renders = 0;
 
         total_render_calls++;
         total_render_time += render_duration;
+
+        // Track render call timing irregularities
+        if (render_interval > 0) {
+            uint64_t expected_render_interval = 16666667; // ~60Hz display refresh
+
+            min_render_interval = (render_interval < min_render_interval) ? render_interval : min_render_interval;
+            max_render_interval = (render_interval > max_render_interval) ? render_interval : max_render_interval;
+
+            // Detect irregular render calls that could cause perceived choppiness
+            if (render_interval < expected_render_interval * 0.5 || render_interval > expected_render_interval * 1.5) {
+                irregular_renders++;
+                if (irregular_renders % 10 == 1) { // Log every 10th irregular call to avoid spam
+                    double interval_ms = render_interval / 1000000.0;
+                    C64U_LOG_WARNING("🎭 RENDER IRREGULAR: %.2f ms interval (expected ~16.7ms for 60Hz display)",
+                                     interval_ms);
+                }
+            }
+        }
 
         if (last_render_log == 0)
             last_render_log = render_end;
@@ -580,13 +626,20 @@ void c64u_render(void *data, gs_effect_t *effect)
             double duration = log_diff / 1000000000.0;
             double render_fps = total_render_calls / duration;
             double avg_render_time_ms = total_render_time / (total_render_calls * 1000000.0);
+            double min_interval_ms = min_render_interval / 1000000.0;
+            double max_interval_ms = max_render_interval / 1000000.0;
 
             C64U_LOG_INFO("🎨 RENDER: %.1f fps | %.2f ms avg render time | %u total calls", render_fps,
                           avg_render_time_ms, render_calls);
+            C64U_LOG_INFO("🎭 RENDER TIMING: Min interval %.2f ms | Max interval %.2f ms | Irregular calls: %u",
+                          min_interval_ms, max_interval_ms, irregular_renders);
 
             // Reset counters
             total_render_calls = 0;
             total_render_time = 0;
+            min_render_interval = UINT64_MAX;
+            max_render_interval = 0;
+            irregular_renders = 0;
             last_render_log = render_end;
         }
     }
@@ -652,6 +705,17 @@ obs_properties_t *c64u_properties(void *data)
         delay_prop,
         "Delay between packet arrival and OBS rendering to smooth out UDP packet loss/reordering (default: 10 frames)");
 
+    // Frame Saving Section
+    obs_property_t *save_frames_prop = obs_properties_add_bool(props, "save_frames", "Save Frames to Disk");
+    obs_property_set_long_description(
+        save_frames_prop,
+        "Save each received frame as a BMP image file for analysis (performance impact - use for debugging only)");
+
+    obs_property_t *save_folder_prop =
+        obs_properties_add_path(props, "save_folder", "Frame Save Folder", OBS_PATH_DIRECTORY, NULL, NULL);
+    obs_property_set_long_description(
+        save_folder_prop, "Directory where frame images will be saved (default: current working directory)");
+
     return props;
 }
 
@@ -666,4 +730,8 @@ void c64u_defaults(obs_data_t *settings)
     obs_data_set_default_int(settings, "video_port", C64U_DEFAULT_VIDEO_PORT);
     obs_data_set_default_int(settings, "audio_port", C64U_DEFAULT_AUDIO_PORT);
     obs_data_set_default_int(settings, "render_delay_frames", 10); // Default 10 frames delay
+
+    // Frame saving defaults
+    obs_data_set_default_bool(settings, "save_frames", false);             // Disabled by default
+    obs_data_set_default_string(settings, "save_folder", "./c64u_frames"); // Default folder
 }

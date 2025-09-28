@@ -102,6 +102,11 @@ struct c64u_source {
 
     // Auto-start control
     bool auto_start_attempted;
+
+    // Frame saving for analysis
+    bool save_frames;
+    char save_folder[512];
+    uint32_t saved_frame_count;
 };
 
 #endif // C64U_TYPES_H
