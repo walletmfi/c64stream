@@ -229,6 +229,20 @@ void c64u_update(void *data, obs_data_t *settings)
     if (new_audio_port == 0)
         new_audio_port = C64U_DEFAULT_AUDIO_PORT;
 
+    // Check if ports have changed (requires socket recreation)
+    bool ports_changed = (new_video_port != context->video_port) || (new_audio_port != context->audio_port);
+
+    if (ports_changed && context->streaming) {
+        C64U_LOG_INFO("Port configuration changed (video: %u->%u, audio: %u->%u), recreating sockets",
+                      context->video_port, new_video_port, context->audio_port, new_audio_port);
+
+        // Stop streaming and close existing sockets
+        c64u_stop_streaming(context);
+
+        // Give the C64U device time to process stop commands
+        os_sleep_ms(100);
+    }
+
     // Update configuration
     strncpy(context->ip_address, new_ip, sizeof(context->ip_address) - 1);
     context->ip_address[sizeof(context->ip_address) - 1] = '\0';
@@ -239,7 +253,7 @@ void c64u_update(void *data, obs_data_t *settings)
     context->video_port = new_video_port;
     context->audio_port = new_audio_port;
 
-    // Always start streaming with current configuration (no stop/restart)
+    // Start streaming with current configuration (will create new sockets if needed)
     C64U_LOG_INFO("Applying configuration and starting streaming");
     c64u_start_streaming(context);
 }
@@ -357,10 +371,32 @@ void c64u_stop_streaming(struct c64u_source *context)
     }
     context->audio_thread_active = false;
 
-    // Reset frame state
+    // Reset frame state and clear buffers
     if (pthread_mutex_lock(&context->frame_mutex) == 0) {
         context->frame_ready = false;
+        context->buffer_swap_pending = false;
+
+        // Clear frame buffers to prevent yellow screen
+        if (context->frame_buffer_front && context->frame_buffer_back) {
+            uint32_t frame_size = context->width * context->height * 4;
+            memset(context->frame_buffer_front, 0, frame_size);
+            memset(context->frame_buffer_back, 0, frame_size);
+        }
+
         pthread_mutex_unlock(&context->frame_mutex);
+    }
+
+    // Reset frame assembly state
+    if (pthread_mutex_lock(&context->assembly_mutex) == 0) {
+        memset(&context->current_frame, 0, sizeof(context->current_frame));
+        context->last_completed_frame = 0;
+        context->frame_drops = 0;
+        context->packet_drops = 0;
+        context->frames_expected = 0;
+        context->frames_captured = 0;
+        context->frames_delivered_to_obs = 0;
+        context->frames_completed = 0;
+        pthread_mutex_unlock(&context->assembly_mutex);
     }
 
     C64U_LOG_INFO("C64U streaming stopped");
