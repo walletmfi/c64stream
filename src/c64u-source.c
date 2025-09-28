@@ -728,8 +728,8 @@ void c64u_defaults(obs_data_t *settings)
     obs_data_set_default_int(settings, "render_delay_frames", 10); // Default 10 frames delay
 
     // Frame saving defaults
-    obs_data_set_default_bool(settings, "save_frames", false);             // Disabled by default
-    obs_data_set_default_string(settings, "save_folder", "./c64u_frames"); // Default folder
+    obs_data_set_default_bool(settings, "save_frames", false);            // Disabled by default
+    obs_data_set_default_string(settings, "save_folder", "./recordings"); // Default folder
 
     // Video recording defaults
     obs_data_set_default_bool(settings, "record_video", false); // Disabled by default
