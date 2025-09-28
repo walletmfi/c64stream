@@ -8,6 +8,7 @@
 #include "c64u-source.h"
 #include "c64u-types.h"
 #include "c64u-protocol.h"
+#include "c64u-video.h"
 #include "c64u-network.h"
 #include "c64u-video.h"
 #include "c64u-audio.h"
@@ -164,6 +165,27 @@ void *c64u_create(obs_data_t *settings, obs_source_t *source)
     }
     context->saved_frame_count = 0;
 
+    // Initialize video recording
+    context->record_video = obs_data_get_bool(settings, "record_video");
+    context->video_file = NULL;
+    context->audio_file = NULL;
+    context->timing_file = NULL;
+    context->recording_start_time = 0;
+    context->recorded_frames = 0;
+    context->recorded_audio_samples = 0;
+
+    // Initialize recording mutex
+    if (pthread_mutex_init(&context->recording_mutex, NULL) != 0) {
+        C64U_LOG_ERROR("Failed to initialize recording mutex");
+        pthread_mutex_destroy(&context->frame_mutex);
+        pthread_mutex_destroy(&context->assembly_mutex);
+        pthread_mutex_destroy(&context->delay_mutex);
+        bfree(context->frame_buffer_front);
+        bfree(context->frame_buffer_back);
+        bfree(context);
+        return NULL;
+    }
+
     C64U_LOG_INFO("C64U source created - C64 IP: %s, OBS IP: %s, Video: %u, Audio: %u", context->ip_address,
                   context->obs_ip_address, context->video_port, context->audio_port);
 
@@ -214,10 +236,30 @@ void c64u_destroy(void *data)
         }
     }
 
+    // Stop recording if active
+    if (context->record_video) {
+        if (pthread_mutex_lock(&context->recording_mutex) == 0) {
+            if (context->video_file) {
+                fclose(context->video_file);
+                context->video_file = NULL;
+            }
+            if (context->audio_file) {
+                fclose(context->audio_file);
+                context->audio_file = NULL;
+            }
+            if (context->timing_file) {
+                fclose(context->timing_file);
+                context->timing_file = NULL;
+            }
+            pthread_mutex_unlock(&context->recording_mutex);
+        }
+    }
+
     // Cleanup resources
     pthread_mutex_destroy(&context->frame_mutex);
     pthread_mutex_destroy(&context->assembly_mutex);
     pthread_mutex_destroy(&context->delay_mutex);
+    pthread_mutex_destroy(&context->recording_mutex);
     if (context->frame_buffer_front) {
         bfree(context->frame_buffer_front);
     }
@@ -333,6 +375,21 @@ void c64u_update(void *data, obs_data_t *settings)
             context->save_folder[sizeof(context->save_folder) - 1] = '\0';
             context->saved_frame_count = 0; // Reset counter for new folder
             C64U_LOG_INFO("Frame save folder updated: %s", context->save_folder);
+        }
+    }
+
+    // Update video recording settings
+    bool new_record_video = obs_data_get_bool(settings, "record_video");
+    if (new_record_video != context->record_video) {
+        context->record_video = new_record_video;
+
+        if (new_record_video) {
+            // Start recording
+            start_video_recording(context);
+            C64U_LOG_INFO("Video recording started");
+        } else {
+            // Stop recording
+            stop_video_recording(context);
         }
     }
 
@@ -716,6 +773,12 @@ obs_properties_t *c64u_properties(void *data)
     obs_property_set_long_description(
         save_folder_prop, "Directory where frame images will be saved (default: current working directory)");
 
+    // Video Recording Section
+    obs_property_t *record_video_prop = obs_properties_add_bool(props, "record_video", "Record Raw Video + Audio");
+    obs_property_set_long_description(
+        record_video_prop,
+        "Record uncompressed video and audio streams to files for analysis (high disk usage - use for debugging only)");
+
     return props;
 }
 
@@ -734,4 +797,7 @@ void c64u_defaults(obs_data_t *settings)
     // Frame saving defaults
     obs_data_set_default_bool(settings, "save_frames", false);             // Disabled by default
     obs_data_set_default_string(settings, "save_folder", "./c64u_frames"); // Default folder
+
+    // Video recording defaults
+    obs_data_set_default_bool(settings, "record_video", false); // Disabled by default
 }

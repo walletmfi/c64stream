@@ -107,6 +107,16 @@ struct c64u_source {
     bool save_frames;
     char save_folder[512];
     uint32_t saved_frame_count;
+
+    // Video recording for analysis
+    bool record_video;
+    FILE *video_file;
+    FILE *audio_file;
+    FILE *timing_file;
+    uint64_t recording_start_time;
+    uint32_t recorded_frames;
+    uint32_t recorded_audio_samples;
+    pthread_mutex_t recording_mutex;
 };
 
 #endif // C64U_TYPES_H

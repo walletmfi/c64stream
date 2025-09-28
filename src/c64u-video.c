@@ -130,6 +130,159 @@ void save_frame_as_bmp(struct c64u_source *context, uint32_t *frame_buffer)
     fclose(file);
 }
 
+// Video recording functions (raw uncompressed format for minimal CPU overhead)
+void start_video_recording(struct c64u_source *context)
+{
+    if (!context->record_video || context->video_file) {
+        return; // Already recording or not enabled
+    }
+
+    if (pthread_mutex_lock(&context->recording_mutex) != 0) {
+        return;
+    }
+
+    // Create timestamped filenames
+    uint64_t timestamp_ms = os_gettime_ns() / 1000000;
+    char video_filename[768], audio_filename[768], timing_filename[768];
+
+    snprintf(video_filename, sizeof(video_filename), "%s/video_%llu.raw", context->save_folder,
+             (unsigned long long)timestamp_ms);
+    snprintf(audio_filename, sizeof(audio_filename), "%s/audio_%llu.raw", context->save_folder,
+             (unsigned long long)timestamp_ms);
+    snprintf(timing_filename, sizeof(timing_filename), "%s/timing_%llu.txt", context->save_folder,
+             (unsigned long long)timestamp_ms);
+
+    // Create directory if it doesn't exist
+    char mkdir_cmd[800];
+    snprintf(mkdir_cmd, sizeof(mkdir_cmd), "mkdir -p \"%s\"", context->save_folder);
+    int result = system(mkdir_cmd);
+    if (result != 0) {
+        C64U_LOG_WARNING("Failed to create recording directory: %s", context->save_folder);
+    }
+
+    // Open files for recording
+    context->video_file = fopen(video_filename, "wb");
+    context->audio_file = fopen(audio_filename, "wb");
+    context->timing_file = fopen(timing_filename, "w");
+
+    if (!context->video_file || !context->audio_file || !context->timing_file) {
+        C64U_LOG_ERROR("Failed to create recording files");
+        if (context->video_file) {
+            fclose(context->video_file);
+            context->video_file = NULL;
+        }
+        if (context->audio_file) {
+            fclose(context->audio_file);
+            context->audio_file = NULL;
+        }
+        if (context->timing_file) {
+            fclose(context->timing_file);
+            context->timing_file = NULL;
+        }
+    } else {
+        context->recording_start_time = timestamp_ms;
+        context->recorded_frames = 0;
+        context->recorded_audio_samples = 0;
+
+        // Write header info to timing file
+        fprintf(context->timing_file, "# C64U Raw Video Recording\n");
+        fprintf(context->timing_file, "# Start Time: %llu ms\n", (unsigned long long)timestamp_ms);
+        fprintf(context->timing_file, "# Video Format: Raw RGBA, %ux%u pixels per frame\n", context->width,
+                context->height);
+        fprintf(context->timing_file, "# Audio Format: Raw 16-bit signed PCM\n");
+        fprintf(context->timing_file, "# Columns: frame_number, timestamp_ms, frame_size_bytes\n");
+        fflush(context->timing_file);
+
+        C64U_LOG_INFO("Started video recording: %s", video_filename);
+    }
+
+    pthread_mutex_unlock(&context->recording_mutex);
+}
+
+void record_video_frame(struct c64u_source *context, uint32_t *frame_buffer)
+{
+    if (!context->record_video || !context->video_file || !frame_buffer) {
+        return;
+    }
+
+    if (pthread_mutex_lock(&context->recording_mutex) != 0) {
+        return;
+    }
+
+    // Write raw RGBA frame data (no compression, minimal CPU overhead)
+    size_t frame_size = context->width * context->height * 4; // RGBA
+    size_t written = fwrite(frame_buffer, 1, frame_size, context->video_file);
+
+    if (written == frame_size) {
+        uint64_t timestamp_ms = os_gettime_ns() / 1000000;
+
+        // Log timing information
+        if (context->timing_file) {
+            fprintf(context->timing_file, "%u,%llu,%zu\n", context->recorded_frames, (unsigned long long)timestamp_ms,
+                    frame_size);
+            fflush(context->timing_file);
+        }
+
+        context->recorded_frames++;
+    } else {
+        C64U_LOG_WARNING("Failed to write video frame to recording");
+    }
+
+    pthread_mutex_unlock(&context->recording_mutex);
+}
+
+void record_audio_data(struct c64u_source *context, const uint8_t *audio_data, size_t data_size)
+{
+    if (!context->record_video || !context->audio_file || !audio_data) {
+        return;
+    }
+
+    if (pthread_mutex_lock(&context->recording_mutex) != 0) {
+        return;
+    }
+
+    // Write raw audio data (no compression, minimal CPU overhead)
+    size_t written = fwrite(audio_data, 1, data_size, context->audio_file);
+
+    if (written == data_size) {
+        context->recorded_audio_samples += data_size / 2; // Assuming 16-bit samples
+    } else {
+        C64U_LOG_WARNING("Failed to write audio data to recording");
+    }
+
+    pthread_mutex_unlock(&context->recording_mutex);
+}
+
+void stop_video_recording(struct c64u_source *context)
+{
+    if (!context->video_file) {
+        return; // Not recording
+    }
+
+    if (pthread_mutex_lock(&context->recording_mutex) != 0) {
+        return;
+    }
+
+    // Close all recording files
+    if (context->video_file) {
+        fclose(context->video_file);
+        context->video_file = NULL;
+    }
+    if (context->audio_file) {
+        fclose(context->audio_file);
+        context->audio_file = NULL;
+    }
+    if (context->timing_file) {
+        fclose(context->timing_file);
+        context->timing_file = NULL;
+    }
+
+    C64U_LOG_INFO("Recording stopped. Frames: %u, Audio samples: %llu", context->recorded_frames,
+                  (unsigned long long)context->recorded_audio_samples);
+
+    pthread_mutex_unlock(&context->recording_mutex);
+}
+
 // VIC-II color palette (16 colors) in RGBA format
 const uint32_t vic_colors[16] = {
     0xFF000000, // 0: Black
@@ -174,6 +327,11 @@ void swap_frame_buffers(struct c64u_source *context)
     // Save frame to disk if enabled (before swap to avoid race conditions)
     if (context->save_frames) {
         save_frame_as_bmp(context, context->frame_buffer_back);
+    }
+
+    // Record frame to video file if recording is enabled
+    if (context->record_video) {
+        record_video_frame(context, context->frame_buffer_back);
     }
 
     // Atomically swap front and back buffers
