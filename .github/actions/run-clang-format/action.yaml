@@ -56,5 +56,26 @@ runs:
 
         print ::group::Run clang-format-19
         local -a changes=(${(s:,:)CHANGED_FILES//[\[\]\'\"]/})
+        
+        # Enable verbose debugging for clang-format
+        print "::debug::Changed files to check: ${changes}"
+        print "::debug::Running clang-format with verbose output..."
+        
+        # Run with verbose output and detailed error reporting
+        for file in ${changes}; do
+          if [[ -f "$file" ]]; then
+            print "::debug::Checking formatting for: $file"
+            if ! clang-format-19 --dry-run --Werror "$file" > /dev/null 2>&1; then
+              print "::error::❌ Formatting issues found in: $file"
+              print "::group::Formatting diff for $file"
+              clang-format-19 --dry-run "$file" | diff -u "$file" - || true
+              print "::endgroup::"
+            else
+              print "::debug::✅ $file is properly formatted"
+            fi
+          fi
+        done
+        
+        # Run the original command for final check
         ./build-aux/run-clang-format --fail-${{ inputs.failCondition }} --check ${changes}
         print ::endgroup::
