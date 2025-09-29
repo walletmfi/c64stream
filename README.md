@@ -54,7 +54,7 @@ to port 11000 (Video) and 11001 (Audio):
 You can set this up with the following Powershell script. Be sure to adjust the `RemoteAddress` to the IP of your C64 Ultimate:
 
 ```powershell
-New-NetFirewallRule -DisplayName "C64U" -Direction Inbound -Protocol UDP -LocalPort 11000,11001 -RemoteAddress 192.168.1.15 -Action Allow
+New-NetFirewallRule -DisplayName "C64U" -Direction Inbound -Protocol UDP -LocalPort 11000,11001 -RemoteAddress 192.168.1.64 -Action Allow
 ```
 
 **macOS:**
@@ -107,8 +107,8 @@ If you prefer to control streaming from the Ultimate device instead of letting O
 **To manually configure (if desired):**
 1. Press F2 to access the Ultimate's configuration menu
 2. Navigate to "Data Streams" section
-3. Set "Stream VIC to" field: `your-obs-ip:11000` (e.g., `192.168.1.185:11000`)
-4. Set "Stream Audio to" field: `your-obs-ip:11001` (e.g., `192.168.1.185:11001`)
+3. Set "Stream VIC to" field: `your-obs-ip:11000` (e.g., `192.168.1.100:11000`)
+4. Set "Stream Audio to" field: `your-obs-ip:11001` (e.g., `192.168.1.100:11001`)
 5. Save configuration changes
 6. Manually start streaming from the Ultimate device
 
