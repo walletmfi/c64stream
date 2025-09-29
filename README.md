@@ -30,7 +30,7 @@ The plugin connects directly to the Ultimate's network interface, eliminating th
 One of:
 - [Ultimate 64 Elite](https://ultimate64.com/Ultimate-64-Elite) - verified
 - [Ultimate 64 Elite MK2](https://ultimate64.com/Ultimate-64-Elite-MK2) - yet to be verified
-- [C64 Ultimate](https://www.commodore.net/product-page/-commodore-64-ultimate-collectible-founders-edition-batch1) - yet to be verified since not released yet
+- [C64 Ultimate](https://www.commodore.net/) - yet to be verified since not released yet
 
 
 ---
