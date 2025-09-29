@@ -33,8 +33,6 @@ One of:
 - [C64 Ultimate](https://www.commodore.net/) - yet to be verified since not released yet
 
 
----
-
 ## Getting Started 🚀
 
 ### What You'll Need
@@ -75,7 +73,6 @@ sudo dpkg -i c64u-obs-plugin-linux.deb
 **Further Details:**
 See the [OBS Plugins Guide](https://obsproject.com/kb/plugins-guide).
 
----
 
 ### Configuration ⚙️
 
@@ -117,7 +114,6 @@ Once configured, live video and audio streams from the C64 Ultimate will be avai
 
 For comprehensive configuration details, refer to the [official C64 Ultimate documentation](https://1541u-documentation.readthedocs.io/en/latest/data_streams.html).
 
----
 
 ## Recording Features 📹
 
@@ -169,7 +165,6 @@ All recording files are organized into session folders with timestamps:
 - Files are written in real-time as data is received from the C64 Ultimate
 - Session folders are created automatically with proper directory structure
 
----
 
 ## Technical Details 🔧
 
@@ -201,7 +196,6 @@ This plugin implements the [C64 Ultimate Data Streams specification](https://154
 - WAV audio: 16-bit stereo PCM, sample rate matches C64 Ultimate output
 - Session organization: Automatic timestamped folder creation
 
----
 
 ## Troubleshooting 🔍
 
@@ -234,13 +228,11 @@ This plugin implements the [C64 Ultimate Data Streams specification](https://154
 - **Large disk usage:** AVI recording creates uncompressed files (~50MB/minute); monitor disk space
 - **Recording stops unexpectedly:** Check disk space and folder permissions
 
----
 
 ## For Developers 🔧
 
 See the [Developer Documentation](doc/developer.md) for build instructions, testing procedures, and contribution guidelines.
 
----
 
 ## License
 
