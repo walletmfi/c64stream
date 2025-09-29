@@ -158,9 +158,14 @@ export CI=1
 **Issue: "script execution error" from build scripts**
 - Solution: Build scripts require CI=1 environment variable to be set for local execution.
 
+**Issue: "./build-aux/run-clang-format" fails on Windows**
+- Solution: The script requires zsh which may not be available on Windows. Use direct clang-format command instead: `& "C:\Program Files\LLVM\bin\clang-format.exe" -i src/*.c src/*.h`
+
 ## Validation and Testing
 
 ### Code Formatting (Always run before committing):
+
+**Linux/macOS (requires zsh):**
 ```bash
 # Check C/C++ formatting
 ./build-aux/run-clang-format --check
@@ -172,6 +177,30 @@ export CI=1
 ./build-aux/run-clang-format
 ./build-aux/run-gersemi
 ```
+
+**Windows (PowerShell):**
+```powershell
+# Check C/C++ formatting (if clang-format is in PATH)
+clang-format --dry-run --Werror src/*.c src/*.h
+
+# Fix C/C++ formatting with LLVM installation
+& "C:\Program Files\LLVM\bin\clang-format.exe" -i src/*.c src/*.h
+
+# Alternative: Format specific file
+& "C:\Program Files\LLVM\bin\clang-format.exe" -i src/c64u-source.c
+
+# Check CMake formatting (requires gersemi via pip)
+gersemi --check CMakeLists.txt cmake/
+
+# Fix CMake formatting
+gersemi --in-place CMakeLists.txt cmake/
+```
+
+**Windows Notes:**
+- The `./build-aux/run-clang-format` script requires zsh, which may not be available on Windows
+- Install LLVM from https://llvm.org/builds/ to get clang-format
+- Install gersemi: `pip install gersemi`
+- Use PowerShell call operator `&` when paths contain spaces
 
 ### Build Validation:
 ```bash
