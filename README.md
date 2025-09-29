@@ -19,8 +19,8 @@ The plugin connects directly to the Ultimate's network interface, eliminating th
 
 **Supported Platforms:**
 - Windows 10/11 (x64) - verified on Windows 11
-- macOS 11+ (Intel/Apple Silicon) - yet to be verified
 - Linux with X window system or Wayload - verified on Kubuntu 24.04
+- macOS 11+ (Intel/Apple Silicon) - yet to be verified
 
 **Software Requirements:**
 - [OBS Studio 32.0.1](https://obsproject.com/download) or above
@@ -28,10 +28,9 @@ The plugin connects directly to the Ultimate's network interface, eliminating th
 **Hardware Requirements:**
 
 One of:
-- [C64 Ultimate](https://www.commodore.net/product-page/-commodore-64-ultimate-collectible-founders-edition-batch1) - yet to be verified since not released yet
 - [Ultimate 64 Elite](https://ultimate64.com/Ultimate-64-Elite) - verified
 - [Ultimate 64 Elite MK2](https://ultimate64.com/Ultimate-64-Elite-MK2) - yet to be verified
-
+- [C64 Ultimate](https://www.commodore.net/product-page/-commodore-64-ultimate-collectible-founders-edition-batch1) - yet to be verified since not released yet
 
 
 ---
