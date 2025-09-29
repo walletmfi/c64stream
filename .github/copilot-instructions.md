@@ -246,8 +246,8 @@ cmake --build build_x64
 & "C:\Program Files\LLVM\bin\clang-format.exe" -i src/*.c src/*.h
 
 # Alternative: Fix specific files one by one
-Get-ChildItem src/*.c, src/*.h | ForEach-Object { 
-    & "C:\Program Files\LLVM\bin\clang-format.exe" -i $_.FullName 
+Get-ChildItem src/*.c, src/*.h | ForEach-Object {
+    & "C:\Program Files\LLVM\bin\clang-format.exe" -i $_.FullName
 }
 
 # Verify no formatting issues remain
@@ -407,5 +407,3 @@ These instructions are comprehensive and tested. Only search for additional info
 1. Build fails with error not covered in "Common Build Issues"
 2. Instructions appear outdated (e.g., tool versions changed significantly)
 3. New platform support is needed beyond Windows/macOS/Linux
-
-For C64 Ultimate streaming implementation details, refer to the official documentation at https://1541u-documentation.readthedocs.io/en/latest/data_streams.html#data_streams.
