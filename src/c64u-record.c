@@ -29,13 +29,24 @@ static bool create_directory_recursive(const char *path)
     if (tmp[len - 1] == '/' || tmp[len - 1] == '\\')
         tmp[len - 1] = 0;
 
-    for (p = tmp + 1; *p; p++) {
+    // Start from the beginning, but skip drive letters on Windows (e.g., "C:")
+    p = tmp;
+    if (len > 1 && tmp[1] == ':') {
+        p = tmp + 2; // Skip "C:" part on Windows
+    }
+    if (*p == '/' || *p == '\\') {
+        p++; // Skip leading slash
+    }
+
+    // Create each directory in the path
+    for (; *p; p++) {
         if (*p == '/' || *p == '\\') {
             *p = 0;
             if (os_mkdir(tmp) != 0) {
                 // Check if it already exists (ignore error if it does)
                 struct stat st;
                 if (stat(tmp, &st) != 0 || !S_ISDIR(st.st_mode)) {
+                    // Directory creation failed and it doesn't exist
                     return false;
                 }
             }
@@ -256,11 +267,12 @@ static void ensure_recording_session(struct c64u_source *context)
              timeinfo->tm_min, timeinfo->tm_sec);
 
     // Create the session directory recursively (cross-platform)
+    C64U_LOG_INFO("Attempting to create session directory: %s", context->session_folder);
     if (!create_directory_recursive(context->session_folder)) {
         C64U_LOG_WARNING("Failed to create session directory: %s", context->session_folder);
         context->session_folder[0] = '\0'; // Clear on failure
     } else {
-        C64U_LOG_INFO("Created recording session: %s", context->session_folder);
+        C64U_LOG_INFO("Successfully created recording session: %s", context->session_folder);
     }
 }
 
