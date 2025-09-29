@@ -200,7 +200,6 @@ One of:
 - Confirm firewall allows UDP traffic on configured ports
 
 **Audio sync issues? 🔊**
-- Ultimate device audio streaming must be enabled separately
 - Check audio port configuration (default 11001)
 - Verify OBS audio monitoring settings
 
