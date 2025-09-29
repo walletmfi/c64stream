@@ -732,8 +732,17 @@ void c64u_defaults(obs_data_t *settings)
     obs_data_set_default_int(settings, "render_delay_frames", 10); // Default 10 frames delay
 
     // Frame saving defaults
-    obs_data_set_default_bool(settings, "save_frames", false);            // Disabled by default
-    obs_data_set_default_string(settings, "save_folder", "./recordings"); // Default folder
+    obs_data_set_default_bool(settings, "save_frames", false); // Disabled by default
+
+    // Platform-specific default recording folder
+#ifdef _WIN32
+    const char *default_folder = "%USERPROFILE%\\Documents\\obs-recordings";
+#elif defined(__APPLE__)
+    const char *default_folder = "~/Documents/obs-recordings";
+#else // Linux and other Unix-like systems
+    const char *default_folder = "~/Documents/obs-recordings";
+#endif
+    obs_data_set_default_string(settings, "save_folder", default_folder);
 
     // Video recording defaults
     obs_data_set_default_bool(settings, "record_video", false); // Disabled by default

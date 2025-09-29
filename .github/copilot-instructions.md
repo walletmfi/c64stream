@@ -265,6 +265,47 @@ The C64 Ultimate device streams video and audio data over network connections. K
 - Enable verbose CMake output: `cmake --preset <name> -- -DCMAKE_VERBOSE_MAKEFILE=ON`
 - Check ccache statistics after builds for performance insights
 
+## Cross-Platform Development Guidelines
+
+### Platform-Specific Code Patterns
+The plugin uses conditional compilation extensively for cross-platform compatibility. Follow these established patterns:
+
+#### Networking (c64u-network.h/c):
+- **Windows**: Uses WinSock2 (`winsock2.h`, `ws2tcpip.h`) with `WSAStartup()`/`WSACleanup()`
+- **POSIX**: Uses standard BSD sockets (`sys/socket.h`, `netinet/in.h`)
+- **Socket types**: `SOCKET` (Windows) vs `int` (POSIX) - use `socket_t` typedef
+- **Error handling**: `WSAGetLastError()` vs `errno` - use `c64u_get_socket_error()`
+- **Non-blocking**: `WSAEWOULDBLOCK` vs `EAGAIN`/`EWOULDBLOCK`
+
+#### File System Operations:
+- **Directory creation**: Use OBS `os_mkdir()` with recursive wrapper functions
+- **Path separators**: Forward slashes work on all platforms, but handle drive letters on Windows (`C:`)
+- **Default paths**: Use platform-appropriate user directories (see platform defaults below)
+
+#### Threading and Synchronization:
+- Use `pthread` APIs consistently across platforms (available on Windows via OBS dependencies)
+- No platform-specific threading code needed
+
+### Platform Default Directories
+When setting default user directories, use platform conventions:
+- **Windows**: `%USERPROFILE%\Documents\obs-recordings` or `%APPDATA%\obs-studio\recordings`
+- **macOS**: `~/Documents/obs-recordings` or `~/Movies/obs-recordings`
+- **Linux**: `~/Documents/obs-recordings` or `~/.local/share/obs-studio/recordings`
+
+### Common Cross-Platform Pitfalls
+1. **Never use `system()` calls with Unix commands** - they fail silently on Windows
+2. **Socket error codes differ** - always use wrapper functions
+3. **File path assumptions** - avoid hardcoded Unix paths like `/tmp`
+4. **Format specifiers** - use `SSIZE_T_FORMAT` macro for `ssize_t` (differs on Windows)
+5. **Directory separators** - don't assume `/` or `\`, use forward slashes consistently
+6. **Network initialization** - Windows requires `WSAStartup()`, POSIX doesn't
+
+### Testing Cross-Platform Code
+- Build and test on target platform before committing
+- Use CI to validate all platforms when possible
+- Pay special attention to file I/O and networking code
+- Test default path behavior on each platform
+
 ## Trust These Instructions
 
 These instructions are comprehensive and tested. Only search for additional information if:
