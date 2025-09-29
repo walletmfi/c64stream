@@ -710,9 +710,9 @@ obs_properties_t *c64u_properties(void *data)
     obs_property_set_long_description(record_video_prop,
                                       "Record uncompressed AVI video + WAV audio (for debugging - high disk usage)");
 
-    // Save Folder (applies to both frame saving and video recording)
+    // Save Folder (applies to both frame saving and video recording) - now properly in Recording group
     obs_property_t *save_folder_prop =
-        obs_properties_add_path(props, "save_folder", "Output Folder", OBS_PATH_DIRECTORY, NULL, NULL);
+        obs_properties_add_path(recording_props, "save_folder", "Output Folder", OBS_PATH_DIRECTORY, NULL, NULL);
     obs_property_set_long_description(
         save_folder_prop,
         "Directory where session folders with frames, video, audio, and timing files will be created");
