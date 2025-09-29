@@ -54,7 +54,7 @@ to port 11000 (Video) and 11001 (Audio):
 You can set this up with the following Powershell script. Be sure to adjust the `RemoteAddress` to the IP of your C64 Ultimate:
 
 ```powershell
-New-NetFirewallRule -DisplayName "C64U" -Direction Inbound -Protocol UDP -LocalPort 11000,11001 -RemoteAddress 192.168.1.15 -Action Allow
+New-NetFirewallRule -DisplayName "C64U" -Direction Inbound -Protocol UDP -LocalPort 11000,11001 -RemoteAddress 192.168.1.64 -Action Allow
 ```
 
 **macOS:**
@@ -99,34 +99,20 @@ Once configured, live video and audio streams from the C64 Ultimate will be avai
 
 ### Ultimate Device Setup 🎛️
 
-**Important:** Your C64 Ultimate device needs to know where to send its streams—let's set that up!
+**Recommended Approach:** The OBS plugin automatically controls streaming on the Ultimate device. When you configure the Ultimate's IP address in the OBS plugin settings, the plugin tells the Ultimate device where to send streams and sends start commands automatically. No manual configuration needed on the Ultimate device.
 
-**Accessing the Configuration Menu:**
-Access the Ultimate's configuration menu (typically by pressing F2) and navigate to:
-```
-F2 → Data Streams
-```
+**Manual Configuration (Not Recommended):**
+If you prefer to control streaming from the Ultimate device instead of letting OBS manage it automatically, you can manually configure the destination addresses. This approach requires more manual work and is not recommended for most users.
 
-**Required Stream Settings:**
-Configure these destination addresses to point to your OBS server:
-- **Stream VIC to:** `192.168.1.185:11000` (replace with your OBS server's IP and video port)
-- **Stream Audio to:** `192.168.1.185:11001` (replace with your OBS server's IP and audio port)
-
-**Address Format Examples:**
-- IP address format: `192.168.1.185:11000`
-- Hostname format: `obs-server:11000`
-
-**Step-by-Step Configuration:**
+**To manually configure (if desired):**
 1. Press F2 to access the Ultimate's configuration menu
-2. Navigate to the "Data Streams" section
-3. Set the "Stream VIC to" field using your OBS server's IP address and port (e.g., `192.168.1.185:11000`)
-4. Set the "Stream Audio to" field using your OBS server's IP address and audio port (e.g., `192.168.1.185:11001`)
-5. Save your configuration changes
-6. Enable streaming when you're ready to begin capturing
+2. Navigate to "Data Streams" section
+3. Set "Stream VIC to" field: `your-obs-ip:11000` (e.g., `192.168.1.100:11000`)
+4. Set "Stream Audio to" field: `your-obs-ip:11001` (e.g., `192.168.1.100:11001`)
+5. Save configuration changes
+6. Manually start streaming from the Ultimate device
 
 For comprehensive configuration details, refer to the [official C64 Ultimate documentation](https://1541u-documentation.readthedocs.io/en/latest/data_streams.html).
-
-**Automatic Control:** When a specific IP address is configured in the OBS plugin settings, the plugin can automatically send start/stop commands to the Ultimate device.
 
 ---
 
