@@ -90,19 +90,19 @@ See the [OBS Plugins Guide](https://obsproject.com/kb/plugins-guide).
 7. **Recording Options (Optional):**
    - **Save BMP Frames:** Enable to save individual frames as BMP files (useful for debugging, impacts performance)
    - **Record AVI + WAV:** Enable to record uncompressed video and audio files (high disk usage)
-   - **Output Folder:** Choose where recording files are saved (defaults to `~/Documents/obs-studio/c64u/recordings`)
+   - **Output Folder:** Choose where recording files are saved. Default locations by OS:
+     - **Windows:** `%USERPROFILE%\Documents\obs-studio\c64u\recordings`
+     - **macOS:** `~/Documents/obs-studio/c64u/recordings`
+     - **Linux:** `~/Documents/obs-studio/c64u/recordings`
 8. **Apply Settings:** Click "OK" to save your configuration
 
 Once configured, live video and audio streams from the C64 Ultimate will be available in OBS Studio.
 
 ### Ultimate Device Setup 🎛️
 
-**Recommended Approach:** The OBS plugin automatically controls streaming on the Ultimate device. When you configure the Ultimate's IP address in the OBS plugin settings, the plugin tells the Ultimate device where to send streams and sends start commands automatically. No manual configuration needed on the Ultimate device.
+**Automatic Configuration (Recommended):** The OBS plugin automatically controls streaming on the Ultimate device. When you configure the Ultimate's IP address in the OBS plugin settings, the plugin tells the Ultimate device where to send streams and sends start commands automatically. Thus, no manual streaming adjustments are needed on the Ultimate device.
 
-**Manual Configuration (Not Recommended):**
-If you prefer to control streaming from the Ultimate device instead of letting OBS manage it automatically, you can manually configure the destination addresses. This approach requires more manual work and is not recommended for most users.
-
-**To manually configure (if desired):**
+**Manual Configuration:**
 1. Press F2 to access the Ultimate's configuration menu
 2. Navigate to "Data Streams" section
 3. Set "Stream VIC to" field: `your-obs-ip:11000` (e.g., `192.168.1.100:11000`)
@@ -148,9 +148,10 @@ All recording files are organized into session folders with timestamps:
 
 ### Recording Configuration
 
-- **Output Folder:** Configurable base directory for all recordings
-  - Windows default: `%USERPROFILE%\Documents\obs-studio\c64u\recordings`
-  - macOS/Linux default: `~/Documents/obs-studio/c64u/recordings`
+- **Output Folder Defaults:**
+  - **Windows:** `%USERPROFILE%\Documents\obs-studio\c64u\recordings`
+  - **macOS:** `~/Documents/obs-studio/c64u/recordings`
+  - **Linux:** `~/Documents/obs-studio/c64u/recordings`
 - **Automatic Session Management:** New session folder created each time recording is enabled
 - **Cross-Platform Compatibility:** Works on Windows, macOS, and Linux
 
@@ -158,7 +159,8 @@ All recording files are organized into session folders with timestamps:
 
 - Recording operates independently of OBS Studio's built-in recording
 - Both recording options can be enabled simultaneously
-- Recording starts/stops automatically when the respective checkboxes are toggled
+- **Recording starts immediately when a checkbox is checked and continues until unchecked**
+- **⚠️ Checkbox states persist across OBS restarts - uncheck to stop recording or risk filling disk space**
 - Files are written in real-time as data is received from the C64 Ultimate
 - Session folders are created automatically with proper directory structure
 
