@@ -665,29 +665,32 @@ obs_properties_t *c64u_properties(void *data)
     obs_property_t *debug_prop = obs_properties_add_bool(props, "debug_logging", "Debug Logging");
     obs_property_set_long_description(debug_prop, "Enable detailed logging for debugging connection issues");
 
+    // Network Configuration Group
+    obs_property_t *network_group = obs_properties_add_group(props, "network_group", "Network Configuration",
+                                                             OBS_GROUP_NORMAL, obs_properties_create());
+    obs_properties_t *network_props = obs_property_group_content(network_group);
+
     // C64 IP Address
-    obs_property_t *ip_prop = obs_properties_add_text(props, "ip_address", "C64 Ultimate IP", OBS_TEXT_DEFAULT);
+    obs_property_t *ip_prop = obs_properties_add_text(network_props, "ip_address", "C64 Ultimate IP", OBS_TEXT_DEFAULT);
     obs_property_set_long_description(
         ip_prop, "IP address or DNS name of C64 Ultimate device (use 0.0.0.0 to skip control commands)");
 
     // OBS IP Address (editable)
-    obs_property_t *obs_ip_prop = obs_properties_add_text(props, "obs_ip_address", "OBS Machine IP", OBS_TEXT_DEFAULT);
-    obs_property_set_long_description(obs_ip_prop, "IP address of this OBS machine (where C64 Ultimate sends streams)");
+    obs_property_t *obs_ip_prop =
+        obs_properties_add_text(network_props, "obs_ip_address", "OBS Server IP", OBS_TEXT_DEFAULT);
+    obs_property_set_long_description(obs_ip_prop, "IP address of this OBS server (where C64 Ultimate sends streams)");
 
     // Auto-detect IP toggle
-    obs_property_t *auto_ip_prop = obs_properties_add_bool(props, "auto_detect_ip", "Auto-detect OBS IP");
-    obs_property_set_long_description(auto_ip_prop,
-                                      "Automatically detect and use OBS machine IP in streaming commands");
+    obs_property_t *auto_ip_prop = obs_properties_add_bool(network_props, "auto_detect_ip", "Auto-detect OBS IP");
+    obs_property_set_long_description(auto_ip_prop, "Automatically detect and use OBS server IP in streaming commands");
 
-    // UDP Ports Group (compact layout)
-    obs_property_t *port_group =
-        obs_properties_add_group(props, "port_group", "UDP Ports", OBS_GROUP_NORMAL, obs_properties_create());
-    obs_properties_t *port_props = obs_property_group_content(port_group);
-
-    obs_property_t *video_port_prop = obs_properties_add_int(port_props, "video_port", "Video (11000)", 1024, 65535, 1);
+    // UDP Ports within the same network group
+    obs_property_t *video_port_prop =
+        obs_properties_add_int(network_props, "video_port", "Video Port (11000)", 1024, 65535, 1);
     obs_property_set_long_description(video_port_prop, "UDP port for video stream from C64 Ultimate");
 
-    obs_property_t *audio_port_prop = obs_properties_add_int(port_props, "audio_port", "Audio (11001)", 1024, 65535, 1);
+    obs_property_t *audio_port_prop =
+        obs_properties_add_int(network_props, "audio_port", "Audio Port (11001)", 1024, 65535, 1);
     obs_property_set_long_description(audio_port_prop, "UDP port for audio stream from C64 Ultimate");
 
     // Rendering Delay
@@ -709,9 +712,9 @@ obs_properties_t *c64u_properties(void *data)
     obs_property_set_long_description(record_video_prop,
                                       "Record uncompressed AVI video + WAV audio (for debugging - high disk usage)");
 
-    // Save Folder (applies to both frame saving and video recording)
+    // Save Folder (applies to both frame saving and video recording) - now properly in Recording group
     obs_property_t *save_folder_prop =
-        obs_properties_add_path(props, "save_folder", "Output Folder", OBS_PATH_DIRECTORY, NULL, NULL);
+        obs_properties_add_path(recording_props, "save_folder", "Output Folder", OBS_PATH_DIRECTORY, NULL, NULL);
     obs_property_set_long_description(
         save_folder_prop,
         "Directory where session folders with frames, video, audio, and timing files will be created");
@@ -732,8 +735,17 @@ void c64u_defaults(obs_data_t *settings)
     obs_data_set_default_int(settings, "render_delay_frames", 10); // Default 10 frames delay
 
     // Frame saving defaults
-    obs_data_set_default_bool(settings, "save_frames", false);            // Disabled by default
-    obs_data_set_default_string(settings, "save_folder", "./recordings"); // Default folder
+    obs_data_set_default_bool(settings, "save_frames", false); // Disabled by default
+
+    // Platform-specific default recording folder
+#ifdef _WIN32
+    const char *default_folder = "%USERPROFILE%\\Documents\\obs-studio\\c64u\\recordings";
+#elif defined(__APPLE__)
+    const char *default_folder = "~/Documents/obs-studio/c64u/recordings";
+#else // Linux and other Unix-like systems
+    const char *default_folder = "~/Documents/obs-studio/c64u/recordings";
+#endif
+    obs_data_set_default_string(settings, "save_folder", default_folder);
 
     // Video recording defaults
     obs_data_set_default_bool(settings, "record_video", false); // Disabled by default

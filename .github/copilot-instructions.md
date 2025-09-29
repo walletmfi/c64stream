@@ -97,10 +97,23 @@ Dependencies are cached in `.deps/` directory and validated by version/hash.
 - `CMAKE_INSTALL_PREFIX` - Installation destination (platform-specific defaults)
 
 ### Quick Local Development Build:
+
+**Linux/macOS:**
 ```bash
 # Simple development build (without full CI infrastructure)
-cmake --preset ubuntu-x86_64  # or macos/windows-x64
-cmake --build build_x86_64    # or build_macos/build_x64
+cmake --preset ubuntu-x86_64  # or macos
+cmake --build build_x86_64    # or build_macos
+```
+
+**Windows (PowerShell):**
+```powershell
+# Configure and build using full paths (if cmake not in PATH)
+& "C:\Program Files\CMake\bin\cmake.exe" --preset windows-x64
+& "C:\Program Files\CMake\bin\cmake.exe" --build build_x64
+
+# Alternative if cmake is in PATH
+cmake --preset windows-x64
+cmake --build build_x64
 ```
 
 ### Configure and Build (Any Platform):
@@ -158,9 +171,14 @@ export CI=1
 **Issue: "script execution error" from build scripts**
 - Solution: Build scripts require CI=1 environment variable to be set for local execution.
 
+**Issue: "./build-aux/run-clang-format" fails on Windows**
+- Solution: The script requires zsh which may not be available on Windows. Use direct clang-format command instead: `& "C:\Program Files\LLVM\bin\clang-format.exe" -i src/*.c src/*.h`
+
 ## Validation and Testing
 
 ### Code Formatting (Always run before committing):
+
+**Linux/macOS (requires zsh):**
 ```bash
 # Check C/C++ formatting
 ./build-aux/run-clang-format --check
@@ -172,6 +190,83 @@ export CI=1
 ./build-aux/run-clang-format
 ./build-aux/run-gersemi
 ```
+
+**Windows (PowerShell):**
+```powershell
+# Check C/C++ formatting (if clang-format is in PATH)
+clang-format --dry-run --Werror src/*.c src/*.h
+
+# Fix C/C++ formatting with LLVM installation
+& "C:\Program Files\LLVM\bin\clang-format.exe" -i src/*.c src/*.h
+
+# Alternative: Format specific file
+& "C:\Program Files\LLVM\bin\clang-format.exe" -i src/c64u-source.c
+
+# Check CMake formatting (requires gersemi via pip)
+gersemi --check CMakeLists.txt cmake/
+
+# Fix CMake formatting
+gersemi --in-place CMakeLists.txt cmake/
+```
+
+**Windows Notes:**
+- The `./build-aux/run-clang-format` script requires zsh, which may not be available on Windows
+- Install LLVM from https://llvm.org/builds/ to get clang-format
+- Install gersemi: `pip install gersemi`
+- Use PowerShell call operator `&` when paths contain spaces
+
+### Windows Development Environment
+
+**Complete Windows Development Workflow (PowerShell):**
+
+**Step 1: Configure build with preset**
+```powershell
+# If cmake is in PATH
+cmake --preset windows-x64
+
+# If cmake not in PATH (common on Windows)
+& "C:\Program Files\CMake\bin\cmake.exe" --preset windows-x64
+```
+
+**Step 2: Build the plugin**
+```powershell
+# If cmake is in PATH
+cmake --build build_x64
+
+# If cmake not in PATH (full path required)
+& "C:\Program Files\CMake\bin\cmake.exe" --build build_x64
+```
+
+**Step 3: Validate formatting (mandatory before commit)**
+```powershell
+# Check all source files for formatting issues
+& "C:\Program Files\LLVM\bin\clang-format.exe" --dry-run --Werror src/*.c src/*.h
+
+# Fix all formatting issues automatically
+& "C:\Program Files\LLVM\bin\clang-format.exe" -i src/*.c src/*.h
+
+# Alternative: Fix specific files one by one
+Get-ChildItem src/*.c, src/*.h | ForEach-Object {
+    & "C:\Program Files\LLVM\bin\clang-format.exe" -i $_.FullName
+}
+
+# Verify no formatting issues remain
+& "C:\Program Files\LLVM\bin\clang-format.exe" --dry-run --Werror src/*.c src/*.h
+```
+
+**Windows Build Environment Requirements:**
+- **Visual Studio Build Tools 2022** - Required for MSVC compiler
+- **Windows SDK 10.0.26100** (or compatible version)
+- **CMake 3.30.5+** - Install from cmake.org
+- **LLVM 19.1.1+** - Install from llvm.org/builds/ for clang-format
+- **PowerShell 5.1+ or 7+** - For build script execution
+
+**Common Windows Build Issues:**
+- **CMake not found**: Add CMake to PATH or use full path `"C:\Program Files\CMake\bin\cmake.exe"`
+- **clang-format not found**: Install LLVM and use full path `"C:\Program Files\LLVM\bin\clang-format.exe"`
+- **MSBuild errors**: Ensure Visual Studio Build Tools 2022 is installed with C++ workload
+- **Preset not found**: Run from project root directory where `CMakePresets.json` exists
+- **Access denied on build**: Run PowerShell as Administrator if needed
 
 ### Build Validation:
 ```bash
@@ -265,11 +360,50 @@ The C64 Ultimate device streams video and audio data over network connections. K
 - Enable verbose CMake output: `cmake --preset <name> -- -DCMAKE_VERBOSE_MAKEFILE=ON`
 - Check ccache statistics after builds for performance insights
 
+## Cross-Platform Development Guidelines
+
+### Platform-Specific Code Patterns
+The plugin uses conditional compilation extensively for cross-platform compatibility. Follow these established patterns:
+
+#### Networking (c64u-network.h/c):
+- **Windows**: Uses WinSock2 (`winsock2.h`, `ws2tcpip.h`) with `WSAStartup()`/`WSACleanup()`
+- **POSIX**: Uses standard BSD sockets (`sys/socket.h`, `netinet/in.h`)
+- **Socket types**: `SOCKET` (Windows) vs `int` (POSIX) - use `socket_t` typedef
+- **Error handling**: `WSAGetLastError()` vs `errno` - use `c64u_get_socket_error()`
+- **Non-blocking**: `WSAEWOULDBLOCK` vs `EAGAIN`/`EWOULDBLOCK`
+
+#### File System Operations:
+- **Directory creation**: Use OBS `os_mkdir()` with recursive wrapper functions
+- **Path separators**: Forward slashes work on all platforms, but handle drive letters on Windows (`C:`)
+- **Default paths**: Use platform-appropriate user directories (see platform defaults below)
+
+#### Threading and Synchronization:
+- Use `pthread` APIs consistently across platforms (available on Windows via OBS dependencies)
+- No platform-specific threading code needed
+
+### Platform Default Directories
+When setting default user directories, use platform conventions:
+- **Windows**: `%USERPROFILE%\Documents\obs-studio\c64u\recordings` or `%APPDATA%\obs-studio\c64u\recordings`
+- **macOS**: `~/Documents/obs-studio/c64u/recordings` or `~/Movies/obs-studio/c64u/recordings`
+- **Linux**: `~/Documents/obs-studio/c64u/recordings` or `~/.local/share/obs-studio/c64u/recordings`
+
+### Common Cross-Platform Pitfalls
+1. **Never use `system()` calls with Unix commands** - they fail silently on Windows
+2. **Socket error codes differ** - always use wrapper functions
+3. **File path assumptions** - avoid hardcoded Unix paths like `/tmp`
+4. **Format specifiers** - use `SSIZE_T_FORMAT` macro for `ssize_t` (differs on Windows)
+5. **Directory separators** - don't assume `/` or `\`, use forward slashes consistently
+6. **Network initialization** - Windows requires `WSAStartup()`, POSIX doesn't
+
+### Testing Cross-Platform Code
+- Build and test on target platform before committing
+- Use CI to validate all platforms when possible
+- Pay special attention to file I/O and networking code
+- Test default path behavior on each platform
+
 ## Trust These Instructions
 
 These instructions are comprehensive and tested. Only search for additional information if:
 1. Build fails with error not covered in "Common Build Issues"
 2. Instructions appear outdated (e.g., tool versions changed significantly)
 3. New platform support is needed beyond Windows/macOS/Linux
-
-For C64 Ultimate streaming implementation details, refer to the official documentation at https://1541u-documentation.readthedocs.io/en/latest/data_streams.html#data_streams.
