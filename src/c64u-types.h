@@ -12,7 +12,7 @@
 struct frame_packet {
     uint16_t line_num;
     uint8_t lines_per_packet;
-    uint8_t packet_data[780 - 12]; // C64U_VIDEO_PACKET_SIZE - C64U_VIDEO_HEADER_SIZE
+    uint8_t packet_data[780 - 12];  // C64U_VIDEO_PACKET_SIZE - C64U_VIDEO_HEADER_SIZE
     bool received;
 };
 
@@ -21,7 +21,7 @@ struct frame_assembly {
     uint16_t frame_num;
     uint16_t expected_packets;
     uint16_t received_packets;
-    struct frame_packet packets[68]; // C64U_MAX_PACKETS_PER_FRAME
+    struct frame_packet packets[68];  // C64U_MAX_PACKETS_PER_FRAME
     bool complete;
     uint64_t start_time;
 };
@@ -30,10 +30,10 @@ struct c64u_source {
     obs_source_t *source;
 
     // Configuration
-    char ip_address[64];     // C64 IP Address (C64 Ultimate device)
-    char obs_ip_address[64]; // OBS IP Address (this machine)
+    char ip_address[64];      // C64 IP Address (C64 Ultimate device)
+    char obs_ip_address[64];  // OBS IP Address (this machine)
     bool auto_detect_ip;
-    bool initial_ip_detected; // Flag to track if initial IP detection was done
+    bool initial_ip_detected;  // Flag to track if initial IP detection was done
     uint32_t video_port;
     uint32_t audio_port;
     bool streaming;
@@ -44,8 +44,8 @@ struct c64u_source {
     uint8_t *video_buffer;
 
     // Double buffering for smooth video
-    uint32_t *frame_buffer_front; // For rendering (OBS thread)
-    uint32_t *frame_buffer_back;  // For UDP assembly (video thread)
+    uint32_t *frame_buffer_front;  // For rendering (OBS thread)
+    uint32_t *frame_buffer_back;   // For UDP assembly (video thread)
     bool frame_ready;
     bool buffer_swap_pending;
 
@@ -89,16 +89,16 @@ struct c64u_source {
 
     // Frame timing
     uint64_t last_frame_time;
-    uint64_t frame_interval_ns; // Target frame interval (20ms for 50Hz PAL)
+    uint64_t frame_interval_ns;  // Target frame interval (20ms for 50Hz PAL)
 
     // Rendering delay
-    uint32_t render_delay_frames;   // Delay in frames before making buffer available to OBS
-    uint32_t *delayed_frame_queue;  // Circular buffer for delayed frames
-    uint32_t delay_queue_size;      // Current size of delay queue
-    uint32_t delay_queue_head;      // Head position in delay queue
-    uint32_t delay_queue_tail;      // Tail position in delay queue
-    uint16_t *delay_sequence_queue; // Sequence numbers for delayed frames
-    pthread_mutex_t delay_mutex;    // Mutex for delay queue access
+    uint32_t render_delay_frames;    // Delay in frames before making buffer available to OBS
+    uint32_t *delayed_frame_queue;   // Circular buffer for delayed frames
+    uint32_t delay_queue_size;       // Current size of delay queue
+    uint32_t delay_queue_head;       // Head position in delay queue
+    uint32_t delay_queue_tail;       // Tail position in delay queue
+    uint16_t *delay_sequence_queue;  // Sequence numbers for delayed frames
+    pthread_mutex_t delay_mutex;     // Mutex for delay queue access
 
     // Auto-start control
     bool auto_start_attempted;
@@ -113,11 +113,11 @@ struct c64u_source {
     FILE *video_file;
     FILE *audio_file;
     FILE *timing_file;
-    char session_folder[800]; // Current session folder path
+    char session_folder[800];  // Current session folder path
     uint64_t recording_start_time;
     uint32_t recorded_frames;
     uint32_t recorded_audio_samples;
     pthread_mutex_t recording_mutex;
 };
 
-#endif // C64U_TYPES_H
+#endif  // C64U_TYPES_H

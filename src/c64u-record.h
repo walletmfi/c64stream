@@ -19,4 +19,4 @@ void c64u_record_init(struct c64u_source *context);
 void c64u_record_cleanup(struct c64u_source *context);
 void c64u_record_update_settings(struct c64u_source *context, void *settings);
 
-#endif // C64U_RECORD_H
+#endif  // C64U_RECORD_H
