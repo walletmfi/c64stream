@@ -17,21 +17,6 @@ The plugin connects directly to the Ultimate's network interface, eliminating th
 - Automatic VIC-II color space conversion
 - Built-in recording capabilities (BMP frames, AVI video, WAV audio)
 
-**Supported Platforms:**
-- Windows 10/11 (x64) - verified on Windows 11
-- Linux with X window system or Wayland - verified on Kubuntu 24.04
-- macOS 11+ (Intel/Apple Silicon) - yet to be verified
-
-**Software Requirements:**
-- [OBS Studio 32.0.1](https://obsproject.com/download) or above
-
-**Hardware Requirements:**
-
-One of:
-- [Ultimate 64 Elite](https://ultimate64.com/Ultimate-64-Elite) - verified
-- [Ultimate 64 Elite MK2](https://ultimate64.com/Ultimate-64-Elite-MK2) - yet to be verified
-- [C64 Ultimate](https://www.commodore.net/) - yet to be verified since not released yet
-
 
 ## Getting Started 🚀
 
@@ -171,9 +156,19 @@ All recording files are organized into session folders with timestamps:
 This plugin implements the [C64 Ultimate Data Streams specification](https://1541u-documentation.readthedocs.io/en/latest/data_streams.html#data_streams) to receive video and audio streams from Ultimate devices via UDP/TCP network protocols.
 
 **Supported Platforms:**
-- Windows 10/11 (x64)
-- macOS 10.15+ (Intel/Apple Silicon)
-- Linux (Ubuntu 20.04+, other distributions via manual build)
+- Windows 10/11 (x64) - verified on Windows 11
+- Linux with X window system or Wayland - verified on Kubuntu 24.04
+- macOS 11+ (Intel/Apple Silicon) - yet to be verified
+
+**Software Requirements:**
+- [OBS Studio 32.0.1](https://obsproject.com/download) or above
+
+**Hardware Requirements:**
+
+One of:
+- [Ultimate 64 Elite](https://ultimate64.com/Ultimate-64-Elite) - verified
+- [Ultimate 64 Elite MK2](https://ultimate64.com/Ultimate-64-Elite-MK2) - yet to be verified
+- [C64 Ultimate](https://www.commodore.net/) - yet to be verified since not released yet
 
 **Video Formats:**
 - PAL: 384x272 @ 50Hz
