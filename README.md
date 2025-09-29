@@ -1,4 +1,4 @@
-# C64 Ultimate OBS Plugin 🎮
+# C64 Ultimate OBS Plugin
 
 Bridge your Commodore 64 Ultimate device directly to [OBS Studio](https://obsproject.com/) for seamless streaming and recording over your network connection.
 
