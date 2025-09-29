@@ -17,6 +17,43 @@
 #endif
 #endif
 
+// Helper function to create directories recursively (cross-platform)
+static bool create_directory_recursive(const char *path)
+{
+    char tmp[1024];
+    char *p = NULL;
+    size_t len;
+
+    snprintf(tmp, sizeof(tmp), "%s", path);
+    len = strlen(tmp);
+    if (tmp[len - 1] == '/' || tmp[len - 1] == '\\')
+        tmp[len - 1] = 0;
+
+    for (p = tmp + 1; *p; p++) {
+        if (*p == '/' || *p == '\\') {
+            *p = 0;
+            if (os_mkdir(tmp) != 0) {
+                // Check if it already exists (ignore error if it does)
+                struct stat st;
+                if (stat(tmp, &st) != 0 || !S_ISDIR(st.st_mode)) {
+                    return false;
+                }
+            }
+            *p = '/'; // Use forward slash consistently (works on Windows too)
+        }
+    }
+
+    // Create the final directory
+    if (os_mkdir(tmp) != 0) {
+        struct stat st;
+        if (stat(tmp, &st) != 0 || !S_ISDIR(st.st_mode)) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
 // Helper function to write minimal, standard-compliant AVI header
 static void write_avi_header(FILE *file, uint32_t width, uint32_t height, double fps)
 {
@@ -218,11 +255,8 @@ static void ensure_recording_session(struct c64u_source *context)
              context->save_folder, timeinfo->tm_year + 1900, timeinfo->tm_mon + 1, timeinfo->tm_mday, timeinfo->tm_hour,
              timeinfo->tm_min, timeinfo->tm_sec);
 
-    // Create the session directory
-    char mkdir_cmd[900];
-    snprintf(mkdir_cmd, sizeof(mkdir_cmd), "mkdir -p \"%s\"", context->session_folder);
-    int result = system(mkdir_cmd);
-    if (result != 0) {
+    // Create the session directory recursively (cross-platform)
+    if (!create_directory_recursive(context->session_folder)) {
         C64U_LOG_WARNING("Failed to create session directory: %s", context->session_folder);
         context->session_folder[0] = '\0'; // Clear on failure
     } else {
@@ -262,13 +296,9 @@ void save_frame_as_bmp(struct c64u_source *context, uint32_t *frame_buffer)
     char frames_folder[900];
     snprintf(frames_folder, sizeof(frames_folder), "%s/frames", context->session_folder);
 
-    if (os_mkdir(frames_folder) != 0) {
-        // Check if it already exists (ignore error if it does)
-        struct stat st;
-        if (stat(frames_folder, &st) != 0 || !S_ISDIR(st.st_mode)) {
-            C64U_LOG_WARNING("Failed to create frames subfolder: %s", frames_folder);
-            return;
-        }
+    if (!create_directory_recursive(frames_folder)) {
+        C64U_LOG_WARNING("Failed to create frames subfolder: %s", frames_folder);
+        return;
     }
 
     // Create timestamped filename in frames subfolder
@@ -597,7 +627,7 @@ void c64u_record_init(struct c64u_source *context)
     context->save_frames = false;
     context->saved_frame_count = 0;
     memset(context->save_folder, 0, sizeof(context->save_folder));
-    strncpy(context->save_folder, "/tmp/c64u_frames", sizeof(context->save_folder) - 1);
+    strncpy(context->save_folder, "./recordings", sizeof(context->save_folder) - 1);
 
     // Initialize video recording
     context->record_video = false;
