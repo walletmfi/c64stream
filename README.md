@@ -47,11 +47,9 @@ Grab the right package for your system from the [Releases page](../../releases):
 3. Restart OBS Studio
 
 If you are using Windows Firewall and block all incoming connections, you may have to setup an exclusion to allow for incoming UDP connections
-to port 11000 (Video) and 11001 (Audio):
+to port 11000 (Video) and 11001 (Audio) from the C64 Ultimate.
 
-![C64U](./doc/img/WindowsFirewall.png "Windows Firewall")
-
-You can set this up with the following Powershell script. Be sure to adjust the `RemoteAddress` to the IP of your C64 Ultimate:
+You can do this with the following Powershell script. Be sure to adjust the `RemoteAddress` to the IP of your C64 Ultimate:
 
 ```powershell
 New-NetFirewallRule -DisplayName "C64U" -Direction Inbound -Protocol UDP -LocalPort 11000,11001 -RemoteAddress 192.168.1.64 -Action Allow
