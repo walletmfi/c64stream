@@ -38,8 +38,8 @@ One of:
 ## Getting Started 🚀
 
 ### What You'll Need
-- **OBS Studio** 32.0.1 or later
-- **[C64 Ultimate](https://www.commodore.net/)** or [Ultimate 64](https://ultimate64.com/) with network streaming support
+- **[OBS Studio 32.0.1](https://obsproject.com/download)** or above
+- **[C64 Ultimate](https://www.commodore.net/)** or [Ultimate 64](https://ultimate64.com/)
 - **Network connection** between your OBS computer and Ultimate device
 
 ### Easy Installation 📦
