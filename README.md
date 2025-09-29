@@ -195,9 +195,7 @@ One of:
 ## Troubleshooting 🔍
 
 **No video stream? 📺**
-- If using specific IP: Verify Ultimate device IP address is correct
-- If using default (0.0.0.0): Ensure C64 Ultimate is streaming and both devices are on same network
-- Ensure both devices are on the same network segment
+- Verify that both IP addresses are correct
 - Check Ultimate device has data streaming enabled
 - Confirm firewall allows UDP traffic on configured ports
 
