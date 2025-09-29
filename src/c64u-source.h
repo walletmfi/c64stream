@@ -21,4 +21,4 @@ void c64u_defaults(obs_data_t *settings);
 void c64u_start_streaming(struct c64u_source *context);
 void c64u_stop_streaming(struct c64u_source *context);
 
-#endif  // C64U_SOURCE_H
+#endif // C64U_SOURCE_H

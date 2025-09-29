@@ -120,4 +120,4 @@ struct c64u_source {
     pthread_mutex_t recording_mutex;
 };
 
-#endif  // C64U_TYPES_H
+#endif // C64U_TYPES_H
