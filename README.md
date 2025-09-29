@@ -187,8 +187,8 @@ This plugin implements the [C64 Ultimate Data Streams specification](https://154
 
 **Network Requirements:**
 - UDP/TCP connectivity to Ultimate device
-- Bandwidth: ~2-5 Mbps (uncompressed video stream)
-- Latency: <100ms on local network
+- Bandwidth: ~22 Mbps total (21.7 Mbps video + 1.4 Mbps audio, uncompressed streams)
+- Built-in UDP jitter compensation via configurable frame buffering
 
 **Recording Formats:**
 - BMP frames: 24-bit uncompressed bitmap images
