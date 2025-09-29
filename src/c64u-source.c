@@ -667,7 +667,7 @@ obs_properties_t *c64u_properties(void *data)
 
     // Network Configuration Group
     obs_property_t *network_group = obs_properties_add_group(props, "network_group", "Network Configuration",
-                                                              OBS_GROUP_NORMAL, obs_properties_create());
+                                                             OBS_GROUP_NORMAL, obs_properties_create());
     obs_properties_t *network_props = obs_property_group_content(network_group);
 
     // C64 IP Address
@@ -682,8 +682,7 @@ obs_properties_t *c64u_properties(void *data)
 
     // Auto-detect IP toggle
     obs_property_t *auto_ip_prop = obs_properties_add_bool(network_props, "auto_detect_ip", "Auto-detect OBS IP");
-    obs_property_set_long_description(auto_ip_prop,
-                                      "Automatically detect and use OBS server IP in streaming commands");
+    obs_property_set_long_description(auto_ip_prop, "Automatically detect and use OBS server IP in streaming commands");
 
     // UDP Ports within the same network group
     obs_property_t *video_port_prop =
