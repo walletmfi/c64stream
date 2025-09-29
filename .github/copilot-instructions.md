@@ -288,9 +288,9 @@ The plugin uses conditional compilation extensively for cross-platform compatibi
 
 ### Platform Default Directories
 When setting default user directories, use platform conventions:
-- **Windows**: `%USERPROFILE%\Documents\obs-recordings` or `%APPDATA%\obs-studio\recordings`
-- **macOS**: `~/Documents/obs-recordings` or `~/Movies/obs-recordings`
-- **Linux**: `~/Documents/obs-recordings` or `~/.local/share/obs-studio/recordings`
+- **Windows**: `%USERPROFILE%\Documents\obs-studio\c64u\recordings` or `%APPDATA%\obs-studio\c64u\recordings`
+- **macOS**: `~/Documents/obs-studio/c64u/recordings` or `~/Movies/obs-studio/c64u/recordings`
+- **Linux**: `~/Documents/obs-studio/c64u/recordings` or `~/.local/share/obs-studio/c64u/recordings`
 
 ### Common Cross-Platform Pitfalls
 1. **Never use `system()` calls with Unix commands** - they fail silently on Windows

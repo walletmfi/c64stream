@@ -736,11 +736,11 @@ void c64u_defaults(obs_data_t *settings)
 
     // Platform-specific default recording folder
 #ifdef _WIN32
-    const char *default_folder = "%USERPROFILE%\\Documents\\obs-recordings";
+    const char *default_folder = "%USERPROFILE%\\Documents\\obs-studio\\c64u\\recordings";
 #elif defined(__APPLE__)
-    const char *default_folder = "~/Documents/obs-recordings";
+    const char *default_folder = "~/Documents/obs-studio/c64u/recordings";
 #else // Linux and other Unix-like systems
-    const char *default_folder = "~/Documents/obs-recordings";
+    const char *default_folder = "~/Documents/obs-studio/c64u/recordings";
 #endif
     obs_data_set_default_string(settings, "save_folder", default_folder);
 
