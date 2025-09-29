@@ -9,15 +9,14 @@ The plugin connects directly to the Ultimate's network interface, eliminating th
 ![C64U](./doc/img/ObsMainScreen.png "C64U")
 
 
-**What You Get:**
-- 🎯 Native OBS integration as a standard video source
-- 📡 Real-time video streaming (PAL 384x272, NTSC 384x240)
-- 🔊 Synchronized audio streaming (16-bit stereo, ~48kHz)
-- 🌐 Network-based connection (UDP/TCP)
-- 🎨 Automatic VIC-II color space conversion
-- 🚀 Zero additional hardware requirements
-- 💾 Built-in recording capabilities (BMP frames, AVI video, WAV audio)
-- 📂 Session-based file organization with timestamped folders
+**Features:**
+- Native OBS integration as a standard video source
+- Real-time video streaming (PAL 384x272, NTSC 384x240)
+- Synchronized audio streaming (16-bit stereo, ~48kHz)
+- Network-based connection (UDP/TCP)
+- Automatic VIC-II color space conversion
+- Built-in recording capabilities (BMP frames, AVI video, WAV audio)
+- Zero additional hardware requirements
 
 **System Requirements:**
 - [OBS Studio 32.0.1](https://obsproject.com/download) or above. May work with older versions, but not tested.
