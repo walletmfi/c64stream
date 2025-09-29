@@ -1,25 +1,26 @@
-# C64 Ultimate OBS Plugin
+# C64 Ultimate OBS Plugin 🎮
 
-[OBS Studio](https://obsproject.com/) source plugin for streaming video and audio from Commodore 64 Ultimate devices over a network connection.
+Bridge your Commodore 64 Ultimate device directly to [OBS Studio](https://obsproject.com/) for seamless streaming and recording over your network connection.
 
 This plugin implements a native OBS source that receives video and audio streams from C64 Ultimate devices (Commodore 64 Ultimate, Ultimate 64, Ultimate II+, etc.) via the Ultimate's built-in data streaming capability.
 
-It eliminates the need for capture cards or composite video conversion by connecting directly to the Ultimate's network interface.
+The plugin connects directly to the Ultimate's network interface, eliminating the need for capture cards or composite video connections.
 
 ![C64U](./doc/img/ObsMainScreen.png "C64U")
 
 
-**Key Features:**
+**Features:**
 - Native OBS integration as a standard video source
 - Real-time video streaming (PAL 384x272, NTSC 384x240)
 - Synchronized audio streaming (16-bit stereo, ~48kHz)
 - Network-based connection (UDP/TCP)
 - Automatic VIC-II color space conversion
+- Built-in recording capabilities (BMP frames, AVI video, WAV audio)
 - Zero additional hardware requirements
 
 **System Requirements:**
-- [OBS 32.0.1](https://obsproject.com/download) or above. May work with older versions, but not tested.
-- see [OBS System Requirements](https://obsproject.com/kb/) for more details
+- [OBS Studio 32.0.1](https://obsproject.com/download) or above. May work with older versions, but not tested.
+- See [OBS System Requirements](https://obsproject.com/kb/) for more details
 
 **Supported platforms:**
   - Windows 10/11 (x64)
@@ -29,16 +30,16 @@ It eliminates the need for capture cards or composite video conversion by connec
 
 ---
 
-## Installation
+## Getting Started 🚀
 
-### Prerequisites
+### What You'll Need
 - **OBS Studio** 32.0.1 or later
 - **[C64 Ultimate](https://www.commodore.net/)** or [Ultimate 64](https://ultimate64.com/) with network streaming support
-- **Network connection** between OBS host and Ultimate device
+- **Network connection** between your OBS computer and Ultimate device
 
-### Binary Installation
+### Easy Installation 📦
 
-Download platform-specific packages from the [Releases page](../../releases):
+Grab the right package for your system from the [Releases page](../../releases):
 
 **Windows:**
 1. Close OBS Studio
@@ -73,27 +74,32 @@ See the [OBS Plugins Guide](https://obsproject.com/kb/plugins-guide).
 
 ---
 
-### Configuration
+### Configuration ⚙️
 
 ![C64U](./doc/img/ObsPluginProperties.png "C64U Configuration")
 
-**Setting up the OBS Source:**
+**Getting Your C64 on Stream:**
 
-1. **Add Source**: In OBS, create a new source and select "C64 Ultimate Stream" from the available types
-2. **Open Properties**: Select the "C64 Ultimate Stream" source in your sources list, then click the "Properties" button to open the configuration dialog
-3. **Configure C64 IP Address**:
-   - Enter your Ultimate device's IP address to enable automatic streaming control from OBS (recommended for convenience)
-   - Alternatively, set to `0.0.0.0` to accept streams from any C64 Ultimate on your network (requires manual control from the device)
-   - This field allows the plugin to automatically start/stop streaming and configure the Ultimate device to send data to your OBS host
-4. **Configure OBS IP Address**: This defaults to your OBS host machine's IP address and typically doesn't require changes
-5. **Configure Ports**: Use the default ports (video: 11000, audio: 11001) unless network conflicts require different values
-6. **Apply Settings**: Click "OK" to save your configuration
+1. **Add Source:** In OBS, create a new source and select "C64 Ultimate Stream" from the available types
+2. **Open Properties:** Select the "C64 Ultimate Stream" source in your sources list, then click the "Properties" button to open the configuration dialog
+3. **Debug Logging:** Enable detailed logging for debugging connection issues (optional)
+4. **Configure Network Settings:**
+   - **C64 Ultimate IP:** Enter your Ultimate device's IP address to enable automatic streaming control from OBS (recommended for convenience), or set to `0.0.0.0` to accept streams from any C64 Ultimate on your network (requires manual control from the device)
+   - **OBS Server IP:** IP address where C64 Ultimate sends streams (auto-detected by default)
+   - **Auto-detect OBS IP:** Automatically detect and use OBS server IP in streaming commands (recommended)
+5. **Configure Ports:** Use the default ports (video: 11000, audio: 11001) unless network conflicts require different values
+6. **Render Delay:** Adjust frame buffering (0-100 frames, default 10) to smooth UDP packet loss/reordering
+7. **Recording Options (Optional):**
+   - **Save BMP Frames:** Enable to save individual frames as BMP files (useful for debugging, impacts performance)
+   - **Record AVI + WAV:** Enable to record uncompressed video and audio files (high disk usage)
+   - **Output Folder:** Choose where recording files are saved (defaults to `~/Documents/obs-studio/c64u/recordings`)
+8. **Apply Settings:** Click "OK" to save your configuration
 
-Once configured, you should immediately see and hear the live video and audio streams from your C64.
+Once configured, live video and audio streams from the C64 Ultimate will be available in OBS Studio.
 
-### Ultimate Device Setup
+### Ultimate Device Setup 🎛️
 
-**Important:** Your C64 Ultimate device must be configured to stream data to your OBS server.
+**Important:** Your C64 Ultimate device needs to know where to send its streams—let's set that up!
 
 **Accessing the Configuration Menu:**
 Access the Ultimate's configuration menu (typically by pressing F2) and navigate to:
@@ -103,8 +109,8 @@ F2 → Data Streams
 
 **Required Stream Settings:**
 Configure these destination addresses to point to your OBS server:
-- **Stream VIC to**: `192.168.1.185:11000` (replace with your OBS server's IP and video port)
-- **Stream Audio to**: `192.168.1.185:11001` (replace with your OBS server's IP and audio port)
+- **Stream VIC to:** `192.168.1.185:11000` (replace with your OBS server's IP and video port)
+- **Stream Audio to:** `192.168.1.185:11001` (replace with your OBS server's IP and audio port)
 
 **Address Format Examples:**
 - IP address format: `192.168.1.185:11000`
@@ -120,12 +126,61 @@ Configure these destination addresses to point to your OBS server:
 
 For comprehensive configuration details, refer to the [official C64 Ultimate documentation](https://1541u-documentation.readthedocs.io/en/latest/data_streams.html).
 
-**Note:** When you configure an IP address in the OBS plugin settings, it can automatically send start/stop commands to your Ultimate device, making stream control more convenient.
-
+**Automatic Control:** When a specific IP address is configured in the OBS plugin settings, the plugin can automatically send start/stop commands to the Ultimate device.
 
 ---
 
-## Technical Details
+## Recording Features 📹
+
+Capture those perfect gaming moments! The plugin includes built-in recording capabilities that work independently of OBS Studio's recording system, letting you save raw C64 Ultimate data streams directly to disk.
+
+### Recording Options
+
+**Frame Saving (BMP):**
+- Saves individual video frames as uncompressed BMP files
+- Useful for debugging video issues or creating frame-by-frame analysis
+- **Performance Impact:** Enabling this feature will reduce streaming performance due to disk I/O
+- Files saved as: `session_YYYYMMDD_HHMMSS/frames/frame_NNNNNN.bmp`
+
+**Video Recording (AVI + WAV):**
+- Records uncompressed AVI video and separate WAV audio files
+- Captures the raw data stream without OBS processing
+- **High Disk Usage:** Uncompressed video files are very large (~50MB per minute)
+- Video file: `session_YYYYMMDD_HHMMSS/video.avi` (24-bit BGR format)
+- Audio file: `session_YYYYMMDD_HHMMSS/audio.wav` (16-bit stereo PCM)
+
+### File Organization
+
+All recording files are organized into session folders with timestamps:
+```
+~/Documents/obs-studio/c64u/recordings/
+├── session_20240929_143052/
+│   ├── frames/           # BMP frame files (if enabled)
+│   ├── video.avi         # Uncompressed video (if enabled)
+│   └── audio.wav         # Uncompressed audio (if enabled)
+└── session_20240929_151234/
+    └── ...
+```
+
+### Recording Configuration
+
+- **Output Folder:** Configurable base directory for all recordings
+  - Windows default: `%USERPROFILE%\Documents\obs-studio\c64u\recordings`
+  - macOS/Linux default: `~/Documents/obs-studio/c64u/recordings`
+- **Automatic Session Management:** New session folder created each time recording is enabled
+- **Cross-Platform Compatibility:** Works on Windows, macOS, and Linux
+
+### Usage Notes
+
+- Recording operates independently of OBS Studio's built-in recording
+- Both recording options can be enabled simultaneously
+- Recording starts/stops automatically when the respective checkboxes are toggled
+- Files are written in real-time as data is received from the C64 Ultimate
+- Session folders are created automatically with proper directory structure
+
+---
+
+## Technical Details 🔧
 
 This plugin implements the [C64 Ultimate Data Streams specification](https://1541u-documentation.readthedocs.io/en/latest/data_streams.html#data_streams) to receive video and audio streams from Ultimate devices via UDP/TCP network protocols.
 
@@ -149,280 +204,50 @@ This plugin implements the [C64 Ultimate Data Streams specification](https://154
 - Bandwidth: ~2-5 Mbps (uncompressed video stream)
 - Latency: <100ms on local network
 
+**Recording Formats:**
+- BMP frames: 24-bit uncompressed bitmap images
+- AVI video: Uncompressed BGR24 format with precise timing
+- WAV audio: 16-bit stereo PCM, sample rate matches C64 Ultimate output
+- Session organization: Automatic timestamped folder creation
+
 ---
 
-## Troubleshooting
+## Troubleshooting 🔍
 
-**No video stream:**
+**No video stream? 📺**
 - If using specific IP: Verify Ultimate device IP address is correct
 - If using default (0.0.0.0): Ensure C64 Ultimate is streaming and both devices are on same network
 - Ensure both devices are on the same network segment
 - Check Ultimate device has data streaming enabled
 - Confirm firewall allows UDP traffic on configured ports
 
-**Audio sync issues:**
+**Audio sync issues? 🔊**
 - Ultimate device audio streaming must be enabled separately
 - Check audio port configuration (default 11001)
 - Verify OBS audio monitoring settings
 
-**Plugin not available in OBS:**
-- Confirm OBS Studio version 31.1.1+
+**Plugin missing from OBS? 🤔**
+- Confirm OBS Studio version 32.0.1+
 - Verify plugin installed to correct directory
 - Check OBS logs for plugin loading errors
 - Restart OBS completely after installation
 
-**Connection timeouts:**
+**Connection acting up? 📡**
 - Network latency should be <100ms for optimal performance
 - Check for network congestion or WiFi interference
 - Consider wired Ethernet connection for stability
 
+**Recording troubles? 💾**
+- **Files not created:** Verify output folder path exists and is writable
+- **Performance drops with BMP saving:** Frame saving impacts performance significantly; disable if not needed
+- **Large disk usage:** AVI recording creates uncompressed files (~50MB/minute); monitor disk space
+- **Recording stops unexpectedly:** Check disk space and folder permissions
+
 ---
 
-# Developer Information
+## For Developers 🔧
 
-## Technical Overview
-
-This plugin implements the [C64 Ultimate Data Streams specification](https://1541u-documentation.readthedocs.io/en/latest/data_streams.html#data_streams) to receive video and audio streams over UDP/TCP from Commodore 64 Ultimate devices.
-
-**Key Features:**
-- **Live C64 Video Streaming**: Captures real-time video output using C64U video stream protocol
-- **Audio Support**: Streams C64 audio alongside video for complete experience
-- **Network-based**: No additional hardware required - connects over local network
-- **OBS Integration**: Native OBS Studio source plugin with proper lifecycle management
-
-## Building the Plugin
-
-### Prerequisites
-
-#### Linux (Ubuntu/Debian)
-```bash
-sudo apt-get update
-sudo apt-get install -y build-essential cmake ninja-build pkg-config \
-                        libobs-dev libobs0t64 zsh clang-format gersemi
-```
-
-#### macOS
-```bash
-# Install Xcode Command Line Tools
-xcode-select --install
-
-# Install dependencies via Homebrew
-brew install cmake ninja obs
-```
-
-#### Windows
-- Visual Studio 2022 (Community, Professional, or Enterprise)
-- CMake 3.28+
-- PowerShell 7+
-
-### Build Types
-
-This project supports three distinct build configurations optimized for different use cases:
-
-#### 1. **Local Development Build**
-**Purpose**: Complete development environment with testing and debugging tools.
-
-**Components built:**
-- Plugin binary (`c64u-plugin-for-obs.so/.dll/.dylib`)
-- Unit tests (`test_vic_colors`) for VIC-II color conversion
-- Mock C64U server (`c64u_mock_server`) for protocol testing
-- Integration tests (`test_integration`) using OBS libraries
-
-**Ubuntu/Linux:**
-```bash
-# Configure with all local development features
-cmake --preset ubuntu-x86_64
-
-# Build everything (plugin + all tests)
-cmake --build build_x86_64
-
-# Run all tests including integration tests
-cd build_x86_64 && ctest -V
-
-# Test with mock server
-./c64u_mock_server &
-./test_integration
-```
-
-**macOS:**
-```bash
-cmake --preset macos
-cmake --build build_macos
-cd build_macos && ctest -V
-```
-
-**Windows:**
-```powershell
-cmake --preset windows-x64
-cmake --build build_x64 --config RelWithDebInfo
-cd build_x64 && ctest -C RelWithDebInfo -V
-```
-
-#### 2. **CI Simulation Build**
-**Purpose**: Test production build configuration locally without development overhead.
-
-**Components built:**
-- Plugin binary only (4/4 targets)
-- No tests (faster build times)
-- No mock server
-- No debugging tools
-
-**How to run**:
-```bash
-# Simulate CI environment locally
-CI=1 GITHUB_ACTIONS=1 cmake --preset ubuntu-x86_64
-CI=1 GITHUB_ACTIONS=1 cmake --build build_x86_64
-
-# Verify no tests were compiled
-find build_x86_64 -name "*test*" -executable -type f
-# Should return nothing
-```
-
-**Verification**: Build output should show:
-```
--- Test configuration:
---   CI Build: ON
---   Mock Server: OFF
---   Integration Tests: OFF
-[4/4] Linking C shared module c64u-plugin-for-obs.so
-```
-
-#### 3. **Production CI Build**
-**Purpose**: Automated release pipeline with code signing and packaging.
-
-**Process:**
-- Multi-platform compilation (Ubuntu, macOS, Windows)
-- Code signing and notarization (macOS)
-- Package generation (.deb, .pkg, .zip distributions)
-- Binary artifact creation
-- Code format validation
-- No test compilation
-
-**Triggers:** Repository pushes, pull requests, tagged releases
-
-### Build Configuration Details
-
-**Environment Detection Logic**:
-```cmake
-# In tests/CMakeLists.txt
-set(IS_CI_BUILD FALSE)
-if(DEFINED ENV{CI} OR DEFINED ENV{GITHUB_ACTIONS})
-    set(IS_CI_BUILD TRUE)
-    message(STATUS "CI Build: ON")
-else()
-    message(STATUS "CI Build: OFF - Local development mode")
-endif()
-```
-
-**Platform Scripts Behavior**:
-- **Local**: `.github/scripts/build-*` run ctest after building
-- **CI**: Same scripts detect CI environment and skip ctest entirely
-- **Error Prevention**: Avoids "CMake Error: Unknown argument" when no tests exist
-
-### Development Workflow
-
-#### Quick Development Cycle
-```bash
-# 1. Clean slate
-rm -rf build_x86_64
-
-# 2. Configure for development
-cmake --preset ubuntu-x86_64
-
-# 3. Build and test
-cmake --build build_x86_64
-cd build_x86_64 && ctest
-
-# 4. Install to local OBS (optional)
-cp c64u-plugin-for-obs.so ~/.config/obs-studio/plugins/c64u-plugin-for-obs/bin/64bit/
-```
-
-#### Code Formatting (Required)
-```bash
-# Check formatting
-./build-aux/run-clang-format --check    # C/C++ code
-./build-aux/run-gersemi --check         # CMake files
-
-# Auto-fix formatting
-./build-aux/run-clang-format            # Fix C/C++ code
-./build-aux/run-gersemi                 # Fix CMake files
-```
-
-#### Testing Strategies
-
-**Unit Testing**:
-```bash
-# Test VIC color conversion algorithms
-cd build_x86_64 && ./test_vic_colors
-```
-
-**Integration Testing** (requires OBS):
-```bash
-# Test with mock C64U server
-cd build_x86_64
-./c64u_mock_server --port 1234 &
-./test_integration --server-port 1234
-```
-
-**Local CI Validation**:
-```bash
-# Test what will run in CI (using act)
-act -j ubuntu-build -P ubuntu-24.04=catthehacker/ubuntu:act-24.04 -s GITHUB_TOKEN="$(gh auth token)"
-```
-
-### Project Structure
-
-```
-c64u-obs/
-├── src/
-│   ├── plugin-main.c          # Main OBS plugin implementation
-│   ├── plugin-support.h       # Plugin utilities and logging
-│   └── plugin-support.c.in    # Template for plugin support
-├── tests/
-│   ├── CMakeLists.txt          # Test build configuration with CI detection
-│   ├── test_vic_colors.c       # Unit tests for VIC color conversion
-│   ├── c64u_mock_server.c      # Mock C64U device for testing
-│   └── test_integration.c      # Integration tests with real OBS
-├── .github/
-│   ├── workflows/              # CI/CD automation
-│   ├── scripts/                # Platform-specific build scripts
-│   └── actions/                # Reusable workflow components
-├── cmake/                      # Build system configuration
-├── data/locale/                # Localization files
-└── doc/                        # Technical documentation
-```
-
-### Common Issues & Solutions
-
-**Build Issues**:
-- **"LibObs not found"**: Dependencies auto-download; check internet connection
-- **"clang-format version too old"**: Need 19.1.1+; CI has correct version
-- **"zsh not found"**: `sudo apt-get install zsh` (Linux only)
-
-**CI Issues**:
-- **Windows "Unknown argument" error**: Fixed by skipping ctest in CI builds
-- **macOS "executable not found"**: Fixed by disabling test compilation in CI
-- **Format check failures**: Run `./build-aux/run-clang-format` locally first
-
-**Development Issues**:
-- **Plugin not loading**: Check OBS logs, verify plugin path
-- **No C64U connection**: Verify network configuration; check IP address if using specific device, firewall settings
-- **Build performance**: Use `ccache` for faster rebuilds
-
-### Contributing
-
-1. **Fork** the repository
-2. **Create** a feature branch
-3. **Format** code: `./build-aux/run-clang-format && ./build-aux/run-gersemi`
-4. **Test** locally: Full build + ctest + act validation
-5. **Submit** pull request
-
-### Resources
-
-- **C64U Stream Spec**: [`doc/c64u-stream-spec.md`](doc/c64u-stream-spec.md)
-- **Official Documentation**: [C64 Ultimate Data Streams](https://1541u-documentation.readthedocs.io/en/latest/data_streams.html#data_streams)
-- **OBS Plugin Development**: [OBS Studio Plugin Guide](https://obsproject.com/wiki/Plugin-Development)
-- **Build System**: Based on [OBS Plugin Template](https://github.com/obsproject/obs-plugintemplate)
+See the [Developer Documentation](doc/developer.md) for build instructions, testing procedures, and contribution guidelines.
 
 ---
 

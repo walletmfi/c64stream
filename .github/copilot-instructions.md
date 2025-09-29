@@ -55,6 +55,16 @@ This repository provides an OBS Studio source plugin for streaming video and aud
 - Premature optimization
 - Breaking existing patterns without good reason
 
+## Documentation Organization
+
+### Markdown File Structure (MANDATORY)
+- **All Markdown files MUST live in the `doc/` folder** and use kebab-case naming (e.g., `network-jitter-analysis.md`, `udp-packet-ordering.md`)
+- **The ONLY exception is `README.md`** which lives at the top-level as the main project entry point
+- **No Markdown files in project root** except README.md (move any others to `doc/` folder)
+- **Consolidate related documentation** to avoid duplication and maintain single source of truth
+- **Use descriptive kebab-case names** that clearly indicate the document's purpose
+- **Update all cross-references** when moving or renaming documentation files
+
 ## Technologies and Tools
 
 **Key Facts:**
