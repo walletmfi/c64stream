@@ -97,10 +97,23 @@ Dependencies are cached in `.deps/` directory and validated by version/hash.
 - `CMAKE_INSTALL_PREFIX` - Installation destination (platform-specific defaults)
 
 ### Quick Local Development Build:
+
+**Linux/macOS:**
 ```bash
 # Simple development build (without full CI infrastructure)
-cmake --preset ubuntu-x86_64  # or macos/windows-x64
-cmake --build build_x86_64    # or build_macos/build_x64
+cmake --preset ubuntu-x86_64  # or macos
+cmake --build build_x86_64    # or build_macos
+```
+
+**Windows (PowerShell):**
+```powershell
+# Configure and build using full paths (if cmake not in PATH)
+& "C:\Program Files\CMake\bin\cmake.exe" --preset windows-x64
+& "C:\Program Files\CMake\bin\cmake.exe" --build build_x64
+
+# Alternative if cmake is in PATH
+cmake --preset windows-x64
+cmake --build build_x64
 ```
 
 ### Configure and Build (Any Platform):
@@ -201,6 +214,59 @@ gersemi --in-place CMakeLists.txt cmake/
 - Install LLVM from https://llvm.org/builds/ to get clang-format
 - Install gersemi: `pip install gersemi`
 - Use PowerShell call operator `&` when paths contain spaces
+
+### Windows Development Environment
+
+**Complete Windows Development Workflow (PowerShell):**
+
+**Step 1: Configure build with preset**
+```powershell
+# If cmake is in PATH
+cmake --preset windows-x64
+
+# If cmake not in PATH (common on Windows)
+& "C:\Program Files\CMake\bin\cmake.exe" --preset windows-x64
+```
+
+**Step 2: Build the plugin**
+```powershell
+# If cmake is in PATH
+cmake --build build_x64
+
+# If cmake not in PATH (full path required)
+& "C:\Program Files\CMake\bin\cmake.exe" --build build_x64
+```
+
+**Step 3: Validate formatting (mandatory before commit)**
+```powershell
+# Check all source files for formatting issues
+& "C:\Program Files\LLVM\bin\clang-format.exe" --dry-run --Werror src/*.c src/*.h
+
+# Fix all formatting issues automatically
+& "C:\Program Files\LLVM\bin\clang-format.exe" -i src/*.c src/*.h
+
+# Alternative: Fix specific files one by one
+Get-ChildItem src/*.c, src/*.h | ForEach-Object { 
+    & "C:\Program Files\LLVM\bin\clang-format.exe" -i $_.FullName 
+}
+
+# Verify no formatting issues remain
+& "C:\Program Files\LLVM\bin\clang-format.exe" --dry-run --Werror src/*.c src/*.h
+```
+
+**Windows Build Environment Requirements:**
+- **Visual Studio Build Tools 2022** - Required for MSVC compiler
+- **Windows SDK 10.0.26100** (or compatible version)
+- **CMake 3.30.5+** - Install from cmake.org
+- **LLVM 19.1.1+** - Install from llvm.org/builds/ for clang-format
+- **PowerShell 5.1+ or 7+** - For build script execution
+
+**Common Windows Build Issues:**
+- **CMake not found**: Add CMake to PATH or use full path `"C:\Program Files\CMake\bin\cmake.exe"`
+- **clang-format not found**: Install LLVM and use full path `"C:\Program Files\LLVM\bin\clang-format.exe"`
+- **MSBuild errors**: Ensure Visual Studio Build Tools 2022 is installed with C++ workload
+- **Preset not found**: Run from project root directory where `CMakePresets.json` exists
+- **Access denied on build**: Run PowerShell as Administrator if needed
 
 ### Build Validation:
 ```bash
