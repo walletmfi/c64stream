@@ -9,6 +9,7 @@ This plugin implements the [C64 Ultimate Data Streams specification](https://154
 ### Prerequisites
 
 #### Linux (Ubuntu/Debian)
+
 ```bash
 # Automated dependency installation
 ./install-ubuntu-deps.sh
@@ -20,7 +21,19 @@ sudo apt-get install -y build-essential cmake ninja-build pkg-config \
 pip3 install gersemi
 ```
 
-#### macOS\n```bash\n# Install Xcode Command Line Tools\nxcode-select --install\n\n# Install dependencies via Homebrew\nbrew install cmake ninja ccache\npip3 install gersemi\n\n# Note: OBS dependencies are auto-downloaded during build\n```
+#### macOS
+
+```bash
+
+# Install Xcode Command Line Tools
+xcode-select --install
+
+# Install dependencies via Homebrew
+brew install cmake ninja ccache
+pip3 install gersemi
+
+# Note: OBS dependencies are auto-downloaded during build
+```
 
 #### Windows
 - Visual Studio 2022 (Community, Professional, or Enterprise)
@@ -380,9 +393,3 @@ endif()
 - **Official Documentation:** [C64 Ultimate Data Streams](https://1541u-documentation.readthedocs.io/en/latest/data_streams.html#data_streams)
 - **OBS Plugin Development:** [OBS Studio Plugin Guide](https://obsproject.com/wiki/Plugin-Development)
 - **Build System:** Based on [OBS Plugin Template](https://github.com/obsproject/obs-plugintemplate)
-
----
-
-## License
-
-This project is licensed under the MIT License - see the [LICENSE](../LICENSE) file for details.
