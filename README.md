@@ -1,10 +1,11 @@
-<div style="display: flex; align-items: center;">
-  <img src="./doc/img/c64u-obs.png" alt="C64U Logo" width="100" style="margin-right: 15px;">
-  <h1 style="margin: 0;">C64 Ultimate OBS Plugin</h1>
+
+# C64 Ultimate OBS Plugin
+
+Bridge your Commodore 64 Ultimate directly to [OBS Studio](https://obsproject.com/) for seamless streaming and recording over your network connection.
+
+<div style="text-align: center;">
+  <img src="./doc/img/c64u-obs.png" alt="C64U Logo" width="200">
 </div>
-
-
-Bridge your Commodore 64 Ultimate device directly to [OBS Studio](https://obsproject.com/) for seamless streaming and recording over your network connection.
 
 This plugin implements a native OBS source that receives video and audio streams from C64 Ultimate devices (Commodore 64 Ultimate or Ultimate 64) via the Ultimate's built-in data streaming capability.
 
