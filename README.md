@@ -1,6 +1,6 @@
 <h1 style="display: flex; align-items: center;">
   C64 Ultimate OBS Plugin
-  <img src="./doc/img/c64u-obs.png" alt="C64U Logo" width="64" style="margin-left: 15px;">
+  <img src="./doc/img/c64u-obs.png" alt="C64U Logo" width="100" style="margin-left: 15px;">
 </h1>
 
 
