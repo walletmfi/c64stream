@@ -544,6 +544,16 @@ void c64u_render(void *data, gs_effect_t *effect)
     // Simple check: show logo if no frames available
     bool should_show_logo = !context->streaming || !context->frame_ready || !context->frame_buffer_front;
 
+    // Debug logging to understand why logo is showing
+    static uint64_t last_debug_log = 0;
+    uint64_t now = os_gettime_ns();
+    if (should_show_logo && (last_debug_log == 0 || (now - last_debug_log) >= 2000000000ULL)) { // Every 2 seconds
+        C64U_LOG_DEBUG("🖼️ Showing logo: streaming=%d, frame_ready=%d, frame_buffer_front=%p, C64_IP='%s', OBS_IP='%s'",
+                       context->streaming, context->frame_ready, (void *)context->frame_buffer_front,
+                       context->ip_address, context->obs_ip_address);
+        last_debug_log = now;
+    }
+
     if (should_show_logo) {
         // Show C64U logo centered on black background
         if (context->logo_texture) {
