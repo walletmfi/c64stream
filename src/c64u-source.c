@@ -570,6 +570,18 @@ void c64u_render(void *data, gs_effect_t *effect)
         last_debug_log = now;
     }
 
+    // Self-healing: If we're supposed to be streaming but frames have timed out,
+    // periodically retry streaming commands (every 5 seconds)
+    if (context->streaming && frames_timed_out) {
+        static uint64_t last_retry_time = 0;
+        if (last_retry_time == 0 || (now - last_retry_time) >= 5000000000ULL) { // 5 seconds
+            C64U_LOG_INFO("🔄 Self-healing: Retrying streaming commands to C64U at %s", context->ip_address);
+            send_control_command(context, true, 0); // Retry video stream
+            send_control_command(context, true, 1); // Retry audio stream
+            last_retry_time = now;
+        }
+    }
+
     if (should_show_logo) {
         // Show C64U logo centered on black background
         if (context->logo_texture) {
