@@ -68,9 +68,6 @@ void swap_frame_buffers(struct c64u_source *context)
     context->frame_buffer_back = temp;
     context->frame_ready = true;
     context->buffer_swap_pending = false;
-
-    // Update last frame received time for logo display logic
-    context->last_frame_received_time = os_gettime_ns();
 }
 
 void assemble_frame_to_buffer(struct c64u_source *context, struct frame_assembly *frame)

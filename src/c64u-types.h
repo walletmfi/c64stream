@@ -105,11 +105,8 @@ struct c64u_source {
     bool auto_start_attempted;
 
     // Logo display for network issues
-    gs_texture_t *logo_texture;        // Loaded logo texture
-    bool logo_load_attempted;          // Have we tried to load the logo?
-    bool show_logo;                    // Should we show logo instead of frames?
-    uint64_t last_frame_received_time; // Time when last frame was received
-    uint64_t last_stream_request_time; // Time when we last sent stream start command
+    gs_texture_t *logo_texture; // Loaded logo texture
+    bool logo_load_attempted;   // Have we tried to load the logo?
 
     // Frame saving for analysis
     bool save_frames;

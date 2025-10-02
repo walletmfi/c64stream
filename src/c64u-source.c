@@ -92,11 +92,16 @@ void *c64u_create(obs_data_t *settings, obs_source_t *source)
             // Save the detected IP to settings for future use
             obs_data_set_string(settings, "obs_ip_address", context->obs_ip_address);
         } else {
-            C64U_LOG_WARNING("Failed to detect OBS IP address, using fallback");
-            strncpy(context->obs_ip_address, "192.168.1.100", sizeof(context->obs_ip_address) - 1);
+            C64U_LOG_WARNING("Failed to detect OBS IP address, will use configured value");
             context->initial_ip_detected = false;
-            obs_data_set_string(settings, "obs_ip_address", context->obs_ip_address);
         }
+    }
+
+    // Ensure we have a valid OBS IP address - use localhost as last resort
+    if (strlen(context->obs_ip_address) == 0) {
+        C64U_LOG_INFO("No OBS IP configured, using localhost as fallback");
+        strncpy(context->obs_ip_address, "127.0.0.1", sizeof(context->obs_ip_address) - 1);
+        obs_data_set_string(settings, "obs_ip_address", context->obs_ip_address);
     }
 
     // Set default ports if not configured
@@ -186,9 +191,6 @@ void *c64u_create(obs_data_t *settings, obs_source_t *source)
     // Initialize logo display
     context->logo_texture = NULL;
     context->logo_load_attempted = false;
-    context->show_logo = true; // Start with logo until frames arrive
-    context->last_frame_received_time = 0;
-    context->last_stream_request_time = 0;
 
     // Initialize recording module
     c64u_record_init(context);
@@ -533,69 +535,14 @@ void c64u_render(void *data, gs_effect_t *effect)
         return;
     }
 
-    uint64_t now = os_gettime_ns();
-    static bool first_render = true;
-    static uint64_t last_state_log = 0;
-    static bool was_showing_logo = false;
-
-    if (first_render) {
-        C64U_LOG_DEBUG("🎨 First render called - context: %p", (void *)context);
-        first_render = false;
-    }
-
     // Lazy load logo texture on first render (when graphics context is available)
     if (!context->logo_load_attempted) {
-        C64U_LOG_DEBUG("Logo load not yet attempted, loading now...");
         context->logo_texture = load_logo_texture();
         context->logo_load_attempted = true;
-        if (context->logo_texture) {
-            C64U_LOG_DEBUG("Logo texture loaded successfully");
-        } else {
-            C64U_LOG_WARNING("Logo texture is NULL after loading attempt");
-        }
     }
 
-    // Determine if we should show logo or video frames
-    bool has_frames = (context->streaming && context->frame_ready && context->frame_buffer_front);
-
-    // Frame timeout detection - show logo if no frames received for 3 seconds
-    const uint64_t frame_timeout_ns = 3000000000ULL; // 3 seconds
-    bool frame_timeout =
-        (context->last_frame_received_time > 0 && (now - context->last_frame_received_time) > frame_timeout_ns);
-
-    // Show logo if: not streaming, no frames available, or frame timeout
-    bool should_show_logo = !context->streaming || !has_frames || frame_timeout;
-
-    // Log state changes
-    if (should_show_logo != was_showing_logo) {
-        if (should_show_logo) {
-            if (frame_timeout) {
-                C64U_LOG_DEBUG("🖼️ Switching to LOGO due to frame timeout (%.1f sec since last frame)",
-                               (now - context->last_frame_received_time) / 1000000000.0);
-            } else {
-                C64U_LOG_DEBUG("🖼️ Switching to LOGO (streaming:%d, frames:%d)", context->streaming, has_frames);
-            }
-        } else {
-            C64U_LOG_DEBUG("📺 Switching to VIDEO (frames available)");
-        }
-        was_showing_logo = should_show_logo;
-        last_state_log = now;
-    }
-
-    // Periodic retry of stream start command when no frames received
-    const uint64_t retry_interval_ns = 1000000000ULL; // 1 second
-    if (context->streaming && !has_frames &&
-        (context->last_stream_request_time == 0 || (now - context->last_stream_request_time) > retry_interval_ns)) {
-
-        C64U_LOG_DEBUG("🔄 Retrying stream start command (no frames for %.1f sec)",
-                       context->last_stream_request_time > 0 ? (now - context->last_stream_request_time) / 1000000000.0
-                                                             : 0.0);
-
-        // Send control commands to restart streaming
-        send_control_command(context, true, 0); // Start video
-        send_control_command(context, true, 1); // Start audio
-        context->last_stream_request_time = now;
-    }
+    // Simple check: show logo if no frames available
+    bool should_show_logo = !context->streaming || !context->frame_ready || !context->frame_buffer_front;
 
     if (should_show_logo) {
         // Show C64U logo centered on black background

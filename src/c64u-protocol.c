@@ -20,7 +20,14 @@ void send_control_command(struct c64u_source *context, bool enable, uint8_t stre
 
     if (enable) {
         // Get the OBS IP to send as destination
-        const char *client_ip = context->auto_detect_ip ? context->obs_ip_address : "192.168.1.100";
+        const char *client_ip = context->obs_ip_address;
+
+        // Ensure we have a valid OBS IP address
+        if (!client_ip || strlen(client_ip) == 0) {
+            C64U_LOG_WARNING("No OBS IP address configured, cannot send stream start command");
+            close(sock);
+            return;
+        }
 
         // Create IP:PORT string for the destination
         char ip_port_str[128]; // Larger buffer to avoid truncation warnings
