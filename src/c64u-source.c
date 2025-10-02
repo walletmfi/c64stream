@@ -130,6 +130,7 @@ void *c64u_create(obs_data_t *settings, obs_source_t *source)
     memset(context->frame_buffer_front, 0, frame_size);
     memset(context->frame_buffer_back, 0, frame_size);
     context->frame_ready = false;
+    context->last_frame_time = 0; // Initialize frame timeout detection
 
     // Initialize video format detection
     context->detected_frame_height = 0;
@@ -541,16 +542,31 @@ void c64u_render(void *data, gs_effect_t *effect)
         context->logo_load_attempted = true;
     }
 
-    // Simple check: show logo if no frames available
-    bool should_show_logo = !context->streaming || !context->frame_ready || !context->frame_buffer_front;
+    // Check if we should show logo:
+    // 1. Not streaming, OR
+    // 2. No frames ready, OR
+    // 3. No frame buffer, OR
+    // 4. Frames have timed out (no new frames for 3 seconds)
+    uint64_t now = os_gettime_ns();
+    bool frames_timed_out = false;
+    if (context->frame_ready && context->last_frame_time > 0) {
+        uint64_t frame_age = now - context->last_frame_time;
+        frames_timed_out = (frame_age > 3000000000ULL); // 3 seconds
+    }
+
+    bool should_show_logo = !context->streaming || !context->frame_ready || !context->frame_buffer_front ||
+                            frames_timed_out;
 
     // Debug logging to understand why logo is showing
     static uint64_t last_debug_log = 0;
-    uint64_t now = os_gettime_ns();
     if (should_show_logo && (last_debug_log == 0 || (now - last_debug_log) >= 2000000000ULL)) { // Every 2 seconds
-        C64U_LOG_DEBUG("🖼️ Showing logo: streaming=%d, frame_ready=%d, frame_buffer_front=%p, C64_IP='%s', OBS_IP='%s'",
-                       context->streaming, context->frame_ready, (void *)context->frame_buffer_front,
-                       context->ip_address, context->obs_ip_address);
+        const char *reason = !context->streaming            ? "not_streaming"
+                             : !context->frame_ready        ? "no_frames"
+                             : !context->frame_buffer_front ? "no_buffer"
+                             : frames_timed_out             ? "frame_timeout"
+                                                            : "unknown";
+        C64U_LOG_DEBUG("🖼️ Showing logo (%s): streaming=%d, frame_ready=%d, frames_timed_out=%d, C64_IP='%s'", reason,
+                       context->streaming, context->frame_ready, frames_timed_out, context->ip_address);
         last_debug_log = now;
     }
 

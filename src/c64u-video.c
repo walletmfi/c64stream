@@ -67,6 +67,7 @@ void swap_frame_buffers(struct c64u_source *context)
     context->frame_buffer_front = context->frame_buffer_back;
     context->frame_buffer_back = temp;
     context->frame_ready = true;
+    context->last_frame_time = os_gettime_ns(); // Update timestamp for timeout detection
     context->buffer_swap_pending = false;
 }
 
