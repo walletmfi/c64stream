@@ -3,6 +3,7 @@
 
 #include <obs-module.h>
 #include <media-io/audio-io.h>
+#include <graphics/graphics.h>
 #include <pthread.h>
 #include <stdint.h>
 #include <stdbool.h>
@@ -102,6 +103,13 @@ struct c64u_source {
 
     // Auto-start control
     bool auto_start_attempted;
+
+    // Logo display for network issues
+    gs_texture_t *logo_texture;        // Loaded logo texture
+    bool logo_load_attempted;          // Have we tried to load the logo?
+    bool show_logo;                    // Should we show logo instead of frames?
+    uint64_t last_frame_received_time; // Time when last frame was received
+    uint64_t last_stream_request_time; // Time when we last sent stream start command
 
     // Frame saving for analysis
     bool save_frames;
