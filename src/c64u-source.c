@@ -546,12 +546,12 @@ void c64u_render(void *data, gs_effect_t *effect)
     // 1. Not streaming, OR
     // 2. No frames ready, OR
     // 3. No frame buffer, OR
-    // 4. Frames have timed out (no new frames for 3 seconds)
+    // 4. Frames have timed out (no new frames for 1 second)
     uint64_t now = os_gettime_ns();
     bool frames_timed_out = false;
     if (context->frame_ready && context->last_frame_time > 0) {
         uint64_t frame_age = now - context->last_frame_time;
-        frames_timed_out = (frame_age > 3000000000ULL); // 3 seconds
+        frames_timed_out = (frame_age > 1000000000ULL); // 1 second
     }
 
     bool should_show_logo = !context->streaming || !context->frame_ready || !context->frame_buffer_front ||
@@ -570,12 +570,22 @@ void c64u_render(void *data, gs_effect_t *effect)
         last_debug_log = now;
     }
 
-    // Self-healing: If we're supposed to be streaming but frames have timed out,
-    // periodically retry streaming commands (every 5 seconds)
-    if (context->streaming && frames_timed_out) {
+    // Clear frame ready state immediately when frames timeout to show logo
+    if (frames_timed_out) {
+        context->frame_ready = false;
+    }
+
+    // Self-healing: Retry streaming commands every 1 second when not receiving frames
+    // This covers both: frames timed out during streaming, and initial connection attempts
+    bool should_retry = (context->streaming && frames_timed_out) ||     // Timeout during streaming
+                        (!context->streaming && !context->frame_ready); // Not streaming and no frames
+
+    if (should_retry) {
         static uint64_t last_retry_time = 0;
-        if (last_retry_time == 0 || (now - last_retry_time) >= 5000000000ULL) { // 5 seconds
-            C64U_LOG_INFO("🔄 Self-healing: Retrying streaming commands to C64U at %s", context->ip_address);
+        if (last_retry_time == 0 || (now - last_retry_time) >= 1000000000ULL) { // 1 second
+            const char *retry_reason = context->streaming ? "frame_timeout" : "initial_connection";
+            C64U_LOG_INFO("🔄 Self-healing (%s): Retrying streaming commands to C64U at %s", retry_reason,
+                          context->ip_address);
             send_control_command(context, true, 0); // Retry video stream
             send_control_command(context, true, 1); // Retry audio stream
             last_retry_time = now;
