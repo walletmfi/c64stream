@@ -89,8 +89,11 @@ void *c64u_create(obs_data_t *settings, obs_source_t *source)
     strncpy(context->hostname, hostname, sizeof(context->hostname) - 1);
     context->hostname[sizeof(context->hostname) - 1] = '\0';
 
+    // Get configured DNS server IP
+    const char *dns_server_ip = obs_data_get_string(settings, "dns_server_ip");
+
     // Resolve hostname to IP address for actual connections
-    if (!c64u_resolve_hostname(hostname, context->ip_address, sizeof(context->ip_address))) {
+    if (!c64u_resolve_hostname_with_dns(hostname, dns_server_ip, context->ip_address, sizeof(context->ip_address))) {
         // If hostname resolution fails, store the hostname as-is (might be invalid IP like 0.0.0.0)
         strncpy(context->ip_address, hostname, sizeof(context->ip_address) - 1);
         context->ip_address[sizeof(context->ip_address) - 1] = '\0';
@@ -369,8 +372,11 @@ void c64u_update(void *data, obs_data_t *settings)
     strncpy(context->hostname, new_host, sizeof(context->hostname) - 1);
     context->hostname[sizeof(context->hostname) - 1] = '\0';
 
+    // Get configured DNS server IP
+    const char *dns_server_ip = obs_data_get_string(settings, "dns_server_ip");
+
     // Resolve hostname to IP address for connections
-    if (!c64u_resolve_hostname(new_host, context->ip_address, sizeof(context->ip_address))) {
+    if (!c64u_resolve_hostname_with_dns(new_host, dns_server_ip, context->ip_address, sizeof(context->ip_address))) {
         // If hostname resolution fails, store the hostname as-is (might be invalid IP like 0.0.0.0)
         strncpy(context->ip_address, new_host, sizeof(context->ip_address) - 1);
         context->ip_address[sizeof(context->ip_address) - 1] = '\0';
@@ -788,6 +794,11 @@ obs_properties_t *c64u_properties(void *data)
                                                              OBS_GROUP_NORMAL, obs_properties_create());
     obs_properties_t *network_props = obs_property_group_content(network_group);
 
+    // DNS Server IP (first property in network group)
+    obs_property_t *dns_prop =
+        obs_properties_add_text(network_props, "dns_server_ip", obs_module_text("DNSServerIP"), OBS_TEXT_DEFAULT);
+    obs_property_set_long_description(dns_prop, obs_module_text("DNSServerIP.Description"));
+
     // C64U Host (IP Address or Hostname)
     obs_property_t *host_prop = obs_properties_add_text(network_props, "c64u_host", "C64U Host", OBS_TEXT_DEFAULT);
     obs_property_set_long_description(
@@ -847,6 +858,7 @@ void c64u_defaults(obs_data_t *settings)
 
     obs_data_set_default_bool(settings, "debug_logging", true);
     obs_data_set_default_bool(settings, "auto_detect_ip", true);
+    obs_data_set_default_string(settings, "dns_server_ip", "192.168.1.1");
     obs_data_set_default_string(settings, "c64u_host", C64U_DEFAULT_HOST);
     obs_data_set_default_string(settings, "obs_ip_address", ""); // Empty by default, will be auto-detected
     obs_data_set_default_int(settings, "video_port", C64U_DEFAULT_VIDEO_PORT);
