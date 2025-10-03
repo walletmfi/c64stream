@@ -815,12 +815,10 @@ obs_properties_t *c64u_properties(void *data)
     obs_property_set_long_description(auto_ip_prop, "Automatically detect and use OBS server IP in streaming commands");
 
     // UDP Ports within the same network group
-    obs_property_t *video_port_prop =
-        obs_properties_add_int(network_props, "video_port", "Video Port (11000)", 1024, 65535, 1);
+    obs_property_t *video_port_prop = obs_properties_add_int(network_props, "video_port", "Video Port", 1024, 65535, 1);
     obs_property_set_long_description(video_port_prop, "UDP port for video stream from C64 Ultimate");
 
-    obs_property_t *audio_port_prop =
-        obs_properties_add_int(network_props, "audio_port", "Audio Port (11001)", 1024, 65535, 1);
+    obs_property_t *audio_port_prop = obs_properties_add_int(network_props, "audio_port", "Audio Port", 1024, 65535, 1);
     obs_property_set_long_description(audio_port_prop, "UDP port for audio stream from C64 Ultimate");
 
     // Rendering Delay
