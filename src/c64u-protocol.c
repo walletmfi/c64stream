@@ -132,7 +132,7 @@ void *async_retry_thread(void *data)
 {
     struct c64u_source *context = (struct c64u_source *)data;
 
-    C64U_LOG_INFO("Async retry thread started - will continuously retry every 500ms");
+    C64U_LOG_DEBUG("Async retry thread started - will continuously retry every 500ms");
 
     while (true) {
         pthread_mutex_lock(&context->retry_mutex);
@@ -186,14 +186,17 @@ void *async_retry_thread(void *data)
             context->retry_count++;
 
             // Adaptive retry delay based on consecutive failures
-            uint32_t retry_delay = 200; // Base 200ms delay
+            uint32_t retry_delay = 300; // Base 300ms delay
             if (context->consecutive_failures > 0 && !tcp_success) {
-                // Progressive backoff: 200ms -> 500ms -> 1s -> 2s -> 3s (max)
-                retry_delay = 200 + (context->consecutive_failures * 300);
+                // Exponential backoff: 300ms * 1.5^failures, capped at 3000ms
+                retry_delay = 300;
+                for (uint32_t i = 0; i < context->consecutive_failures && retry_delay < 3000; i++) {
+                    retry_delay = (retry_delay * 3) / 2; // Multiply by 1.5
+                }
                 if (retry_delay > 3000)
                     retry_delay = 3000; // Cap at 3 seconds
-                C64U_LOG_INFO("TCP connection failed (%u consecutive), using %ums retry delay",
-                              context->consecutive_failures, retry_delay);
+                C64U_LOG_DEBUG("TCP connection failed (%u consecutive), using %ums retry delay",
+                               context->consecutive_failures, retry_delay);
             }
             os_sleep_ms(retry_delay);
         } else {
@@ -208,6 +211,6 @@ void *async_retry_thread(void *data)
         }
     }
 
-    C64U_LOG_INFO("Async retry thread ended");
+    C64U_LOG_DEBUG("Async retry thread ended");
     return NULL;
 }

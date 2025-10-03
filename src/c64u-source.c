@@ -841,13 +841,28 @@ void c64u_defaults(obs_data_t *settings)
     // Frame saving defaults
     obs_data_set_default_bool(settings, "save_frames", false); // Disabled by default
 
-    // Platform-specific default recording folder
+    // Platform-specific default recording folder (absolute paths to avoid tilde expansion issues)
+    char *home_dir = getenv("HOME");
 #ifdef _WIN32
     const char *default_folder = "%USERPROFILE%\\Documents\\obs-studio\\c64u\\recordings";
 #elif defined(__APPLE__)
-    const char *default_folder = "~/Documents/obs-studio/c64u/recordings";
+    static char mac_path[512];
+    if (home_dir) {
+        snprintf(mac_path, sizeof(mac_path), "%s/Documents/obs-studio/c64u/recordings", home_dir);
+    } else {
+        snprintf(mac_path, sizeof(mac_path), "/Users/%s/Documents/obs-studio/c64u/recordings",
+                 getenv("USER") ?: "user");
+    }
+    const char *default_folder = mac_path;
 #else // Linux and other Unix-like systems
-    const char *default_folder = "~/Documents/obs-studio/c64u/recordings";
+    static char linux_path[512];
+    if (home_dir) {
+        snprintf(linux_path, sizeof(linux_path), "%s/Documents/obs-studio/c64u/recordings", home_dir);
+    } else {
+        snprintf(linux_path, sizeof(linux_path), "/home/%s/Documents/obs-studio/c64u/recordings",
+                 getenv("USER") ?: "user");
+    }
+    const char *default_folder = linux_path;
 #endif
     obs_data_set_default_string(settings, "save_folder", default_folder);
 

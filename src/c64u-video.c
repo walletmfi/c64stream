@@ -257,9 +257,9 @@ void *video_thread_func(void *data)
     uint8_t packet[C64U_VIDEO_PACKET_SIZE];
     static int packet_count = 0;
 
-    C64U_LOG_INFO("Video receiver thread started on port %u", context->video_port);
+    C64U_LOG_DEBUG("Video receiver thread started on port %u", context->video_port);
     // Video receiver thread initialized
-    C64U_LOG_INFO("🔥 VIDEO THREAD FUNCTION STARTED - Our custom statistics code will run here!");
+    C64U_LOG_DEBUG("Video thread function started");
 
     while (context->thread_active) {
         ssize_t received = recv(context->video_socket, (char *)packet, (int)sizeof(packet), 0);
@@ -624,6 +624,6 @@ void *video_thread_func(void *data)
         pthread_mutex_unlock(&context->assembly_mutex);
     }
 
-    C64U_LOG_INFO("Video receiver thread stopped");
+    C64U_LOG_DEBUG("Video receiver thread stopped");
     return NULL;
 }
