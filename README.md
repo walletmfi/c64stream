@@ -3,49 +3,7 @@
 
 Bridge your Commodore 64 Ultimate directly to [OBS Studio](https://obsproject.com/) for seamless streaming and recording over your network connection.
 
-<img src="./doc/img/c64u-obs.png" alt="C64U Logo" width="2## Troubleshooting 🔧
-
-**Hostname not resolving? 🌐**
-
-If the plugin can't resolve your C64 Ultimate hostname (e.g., `c64u`), try these solutions:
-
-*Quick Fix:*
-1. **Use IP Address:** Instead of `c64u`, enter the device's IP address directly (e.g., `192.168.1.64`)
-2. **Check DNS Server IP:** Verify the DNS Server IP setting matches your router's IP address
-   - Common router IPs: `192.168.1.1`, `192.168.0.1`, `10.0.0.1`
-   - Find your router IP: Run `ip route | grep default` (Linux) or `ipconfig` (Windows)
-
-*Advanced Troubleshooting:*
-1. **Test DNS Resolution Manually:**
-   ```bash
-   # Linux/macOS - Test if router can resolve the hostname
-   dig @192.168.1.1 c64u
-
-   # Windows - Test DNS resolution
-   nslookup c64u 192.168.1.1
-   ```
-
-2. **Platform-Specific Issues:**
-   - **Linux:** systemd-resolved may not forward local hostnames to router DNS
-   - **macOS:** Similar DNS forwarding issues with local device names
-   - **Windows:** System DNS typically works without issues
-
-3. **Configure Custom DNS Server:**
-   - Set **DNS Server IP** to your router's IP address (usually `192.168.1.1`)
-   - Try alternative common router IPs: `192.168.0.1`, `10.0.0.1`
-   - Check your router's DHCP settings for the correct DNS server IP
-
-4. **Enable Debug Logging:**
-   - Check "Debug Logging" in plugin properties
-   - Look for DNS resolution messages in OBS logs
-   - Messages show which DNS resolution method succeeded
-
-*Alternative Solutions:*
-- **Static DNS Entry:** Add `192.168.1.64 c64u` to your system's hosts file
-- **mDNS/Bonjour:** Use `.local` suffix (e.g., `c64u.local`) if your network supports it
-- **Router Configuration:** Ensure your router's DNS server has the device hostname registered
-
-**No video stream? 📺**>
+<img src="./doc/img/c64u-obs.png" alt="C64U Logo" width="200"/>
 
 This plugin implements a native OBS source that receives video and audio streams from C64 Ultimate devices (Commodore 64 Ultimate or Ultimate 64) via the Ultimate's built-in data streaming capability.
 
@@ -115,7 +73,7 @@ See the [OBS Plugins Guide](https://obsproject.com/kb/plugins-guide).
 2. **Open Properties:** Select the "C64U" source in your sources list, then click the "Properties" button to open the configuration dialog
 3. **Debug Logging:** Enable detailed logging for debugging connection issues (optional)
 4. **Configure Network Settings:**
-   - **DNS Server IP:** IP address of DNS server for resolving device hostnames (default: `192.168.1.1` for most home routers). Used when the C64U Host is a hostname rather than an IP address. This enhanced DNS resolution bypasses system DNS issues on Linux/macOS where local device names may not resolve properly.
+   - **DNS Server IP:** IP address of DNS server for resolving device hostnames (default: `192.168.1.1` for most home routers). Used when the C64U Host is a hostname rather than an IP address. 
    - **C64U Host:** Enter your Ultimate device's hostname (default: `c64u`) or IP address to enable automatic streaming control from OBS (recommended for convenience), or set to `0.0.0.0` to accept streams from any C64 Ultimate on your network (requires manual control from the device)
    - **OBS Server IP:** IP address where C64 Ultimate sends streams (auto-detected by default)
    - **Auto-detect OBS IP:** Automatically detect and use OBS server IP in streaming commands (recommended)
@@ -159,9 +117,9 @@ The plugin supports both **hostnames** and **IP addresses** for the C64U Host fi
 - **Direct IP:** `192.168.1.64` - Standard IPv4 address format
 - **Fallback:** `0.0.0.0` - Accept streams from any C64 Ultimate (no automatic control)
 
-**Enhanced DNS Resolution (New in v2.0):**
+**DNS Resolution:**
 
-The plugin now features advanced hostname resolution that works reliably on Linux and macOS where system DNS may fail for local device names:
+The plugin offers hostname resolution that works reliably on Linux and macOS where system DNS may fail for local device names:
 
 1. **System DNS First:** Tries standard system DNS resolution (works for internet hostnames and properly configured networks)
 2. **FQDN Resolution:** Attempts resolution with trailing dot (e.g., `c64u.` for some network configurations)
@@ -307,6 +265,46 @@ One of:
 - Network latency should be <100ms for optimal performance
 - Check for network congestion or WiFi interference
 - Consider wired Ethernet connection for stability
+
+**Hostname not resolving? 🌐**
+
+If the plugin can't resolve your C64 Ultimate hostname (e.g., `c64u`), try these solutions:
+
+*Quick Fix:*
+1. **Use IP Address:** Instead of `c64u`, enter the device's IP address directly (e.g., `192.168.1.64`)
+2. **Check DNS Server IP:** Verify the DNS Server IP setting matches your router's IP address
+   - Common router IPs: `192.168.1.1`, `192.168.0.1`, `10.0.0.1`
+   - Find your router IP: Run `ip route | grep default` (Linux) or `ipconfig` (Windows)
+
+*Advanced Troubleshooting:*
+1. **Test DNS Resolution Manually:**
+   ```bash
+   # Linux/macOS - Test if router can resolve the hostname
+   dig @192.168.1.1 c64u
+
+   # Windows - Test DNS resolution
+   nslookup c64u 192.168.1.1
+   ```
+
+2. **Platform-Specific Issues:**
+   - **Linux:** systemd-resolved may not forward local hostnames to router DNS
+   - **macOS:** Similar DNS forwarding issues with local device names
+   - **Windows:** System DNS typically works without issues
+
+3. **Configure Custom DNS Server:**
+   - Set **DNS Server IP** to your router's IP address (usually `192.168.1.1`)
+   - Try alternative common router IPs: `192.168.0.1`, `10.0.0.1`
+   - Check your router's DHCP settings for the correct DNS server IP
+
+4. **Enable Debug Logging:**
+   - Check "Debug Logging" in plugin properties
+   - Look for DNS resolution messages in OBS logs
+   - Messages show which DNS resolution method succeeded
+
+*Alternative Solutions:*
+- **Static DNS Entry:** Add `192.168.1.64 c64u` to your system's hosts file
+- **mDNS/Bonjour:** Use `.local` suffix (e.g., `c64u.local`) if your network supports it
+- **Router Configuration:** Ensure your router's DNS server has the device hostname registered
 
 **Recording troubles? 💾**
 - **Files not created:** Verify output folder path exists and is writable
