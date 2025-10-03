@@ -11,8 +11,12 @@
 #include <io.h>
 #include <windows.h>
 #include <iphlpapi.h>
+#include <shlobj.h>
+#include <shlwapi.h>
 #pragma comment(lib, "ws2_32.lib")
 #pragma comment(lib, "iphlpapi.lib")
+#pragma comment(lib, "shell32.lib")
+#pragma comment(lib, "shlwapi.lib")
 #define close(s) closesocket(s)
 #define SHUT_RDWR SD_BOTH
 typedef int socklen_t;
@@ -55,8 +59,12 @@ typedef int socket_t;
 bool c64u_init_networking(void);
 void c64u_cleanup_networking(void);
 
-// IP detection
+// IP detection and hostname resolution
 bool c64u_detect_local_ip(char *ip_buffer, size_t buffer_size);
+bool c64u_resolve_hostname(const char *hostname, char *ip_buffer, size_t buffer_size);
+
+// Platform-specific utilities
+bool c64u_get_user_documents_path(char *path_buffer, size_t buffer_size);
 
 // Socket operations
 socket_t create_udp_socket(uint32_t port);

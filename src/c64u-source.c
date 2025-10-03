@@ -82,8 +82,23 @@ void *c64u_create(obs_data_t *settings, obs_source_t *source)
     context->source = source;
 
     // Initialize configuration from settings
-    const char *ip = obs_data_get_string(settings, "ip_address");
-    strncpy(context->ip_address, ip ? ip : C64U_DEFAULT_IP, sizeof(context->ip_address) - 1);
+    const char *host = obs_data_get_string(settings, "c64u_host");
+    const char *hostname = host ? host : C64U_DEFAULT_HOST;
+
+    // Store the original hostname/IP as entered by user
+    strncpy(context->hostname, hostname, sizeof(context->hostname) - 1);
+    context->hostname[sizeof(context->hostname) - 1] = '\0';
+
+    // Resolve hostname to IP address for actual connections
+    if (!c64u_resolve_hostname(hostname, context->ip_address, sizeof(context->ip_address))) {
+        // If hostname resolution fails, store the hostname as-is (might be invalid IP like 0.0.0.0)
+        strncpy(context->ip_address, hostname, sizeof(context->ip_address) - 1);
+        context->ip_address[sizeof(context->ip_address) - 1] = '\0';
+        C64U_LOG_WARNING("Could not resolve hostname '%s', using as-is: %s", hostname, context->ip_address);
+    } else {
+        C64U_LOG_INFO("Resolved C64U host '%s' to IP: %s", hostname, context->ip_address);
+    }
+
     context->auto_detect_ip = obs_data_get_bool(settings, "auto_detect_ip");
     context->video_port = (uint32_t)obs_data_get_int(settings, "video_port");
     context->audio_port = (uint32_t)obs_data_get_int(settings, "audio_port");
@@ -221,8 +236,8 @@ void *c64u_create(obs_data_t *settings, obs_source_t *source)
     // Apply recording settings from OBS
     c64u_record_update_settings(context, settings);
 
-    C64U_LOG_INFO("C64U source created - C64 IP: %s, OBS IP: %s, Video: %u, Audio: %u", context->ip_address,
-                  context->obs_ip_address, context->video_port, context->audio_port);
+    C64U_LOG_INFO("C64U source created - C64U host: %s (IP: %s), OBS IP: %s, Video: %u, Audio: %u", context->hostname,
+                  context->ip_address, context->obs_ip_address, context->video_port, context->audio_port);
 
     // Initialize async retry system immediately to start continuous retry attempts
     init_async_retry_system(context);
@@ -323,14 +338,14 @@ void c64u_update(void *data, obs_data_t *settings)
     }
 
     // Update configuration
-    const char *new_ip = obs_data_get_string(settings, "ip_address");
+    const char *new_host = obs_data_get_string(settings, "c64u_host");
     const char *new_obs_ip = obs_data_get_string(settings, "obs_ip_address");
     uint32_t new_video_port = (uint32_t)obs_data_get_int(settings, "video_port");
     uint32_t new_audio_port = (uint32_t)obs_data_get_int(settings, "audio_port");
 
     // Set defaults
-    if (!new_ip)
-        new_ip = C64U_DEFAULT_IP;
+    if (!new_host)
+        new_host = C64U_DEFAULT_HOST;
     if (new_video_port == 0)
         new_video_port = C64U_DEFAULT_VIDEO_PORT;
     if (new_audio_port == 0)
@@ -350,9 +365,20 @@ void c64u_update(void *data, obs_data_t *settings)
         os_sleep_ms(100);
     }
 
-    // Update configuration
-    strncpy(context->ip_address, new_ip, sizeof(context->ip_address) - 1);
-    context->ip_address[sizeof(context->ip_address) - 1] = '\0';
+    // Update configuration - hostname and IP resolution
+    strncpy(context->hostname, new_host, sizeof(context->hostname) - 1);
+    context->hostname[sizeof(context->hostname) - 1] = '\0';
+
+    // Resolve hostname to IP address for connections
+    if (!c64u_resolve_hostname(new_host, context->ip_address, sizeof(context->ip_address))) {
+        // If hostname resolution fails, store the hostname as-is (might be invalid IP like 0.0.0.0)
+        strncpy(context->ip_address, new_host, sizeof(context->ip_address) - 1);
+        context->ip_address[sizeof(context->ip_address) - 1] = '\0';
+        C64U_LOG_WARNING("Could not resolve hostname '%s' during update, using as-is: %s", new_host,
+                         context->ip_address);
+    } else {
+        C64U_LOG_DEBUG("Resolved C64U host '%s' to IP: %s", new_host, context->ip_address);
+    }
     if (new_obs_ip) {
         strncpy(context->obs_ip_address, new_obs_ip, sizeof(context->obs_ip_address) - 1);
         context->obs_ip_address[sizeof(context->obs_ip_address) - 1] = '\0';
@@ -743,7 +769,7 @@ uint32_t c64u_get_height(void *data)
 const char *c64u_get_name(void *unused)
 {
     UNUSED_PARAMETER(unused);
-    return "C64U Display";
+    return obs_module_text("C64UDisplay");
 }
 
 obs_properties_t *c64u_properties(void *data)
@@ -762,10 +788,11 @@ obs_properties_t *c64u_properties(void *data)
                                                              OBS_GROUP_NORMAL, obs_properties_create());
     obs_properties_t *network_props = obs_property_group_content(network_group);
 
-    // C64 IP Address
-    obs_property_t *ip_prop = obs_properties_add_text(network_props, "ip_address", "C64 Ultimate IP", OBS_TEXT_DEFAULT);
+    // C64U Host (IP Address or Hostname)
+    obs_property_t *host_prop = obs_properties_add_text(network_props, "c64u_host", "C64U Host", OBS_TEXT_DEFAULT);
     obs_property_set_long_description(
-        ip_prop, "IP address or DNS name of C64 Ultimate device (use 0.0.0.0 to skip control commands)");
+        host_prop,
+        "Hostname or IP address of C64 Ultimate device (default: c64u). Use 0.0.0.0 to skip control commands.");
 
     // OBS IP Address (editable)
     obs_property_t *obs_ip_prop =
@@ -820,7 +847,7 @@ void c64u_defaults(obs_data_t *settings)
 
     obs_data_set_default_bool(settings, "debug_logging", true);
     obs_data_set_default_bool(settings, "auto_detect_ip", true);
-    obs_data_set_default_string(settings, "ip_address", C64U_DEFAULT_IP);
+    obs_data_set_default_string(settings, "c64u_host", C64U_DEFAULT_HOST);
     obs_data_set_default_string(settings, "obs_ip_address", ""); // Empty by default, will be auto-detected
     obs_data_set_default_int(settings, "video_port", C64U_DEFAULT_VIDEO_PORT);
     obs_data_set_default_int(settings, "audio_port", C64U_DEFAULT_AUDIO_PORT);
@@ -830,30 +857,28 @@ void c64u_defaults(obs_data_t *settings)
     obs_data_set_default_bool(settings, "save_frames", false); // Disabled by default
 
     // Platform-specific default recording folder (absolute paths to avoid tilde expansion issues)
-    char *home_dir = getenv("HOME");
-#ifdef _WIN32
-    const char *default_folder = "%USERPROFILE%\\Documents\\obs-studio\\c64u\\recordings";
-#else
-    // Use automatic (stack) variables instead of static to avoid memory leak reports
     char platform_path[512];
-#if defined(__APPLE__)
-    if (home_dir) {
-        snprintf(platform_path, sizeof(platform_path), "%s/Documents/obs-studio/c64u/recordings", home_dir);
+    char documents_path[256];
+
+    if (c64u_get_user_documents_path(documents_path, sizeof(documents_path))) {
+        // Successfully got user's Documents folder
+#ifdef _WIN32
+        snprintf(platform_path, sizeof(platform_path), "%s\\obs-studio\\c64u\\recordings", documents_path);
+#else
+        snprintf(platform_path, sizeof(platform_path), "%s/obs-studio/c64u/recordings", documents_path);
+#endif
     } else {
-        snprintf(platform_path, sizeof(platform_path), "/Users/%s/Documents/obs-studio/c64u/recordings",
-                 getenv("USER") ?: "user");
-    }
+        // Fallback to platform-specific defaults
+#ifdef _WIN32
+        strcpy(platform_path, "C:\\Users\\Public\\Documents\\obs-studio\\c64u\\recordings");
+#elif defined(__APPLE__)
+        strcpy(platform_path, "/Users/user/Documents/obs-studio/c64u/recordings");
 #else // Linux and other Unix-like systems
-    if (home_dir) {
-        snprintf(platform_path, sizeof(platform_path), "%s/Documents/obs-studio/c64u/recordings", home_dir);
-    } else {
-        snprintf(platform_path, sizeof(platform_path), "/home/%s/Documents/obs-studio/c64u/recordings",
-                 getenv("USER") ?: "user");
+        strcpy(platform_path, "/home/user/Documents/obs-studio/c64u/recordings");
+#endif
     }
-#endif
-    const char *default_folder = platform_path;
-#endif
-    obs_data_set_default_string(settings, "save_folder", default_folder);
+
+    obs_data_set_default_string(settings, "save_folder", platform_path);
 
     // Video recording defaults
     obs_data_set_default_bool(settings, "record_video", false); // Disabled by default

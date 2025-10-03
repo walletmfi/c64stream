@@ -72,8 +72,8 @@ See the [OBS Plugins Guide](https://obsproject.com/kb/plugins-guide).
 2. **Open Properties:** Select the "C64U" source in your sources list, then click the "Properties" button to open the configuration dialog
 3. **Debug Logging:** Enable detailed logging for debugging connection issues (optional)
 4. **Configure Network Settings:**
-   - **C64 Ultimate IP:** Enter your Ultimate device's IP address to enable automatic streaming control from OBS (recommended for convenience), or set to `0.0.0.0` to accept streams from any C64 Ultimate on your network (requires manual control from the device)
-   - **OBS Server IP:** IP address where C64 Ultimate sends streams (auto-detected by default)
+   - **C64U Host:** Enter your Ultimate device's hostname (default: `c64u`) or IP address to enable automatic streaming control from OBS (recommended for convenience), or set to `0.0.0.0` to accept streams from any C64 Ultimate on your network (requires manual control from the device)
+   - **OBS Server IP:** IP address where C64 Ultimate sends streams (auto-detected by default)  
    - **Auto-detect OBS IP:** Automatically detect and use OBS server IP in streaming commands (recommended)
 5. **Configure Ports:** Use the default ports (video: 11000, audio: 11001) unless network conflicts require different values
 6. **Render Delay:** Adjust frame buffering (0-100 frames, default 3) to smooth UDP packet loss/reordering
@@ -90,7 +90,7 @@ Once configured, live video and audio streams from the C64 Ultimate will be avai
 
 ### Ultimate Device Setup 🎛️
 
-**Automatic Configuration (Recommended):** The OBS plugin automatically controls streaming on the Ultimate device. When you configure the Ultimate's IP address in the OBS plugin settings, the plugin tells the Ultimate device where to send streams and sends start commands automatically. Thus, no manual streaming adjustments are needed on the Ultimate device.
+**Automatic Configuration (Recommended):** The OBS plugin automatically controls streaming on the Ultimate device. When you configure the Ultimate's hostname or IP address in the OBS plugin settings, the plugin tells the Ultimate device where to send streams and sends start commands automatically. Thus, no manual streaming adjustments are needed on the Ultimate device.
 
 **Manual Configuration:**
 1. Press F2 to access the Ultimate's configuration menu
@@ -102,6 +102,30 @@ Once configured, live video and audio streams from the C64 Ultimate will be avai
 
 For comprehensive configuration details, refer to the [official C64 Ultimate documentation](https://1541u-documentation.readthedocs.io/en/latest/data_streams.html).
 
+### Hostname vs IP Address 🌐
+
+The plugin supports both **hostnames** and **IP addresses** for the C64U Host field:
+
+**Using Hostnames (Recommended):**
+- **Default:** `c64u` - The plugin will try to resolve this hostname to an IP address
+- **Custom:** `my-c64u` or `retro-pc` - Use any hostname your C64 Ultimate device is known by
+- **FQDN Support:** The plugin automatically tries both `hostname` and `hostname.` (with trailing dot) for proper DNS resolution
+
+**Using IP Addresses:**
+- **Direct IP:** `192.168.1.64` - Standard IPv4 address format
+- **Fallback:** `0.0.0.0` - Accept streams from any C64 Ultimate (no automatic control)
+
+**How it Works:**
+1. Plugin first checks if the input is already a valid IP address
+2. If not, it attempts DNS resolution of the hostname as-is
+3. If that fails, it tries FQDN resolution with a trailing dot (e.g., `c64u.`)
+4. If hostname resolution fails, the plugin logs a warning but continues using the hostname as-is
+
+**Examples:**
+- `c64u` → resolves to `192.168.1.64` (automatic)
+- `192.168.1.64` → used directly as IP address  
+- `retro-basement.local` → resolves via mDNS/Bonjour
+- `ultimate64` → tries both `ultimate64` and `ultimate64.` for resolution
 
 ## Recording Features 📹
 

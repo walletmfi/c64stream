@@ -11,8 +11,8 @@
 
 void send_control_command(struct c64u_source *context, bool enable, uint8_t stream_id)
 {
-    if (strcmp(context->ip_address, C64U_DEFAULT_IP) == 0) {
-        C64U_LOG_DEBUG("Skipping control command - no IP configured");
+    if (strcmp(context->ip_address, "0.0.0.0") == 0) {
+        C64U_LOG_DEBUG("Skipping control command - no IP configured (0.0.0.0)");
         return;
     }
 

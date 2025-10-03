@@ -2,12 +2,14 @@
     "version": "2.0.0",
     "tasks": [
         {
-            "label": "Build Debug Plugin",
+            "label": "Build Debug Plugin (Windows)",
             "type": "shell",
             "command": "cmake",
             "args": [
                 "--build",
-                "build_x86_64"
+                "build_x64",
+                "--config",
+                "Debug"
             ],
             "group": {
                 "kind": "build",
@@ -24,15 +26,45 @@
             "options": {
                 "cwd": "${workspaceFolder}"
             },
-            "dependsOn": "Install Plugin to OBS"
+            "dependsOn": "Install Plugin to OBS (Windows)",
+            "windows": {
+                "command": "cmake"
+            }
         },
         {
-            "label": "Install Plugin to OBS",
+            "label": "Build Debug Plugin (Linux)",
             "type": "shell",
-            "command": "cp",
+            "command": "cmake",
             "args": [
-                "build_x86_64/c64u-plugin-for-obs.so",
-                "${env:HOME}/.config/obs-studio/plugins/c64u-plugin-for-obs/bin/64bit/"
+                "--build",
+                "build_x86_64"
+            ],
+            "group": {
+                "kind": "build"
+            },
+            "presentation": {
+                "echo": true,
+                "reveal": "silent",
+                "focus": false,
+                "panel": "shared",
+                "showReuseMessage": true,
+                "clear": false
+            },
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "dependsOn": "Install Plugin to OBS (Linux)",
+            "linux": {
+                "command": "cmake"
+            }
+        },
+        {
+            "label": "Install Plugin to OBS (Windows)",
+            "type": "shell",
+            "command": "powershell",
+            "args": [
+                "-File",
+                "${workspaceFolder}/build-aux/install-plugin-windows.ps1"
             ],
             "group": "build",
             "presentation": {
@@ -43,10 +75,57 @@
             },
             "options": {
                 "cwd": "${workspaceFolder}"
+            },
+            "windows": {
+                "command": "powershell"
             }
         },
         {
-            "label": "Clean Build",
+            "label": "Install Plugin to OBS (Linux)",
+            "type": "shell",
+            "command": "bash",
+            "args": [
+                "-c",
+                "mkdir -p \"$HOME/.config/obs-studio/plugins/c64u-plugin-for-obs/bin/64bit\" && mkdir -p \"$HOME/.config/obs-studio/plugins/c64u-plugin-for-obs/data\" && cp \"build_x86_64/c64u-plugin-for-obs.so\" \"$HOME/.config/obs-studio/plugins/c64u-plugin-for-obs/bin/64bit/\" && cp -r \"data\"/* \"$HOME/.config/obs-studio/plugins/c64u-plugin-for-obs/data/\""
+            ],
+            "group": "build",
+            "presentation": {
+                "echo": true,
+                "reveal": "silent",
+                "focus": false,
+                "panel": "shared"
+            },
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "linux": {
+                "command": "bash"
+            }
+        },
+        {
+            "label": "Clean Build (Windows)",
+            "type": "shell",
+            "command": "powershell",
+            "args": [
+                "-Command",
+                "Remove-Item -Recurse -Force -Path \"build_x64\" -ErrorAction SilentlyContinue"
+            ],
+            "group": "build",
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "shared"
+            },
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "windows": {
+                "command": "powershell"
+            }
+        },
+        {
+            "label": "Clean Build (Linux)",
             "type": "shell",
             "command": "rm",
             "args": [
@@ -62,6 +141,9 @@
             },
             "options": {
                 "cwd": "${workspaceFolder}"
+            },
+            "linux": {
+                "command": "rm"
             }
         }
     ]

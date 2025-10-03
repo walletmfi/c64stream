@@ -148,6 +148,116 @@ const char *c64u_get_socket_error_string(int error)
 #endif
 }
 
+// Resolve hostname to IP address with fallback to dotted hostname
+bool c64u_resolve_hostname(const char *hostname, char *ip_buffer, size_t buffer_size)
+{
+    if (!hostname || !ip_buffer || buffer_size < 16) {
+        return false;
+    }
+
+    // If it's already an IP address, copy it directly
+    struct sockaddr_in sa;
+    if (inet_pton(AF_INET, hostname, &sa.sin_addr) == 1) {
+        strncpy(ip_buffer, hostname, buffer_size - 1);
+        ip_buffer[buffer_size - 1] = '\0';
+        obs_log(LOG_DEBUG, "[C64U] Input '%s' is already an IP address", hostname);
+        return true;
+    }
+
+    // Try to resolve hostname as-is first
+    struct addrinfo hints, *result = NULL;
+    memset(&hints, 0, sizeof(hints));
+    hints.ai_family = AF_INET; // IPv4 only
+    hints.ai_socktype = SOCK_STREAM;
+
+    obs_log(LOG_DEBUG, "[C64U] Attempting to resolve hostname: %s", hostname);
+
+    int status = getaddrinfo(hostname, NULL, &hints, &result);
+    if (status == 0 && result != NULL) {
+        struct sockaddr_in *addr_in = (struct sockaddr_in *)result->ai_addr;
+        if (inet_ntop(AF_INET, &addr_in->sin_addr, ip_buffer, buffer_size) != NULL) {
+            obs_log(LOG_INFO, "[C64U] Successfully resolved '%s' to IP: %s", hostname, ip_buffer);
+            freeaddrinfo(result);
+            return true;
+        }
+    }
+
+    if (result) {
+        freeaddrinfo(result);
+    }
+
+    // If hostname resolution failed, try with dot suffix (for FQDN)
+    // Many networks require FQDN for proper resolution
+    char hostname_with_dot[256];
+    snprintf(hostname_with_dot, sizeof(hostname_with_dot), "%s.", hostname);
+
+    obs_log(LOG_DEBUG, "[C64U] Trying FQDN resolution: %s", hostname_with_dot);
+
+    status = getaddrinfo(hostname_with_dot, NULL, &hints, &result);
+    if (status == 0 && result != NULL) {
+        struct sockaddr_in *addr_in = (struct sockaddr_in *)result->ai_addr;
+        if (inet_ntop(AF_INET, &addr_in->sin_addr, ip_buffer, buffer_size) != NULL) {
+            obs_log(LOG_INFO, "[C64U] Successfully resolved '%s' to IP: %s", hostname_with_dot, ip_buffer);
+            freeaddrinfo(result);
+            return true;
+        }
+    }
+
+    if (result) {
+        freeaddrinfo(result);
+    }
+
+    obs_log(LOG_WARNING, "[C64U] Failed to resolve hostname '%s' (tried both '%s' and '%s')", hostname, hostname,
+            hostname_with_dot);
+    return false;
+}
+
+// Get the current user's Documents folder path
+bool c64u_get_user_documents_path(char *path_buffer, size_t buffer_size)
+{
+    if (!path_buffer || buffer_size < 32) {
+        return false;
+    }
+
+#ifdef _WIN32
+    // Windows: Use SHGetFolderPath to get the current user's Documents folder
+    WCHAR documents_path_w[MAX_PATH];
+    char documents_path[MAX_PATH];
+
+    HRESULT hr = SHGetFolderPathW(NULL, CSIDL_MYDOCUMENTS, NULL, SHGFP_TYPE_CURRENT, documents_path_w);
+    if (SUCCEEDED(hr)) {
+        // Convert wide string to multi-byte string
+        int result =
+            WideCharToMultiByte(CP_UTF8, 0, documents_path_w, -1, documents_path, sizeof(documents_path), NULL, NULL);
+        if (result > 0) {
+            strncpy(path_buffer, documents_path, buffer_size - 1);
+            path_buffer[buffer_size - 1] = '\0';
+            obs_log(LOG_DEBUG, "[C64U] Retrieved Windows Documents path: %s", path_buffer);
+            return true;
+        } else {
+            obs_log(LOG_WARNING, "[C64U] Failed to convert Windows Documents path to UTF-8");
+        }
+    } else {
+        obs_log(LOG_WARNING, "[C64U] Failed to get Windows Documents folder path (HRESULT: 0x%08X)", hr);
+    }
+
+    // Fallback to Public Documents if personal Documents fails
+    strcpy(path_buffer, "C:\\Users\\Public\\Documents");
+    return false;
+#else
+    // Unix/Linux/macOS: Use HOME environment variable
+    char *home_dir = getenv("HOME");
+    if (home_dir) {
+        snprintf(path_buffer, buffer_size, "%s/Documents", home_dir);
+        return true;
+    } else {
+        // Fallback
+        snprintf(path_buffer, buffer_size, "/home/%s/Documents", getenv("USER") ?: "user");
+        return false;
+    }
+#endif
+}
+
 socket_t create_udp_socket(uint32_t port)
 {
     socket_t sock = socket(AF_INET, SOCK_DGRAM, 0);
@@ -156,6 +266,41 @@ socket_t create_udp_socket(uint32_t port)
         obs_log(LOG_ERROR, "[C64U] Failed to create UDP socket: %s", c64u_get_socket_error_string(error));
         return INVALID_SOCKET_VALUE;
     }
+
+    // Configure UDP socket buffer sizes for high-frequency packet reception
+    // C64U video stream: ~3400 packets/sec × 780 bytes = ~2.6 Mbps
+    // We need large enough buffers to handle temporary bursts and OS scheduling delays
+#ifdef _WIN32
+    // Windows: Increase receive buffer to handle high packet rates
+    // Default Windows UDP buffer is often only 8KB, insufficient for C64U video streams
+    int recv_buffer_size = 2 * 1024 * 1024; // 2MB receive buffer
+    if (setsockopt(sock, SOL_SOCKET, SO_RCVBUF, (char *)&recv_buffer_size, sizeof(recv_buffer_size)) < 0) {
+        int error = c64u_get_socket_error();
+        obs_log(LOG_WARNING, "[C64U] Failed to set UDP receive buffer size to %d bytes: %s", recv_buffer_size,
+                c64u_get_socket_error_string(error));
+    } else {
+        obs_log(LOG_DEBUG, "[C64U] Set UDP receive buffer to %d bytes for high-frequency packet handling",
+                recv_buffer_size);
+    }
+
+    // Windows: Disable UDP checksum validation for performance (optional optimization)
+    // This can reduce CPU overhead for high-frequency UDP streams
+    BOOL udp_nochecksum = FALSE; // Keep checksums enabled for reliability
+    if (setsockopt(sock, IPPROTO_UDP, UDP_NOCHECKSUM, (char *)&udp_nochecksum, sizeof(udp_nochecksum)) < 0) {
+        // This option may not be available on all Windows versions, so don't log an error
+        obs_log(LOG_DEBUG, "[C64U] UDP_NOCHECKSUM option not supported on this system");
+    }
+#else
+    // Linux/macOS: Also increase receive buffer, but usually less critical than Windows
+    int recv_buffer_size = 1 * 1024 * 1024; // 1MB receive buffer (Linux default is often larger)
+    if (setsockopt(sock, SOL_SOCKET, SO_RCVBUF, &recv_buffer_size, sizeof(recv_buffer_size)) < 0) {
+        int error = c64u_get_socket_error();
+        obs_log(LOG_WARNING, "[C64U] Failed to set UDP receive buffer size to %d bytes: %s", recv_buffer_size,
+                c64u_get_socket_error_string(error));
+    } else {
+        obs_log(LOG_DEBUG, "[C64U] Set UDP receive buffer to %d bytes", recv_buffer_size);
+    }
+#endif
 
     struct sockaddr_in addr;
     memset(&addr, 0, sizeof(addr));
@@ -185,7 +330,9 @@ socket_t create_udp_socket(uint32_t port)
     }
 #endif
 
-    obs_log(LOG_DEBUG, "[C64U] Created UDP socket on port %u", port);
+    obs_log(LOG_INFO,
+            "[C64U] Created optimized UDP socket on port %u with large receive buffer for high-frequency packets",
+            port);
     return sock;
 }
 
