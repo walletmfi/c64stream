@@ -3,7 +3,49 @@
 
 Bridge your Commodore 64 Ultimate directly to [OBS Studio](https://obsproject.com/) for seamless streaming and recording over your network connection.
 
-<img src="./doc/img/c64u-obs.png" alt="C64U Logo" width="200">
+<img src="./doc/img/c64u-obs.png" alt="C64U Logo" width="2## Troubleshooting 🔧
+
+**Hostname not resolving? 🌐**
+
+If the plugin can't resolve your C64 Ultimate hostname (e.g., `c64u`), try these solutions:
+
+*Quick Fix:*
+1. **Use IP Address:** Instead of `c64u`, enter the device's IP address directly (e.g., `192.168.1.64`)
+2. **Check DNS Server IP:** Verify the DNS Server IP setting matches your router's IP address
+   - Common router IPs: `192.168.1.1`, `192.168.0.1`, `10.0.0.1`
+   - Find your router IP: Run `ip route | grep default` (Linux) or `ipconfig` (Windows)
+
+*Advanced Troubleshooting:*
+1. **Test DNS Resolution Manually:**
+   ```bash
+   # Linux/macOS - Test if router can resolve the hostname
+   dig @192.168.1.1 c64u
+   
+   # Windows - Test DNS resolution
+   nslookup c64u 192.168.1.1
+   ```
+
+2. **Platform-Specific Issues:**
+   - **Linux:** systemd-resolved may not forward local hostnames to router DNS
+   - **macOS:** Similar DNS forwarding issues with local device names
+   - **Windows:** System DNS typically works without issues
+
+3. **Configure Custom DNS Server:**
+   - Set **DNS Server IP** to your router's IP address (usually `192.168.1.1`)
+   - Try alternative common router IPs: `192.168.0.1`, `10.0.0.1`
+   - Check your router's DHCP settings for the correct DNS server IP
+
+4. **Enable Debug Logging:**
+   - Check "Debug Logging" in plugin properties
+   - Look for DNS resolution messages in OBS logs
+   - Messages show which DNS resolution method succeeded
+
+*Alternative Solutions:*
+- **Static DNS Entry:** Add `192.168.1.64 c64u` to your system's hosts file
+- **mDNS/Bonjour:** Use `.local` suffix (e.g., `c64u.local`) if your network supports it
+- **Router Configuration:** Ensure your router's DNS server has the device hostname registered
+
+**No video stream? 📺**>
 
 This plugin implements a native OBS source that receives video and audio streams from C64 Ultimate devices (Commodore 64 Ultimate or Ultimate 64) via the Ultimate's built-in data streaming capability.
 
@@ -17,6 +59,7 @@ The plugin connects directly to the Ultimate's network interface, eliminating th
 - Real-time video streaming (PAL 384x272, NTSC 384x240)
 - Synchronized audio streaming (16-bit stereo, ~48kHz)
 - Network-based connection (UDP/TCP)
+- **Enhanced DNS resolution** - reliable hostname resolution on all platforms (Linux/macOS/Windows)
 - Automatic VIC-II color space conversion
 - Built-in recording capabilities (BMP frames, AVI video, WAV audio)
 
@@ -72,6 +115,7 @@ See the [OBS Plugins Guide](https://obsproject.com/kb/plugins-guide).
 2. **Open Properties:** Select the "C64U" source in your sources list, then click the "Properties" button to open the configuration dialog
 3. **Debug Logging:** Enable detailed logging for debugging connection issues (optional)
 4. **Configure Network Settings:**
+   - **DNS Server IP:** IP address of DNS server for resolving device hostnames (default: `192.168.1.1` for most home routers). Used when the C64U Host is a hostname rather than an IP address. This enhanced DNS resolution bypasses system DNS issues on Linux/macOS where local device names may not resolve properly.
    - **C64U Host:** Enter your Ultimate device's hostname (default: `c64u`) or IP address to enable automatic streaming control from OBS (recommended for convenience), or set to `0.0.0.0` to accept streams from any C64 Ultimate on your network (requires manual control from the device)
    - **OBS Server IP:** IP address where C64 Ultimate sends streams (auto-detected by default)
    - **Auto-detect OBS IP:** Automatically detect and use OBS server IP in streaming commands (recommended)
@@ -104,7 +148,7 @@ For comprehensive configuration details, refer to the [official C64 Ultimate doc
 
 ### Hostname vs IP Address 🌐
 
-The plugin supports both **hostnames** and **IP addresses** for the C64U Host field:
+The plugin supports both **hostnames** and **IP addresses** for the C64U Host field with enhanced DNS resolution that works reliably across all platforms:
 
 **Using Hostnames (Recommended):**
 - **Default:** `c64u` - The plugin will try to resolve this hostname to an IP address
@@ -115,17 +159,33 @@ The plugin supports both **hostnames** and **IP addresses** for the C64U Host fi
 - **Direct IP:** `192.168.1.64` - Standard IPv4 address format
 - **Fallback:** `0.0.0.0` - Accept streams from any C64 Ultimate (no automatic control)
 
-**How it Works:**
-1. Plugin first checks if the input is already a valid IP address
-2. If not, it attempts DNS resolution of the hostname as-is
-3. If that fails, it tries FQDN resolution with a trailing dot (e.g., `c64u.`)
-4. If hostname resolution fails, the plugin logs a warning but continues using the hostname as-is
+**Enhanced DNS Resolution (New in v2.0):**
+
+The plugin now features advanced hostname resolution that works reliably on Linux and macOS where system DNS may fail for local device names:
+
+1. **System DNS First:** Tries standard system DNS resolution (works for internet hostnames and properly configured networks)
+2. **FQDN Resolution:** Attempts resolution with trailing dot (e.g., `c64u.` for some network configurations)
+3. **Direct DNS Queries:** On Linux/macOS, bypasses systemd-resolved by querying DNS servers directly:
+   - Uses configured **DNS Server IP** (default: `192.168.1.1`)
+   - Falls back to common router IPs: `192.168.0.1`, `10.0.0.1`, `172.16.0.1`
+4. **Cross-Platform:** Windows uses system DNS (which works reliably), Linux/macOS use enhanced resolution
+
+**DNS Server Configuration:**
+- **Default:** `192.168.1.1` (most common home router DNS server)
+- **Custom:** Set to your router's IP or a specific DNS server (e.g., `192.168.0.1`, `10.0.0.1`)
+- **Automatic Fallback:** If the configured DNS server fails, tries other common router IPs
+- **Why This Helps:** Solves Linux/macOS issues where `c64u` hostname doesn't resolve through system DNS but works via direct router queries
 
 **Examples:**
-- `c64u` → resolves to `192.168.1.64` (automatic)
-- `192.168.1.64` → used directly as IP address
-- `retro-basement.local` → resolves via mDNS/Bonjour
-- `ultimate64` → tries both `ultimate64` and `ultimate64.` for resolution
+- `c64u` → resolves to `192.168.1.64` via enhanced DNS resolution
+- `192.168.1.64` → used directly as IP address  
+- `retro-basement.local` → resolves via mDNS/Bonjour or direct DNS
+- `ultimate64` → tries system DNS first, then direct router DNS queries
+
+**Platform-Specific Behavior:**
+- **Windows:** Uses system DNS (typically works without issues)
+- **Linux/macOS:** Uses enhanced DNS resolution to bypass systemd-resolved limitations
+- **All Platforms:** Support both hostname and IP address formats seamlessly
 
 ## Recording Features 📹
 
@@ -211,6 +271,13 @@ One of:
 - UDP/TCP connectivity to Ultimate device
 - Bandwidth: ~22 Mbps total (21.7 Mbps video + 1.4 Mbps audio, uncompressed streams)
 - Built-in UDP jitter compensation via configurable frame buffering
+
+**DNS Resolution:**
+- **Cross-platform hostname support:** Works reliably on Windows, Linux, and macOS
+- **Enhanced Linux/macOS resolution:** Bypasses systemd-resolved limitations using direct DNS queries
+- **Configurable DNS server:** Set custom DNS server IP for hostname resolution (default: 192.168.1.1)
+- **Automatic fallbacks:** Falls back to common router IPs (192.168.0.1, 10.0.0.1, etc.) if configured DNS fails
+- **FQDN support:** Tries both standard hostname and FQDN (with trailing dot) resolution
 
 **Recording Formats:**
 - BMP frames: 24-bit uncompressed bitmap images
