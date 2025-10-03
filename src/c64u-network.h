@@ -74,4 +74,4 @@ socket_t create_tcp_socket(const char *ip, uint32_t port);
 int c64u_get_socket_error(void);
 const char *c64u_get_socket_error_string(int error);
 
-#endif // C64U_NETWORK_H
+#endif  // C64U_NETWORK_H
