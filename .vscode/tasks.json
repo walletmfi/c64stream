@@ -206,7 +206,7 @@
         // Simplified Linux-only task that does everything in one step
         {
             "label": "Linux: Build and Install Plugin",
-            "type": "shell", 
+            "type": "shell",
             "command": "bash",
             "args": [
                 "-c",
@@ -232,7 +232,7 @@
                 "args": ["This task is Linux-only - use Windows tasks instead"]
             },
             "osx": {
-                "command": "echo", 
+                "command": "echo",
                 "args": ["This task is Linux-only"]
             },
             "problemMatcher": ["$gcc"]

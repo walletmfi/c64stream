@@ -20,7 +20,7 @@ If the plugin can't resolve your C64 Ultimate hostname (e.g., `c64u`), try these
    ```bash
    # Linux/macOS - Test if router can resolve the hostname
    dig @192.168.1.1 c64u
-   
+
    # Windows - Test DNS resolution
    nslookup c64u 192.168.1.1
    ```
@@ -178,7 +178,7 @@ The plugin now features advanced hostname resolution that works reliably on Linu
 
 **Examples:**
 - `c64u` → resolves to `192.168.1.64` via enhanced DNS resolution
-- `192.168.1.64` → used directly as IP address  
+- `192.168.1.64` → used directly as IP address
 - `retro-basement.local` → resolves via mDNS/Bonjour or direct DNS
 - `ultimate64` → tries system DNS first, then direct router DNS queries
 

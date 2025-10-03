@@ -1,6 +1,6 @@
 /*
  * Test hostname resolution using system DNS on Linux/macOS
- * 
+ *
  * This test verifies that we can resolve hostnames like 'c64u' to IP addresses
  * using the system's DNS configuration, which should work in OBS plugin context.
  */

@@ -1,6 +1,6 @@
 /*
  * Test program for enhanced DNS resolution functions
- * 
+ *
  * This tests the core DNS resolution logic without OBS dependencies
  */
 
