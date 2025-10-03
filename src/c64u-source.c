@@ -857,30 +857,28 @@ void c64u_defaults(obs_data_t *settings)
     obs_data_set_default_bool(settings, "save_frames", false); // Disabled by default
 
     // Platform-specific default recording folder (absolute paths to avoid tilde expansion issues)
-    char *home_dir = getenv("HOME");
-#ifdef _WIN32
-    const char *default_folder = "%USERPROFILE%\\Documents\\obs-studio\\c64u\\recordings";
-#else
-    // Use automatic (stack) variables instead of static to avoid memory leak reports
     char platform_path[512];
-#if defined(__APPLE__)
-    if (home_dir) {
-        snprintf(platform_path, sizeof(platform_path), "%s/Documents/obs-studio/c64u/recordings", home_dir);
+    char documents_path[256];
+
+    if (c64u_get_user_documents_path(documents_path, sizeof(documents_path))) {
+        // Successfully got user's Documents folder
+#ifdef _WIN32
+        snprintf(platform_path, sizeof(platform_path), "%s\\obs-studio\\c64u\\recordings", documents_path);
+#else
+        snprintf(platform_path, sizeof(platform_path), "%s/obs-studio/c64u/recordings", documents_path);
+#endif
     } else {
-        snprintf(platform_path, sizeof(platform_path), "/Users/%s/Documents/obs-studio/c64u/recordings",
-                 getenv("USER") ?: "user");
-    }
+        // Fallback to platform-specific defaults
+#ifdef _WIN32
+        strcpy(platform_path, "C:\\Users\\Public\\Documents\\obs-studio\\c64u\\recordings");
+#elif defined(__APPLE__)
+        strcpy(platform_path, "/Users/user/Documents/obs-studio/c64u/recordings");
 #else // Linux and other Unix-like systems
-    if (home_dir) {
-        snprintf(platform_path, sizeof(platform_path), "%s/Documents/obs-studio/c64u/recordings", home_dir);
-    } else {
-        snprintf(platform_path, sizeof(platform_path), "/home/%s/Documents/obs-studio/c64u/recordings",
-                 getenv("USER") ?: "user");
+        strcpy(platform_path, "/home/user/Documents/obs-studio/c64u/recordings");
+#endif
     }
-#endif
-    const char *default_folder = platform_path;
-#endif
-    obs_data_set_default_string(settings, "save_folder", default_folder);
+
+    obs_data_set_default_string(settings, "save_folder", platform_path);
 
     // Video recording defaults
     obs_data_set_default_bool(settings, "record_video", false); // Disabled by default

@@ -39,4 +39,4 @@ void init_async_retry_system(struct c64u_source *context);
 void shutdown_async_retry_system(struct c64u_source *context);
 void *async_retry_thread(void *data);
 
-#endif // C64U_PROTOCOL_H
+#endif  // C64U_PROTOCOL_H
