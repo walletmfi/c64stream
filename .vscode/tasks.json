@@ -1,6 +1,7 @@
 {
     "version": "2.0.0",
     "tasks": [
+        // Cross-platform build tasks - these override workspace tasks
         {
             "label": "Build Debug Plugin (Windows)",
             "type": "shell",
@@ -26,13 +27,28 @@
             "options": {
                 "cwd": "${workspaceFolder}"
             },
-            "dependsOn": "Install Plugin to OBS (Windows)",
+            "dependsOrder": "sequence",
+            "dependsOn": [
+                "Install Plugin to OBS (Windows)"
+            ],
             "windows": {
                 "command": "cmake"
+            },
+            "linux": {
+                "command": "echo",
+                "args": ["This task is Windows-only"]
+            },
+            "osx": {
+                "command": "echo",
+                "args": ["This task is Windows-only"]
+            },
+            "problemMatcher": ["$gcc"],
+            "runOptions": {
+                "instanceLimit": 1
             }
         },
         {
-            "label": "Build Debug Plugin (Linux)",
+            "label": "VSCode: Build Debug Plugin (Linux)",
             "type": "shell",
             "command": "cmake",
             "args": [
@@ -53,16 +69,34 @@
             "options": {
                 "cwd": "${workspaceFolder}"
             },
-            "dependsOn": "Install Plugin to OBS (Linux)",
+            "dependsOrder": "sequence",
+            "dependsOn": [
+                "VSCode: Install Plugin to OBS (Linux)"
+            ],
             "linux": {
                 "command": "cmake"
+            },
+            "windows": {
+                "command": "echo",
+                "args": ["This task is Linux-only"]
+            },
+            "osx": {
+                "command": "echo",
+                "args": ["This task is Linux-only"]
+            },
+            "problemMatcher": ["$gcc"],
+            "runOptions": {
+                "instanceLimit": 1
             }
         },
+
+        // Plugin installation tasks
         {
             "label": "Install Plugin to OBS (Windows)",
             "type": "shell",
             "command": "powershell",
             "args": [
+                "-ExecutionPolicy", "Bypass",
                 "-File",
                 "${workspaceFolder}/build-aux/install-plugin-windows.ps1"
             ],
@@ -78,15 +112,24 @@
             },
             "windows": {
                 "command": "powershell"
-            }
+            },
+            "linux": {
+                "command": "echo",
+                "args": ["This task is Windows-only"]
+            },
+            "osx": {
+                "command": "echo",
+                "args": ["This task is Windows-only"]
+            },
+            "problemMatcher": []
         },
         {
-            "label": "Install Plugin to OBS (Linux)",
+            "label": "VSCode: Install Plugin to OBS (Linux)",
             "type": "shell",
             "command": "bash",
             "args": [
                 "-c",
-                "mkdir -p \"$HOME/.config/obs-studio/plugins/c64u-plugin-for-obs/bin/64bit\" && mkdir -p \"$HOME/.config/obs-studio/plugins/c64u-plugin-for-obs/data\" && cp \"build_x86_64/c64u-plugin-for-obs.so\" \"$HOME/.config/obs-studio/plugins/c64u-plugin-for-obs/bin/64bit/\" && cp -r \"data\"/* \"$HOME/.config/obs-studio/plugins/c64u-plugin-for-obs/data/\""
+                "mkdir -p \"$HOME/.config/obs-studio/plugins/c64u-plugin-for-obs/bin/64bit\" && mkdir -p \"$HOME/.config/obs-studio/plugins/c64u-plugin-for-obs/data\" && cp \"build_x86_64/c64u-plugin-for-obs.so\" \"$HOME/.config/obs-studio/plugins/c64u-plugin-for-obs/bin/64bit/\" && cp -r \"data\"/* \"$HOME/.config/obs-studio/plugins/c64u-plugin-for-obs/data/\" && echo 'Plugin installed successfully'"
             ],
             "group": "build",
             "presentation": {
@@ -100,15 +143,26 @@
             },
             "linux": {
                 "command": "bash"
-            }
+            },
+            "windows": {
+                "command": "echo",
+                "args": ["This task is Linux-only"]
+            },
+            "osx": {
+                "command": "echo",
+                "args": ["This task is Linux-only"]
+            },
+            "problemMatcher": []
         },
+
+        // Clean tasks
         {
             "label": "Clean Build (Windows)",
             "type": "shell",
             "command": "powershell",
             "args": [
                 "-Command",
-                "Remove-Item -Recurse -Force -Path \"build_x64\" -ErrorAction SilentlyContinue"
+                "if (Test-Path 'build_x64') { Remove-Item -Recurse -Force 'build_x64'; Write-Host 'Cleaned build_x64' } else { Write-Host 'No build_x64 directory to clean' }"
             ],
             "group": "build",
             "presentation": {
@@ -122,15 +176,16 @@
             },
             "windows": {
                 "command": "powershell"
-            }
+            },
+            "problemMatcher": []
         },
         {
             "label": "Clean Build (Linux)",
             "type": "shell",
-            "command": "rm",
+            "command": "bash",
             "args": [
-                "-rf",
-                "build_x86_64"
+                "-c",
+                "if [ -d 'build_x86_64' ]; then rm -rf build_x86_64 && echo 'Cleaned build_x86_64'; else echo 'No build_x86_64 directory to clean'; fi"
             ],
             "group": "build",
             "presentation": {
@@ -143,8 +198,44 @@
                 "cwd": "${workspaceFolder}"
             },
             "linux": {
-                "command": "rm"
-            }
+                "command": "bash"
+            },
+            "problemMatcher": []
+        },
+
+        // Simplified Linux-only task that does everything in one step
+        {
+            "label": "Linux: Build and Install Plugin",
+            "type": "shell",
+            "command": "bash",
+            "args": [
+                "-c",
+                "echo 'Building plugin...' && cmake --build build_x86_64 && echo 'Installing plugin...' && mkdir -p \"$HOME/.config/obs-studio/plugins/c64u-plugin-for-obs/bin/64bit\" && mkdir -p \"$HOME/.config/obs-studio/plugins/c64u-plugin-for-obs/data\" && cp \"build_x86_64/c64u-plugin-for-obs.so\" \"$HOME/.config/obs-studio/plugins/c64u-plugin-for-obs/bin/64bit/\" && cp -r \"data\"/* \"$HOME/.config/obs-studio/plugins/c64u-plugin-for-obs/data/\" && echo 'Plugin build and install completed successfully!'"
+            ],
+            "group": {
+                "kind": "build"
+            },
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "shared"
+            },
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "linux": {
+                "command": "bash"
+            },
+            "windows": {
+                "command": "echo",
+                "args": ["This task is Linux-only - use Windows tasks instead"]
+            },
+            "osx": {
+                "command": "echo",
+                "args": ["This task is Linux-only"]
+            },
+            "problemMatcher": ["$gcc"]
         }
     ]
 }

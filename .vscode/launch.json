@@ -1,6 +1,10 @@
 {
     // VS Code launch configurations for debugging C64U plugin with OBS Studio
     //
+    // F5 will automatically select the correct configuration based on your platform:
+    // - Windows: Uses cppvsdbg debugger with Visual Studio debugging
+    // - Linux: Uses cppdbg with GDB debugging
+    //
     // Windows users: If OBS is installed in a different location, update the "program" path
     // Common OBS paths:
     // - "C:/Program Files/obs-studio/bin/64bit/obs64.exe" (default)
@@ -12,26 +16,7 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Debug OBS with C64U Plugin (Windows)",
-            "type": "cppvsdbg",
-            "request": "launch",
-            "program": "C:/Program Files/obs-studio/bin/64bit/obs64.exe",
-            "args": ["--verbose"],
-            "stopAtEntry": false,
-            "cwd": "${workspaceFolder}",
-            "environment": [],
-            "console": "externalTerminal",
-            "preLaunchTask": "Build Debug Plugin (Windows)",
-            "logging": {
-                "moduleLoad": false,
-                "trace": false,
-                "engineLogging": false,
-                "programOutput": true,
-                "exceptions": true
-            }
-        },
-        {
-            "name": "Debug OBS with C64U Plugin (Linux)",
+            "name": "🐧 Debug OBS with C64U Plugin (Linux)",
             "type": "cppdbg",
             "request": "launch",
             "program": "/usr/bin/obs",
@@ -48,8 +33,27 @@
                     "ignoreFailures": true
                 }
             ],
-            "preLaunchTask": "Build Debug Plugin (Linux)",
+            "preLaunchTask": "Linux: Build and Install Plugin",
             "miDebuggerPath": "/usr/bin/gdb",
+            "logging": {
+                "moduleLoad": false,
+                "trace": false,
+                "engineLogging": false,
+                "programOutput": true,
+                "exceptions": true
+            }
+        },
+        {
+            "name": "🪟 Debug OBS with C64U Plugin (Windows)",
+            "type": "cppvsdbg",
+            "request": "launch",
+            "program": "C:/Program Files/obs-studio/bin/64bit/obs64.exe",
+            "args": ["--verbose"],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}",
+            "environment": [],
+            "console": "externalTerminal",
+            "preLaunchTask": "Build Debug Plugin (Windows)",
             "logging": {
                 "moduleLoad": false,
                 "trace": false,

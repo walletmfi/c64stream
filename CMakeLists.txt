@@ -47,6 +47,11 @@ target_sources(
     src/c64u-record.c
 )
 
+# Link resolver library for DNS functionality on Unix platforms
+if(UNIX)
+  target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE resolv)
+endif()
+
 set_target_properties_plugin(${CMAKE_PROJECT_NAME} PROPERTIES OUTPUT_NAME ${_name})
 
 # Add tests if enabled

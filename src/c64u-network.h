@@ -62,6 +62,8 @@ void c64u_cleanup_networking(void);
 // IP detection and hostname resolution
 bool c64u_detect_local_ip(char *ip_buffer, size_t buffer_size);
 bool c64u_resolve_hostname(const char *hostname, char *ip_buffer, size_t buffer_size);
+bool c64u_resolve_hostname_with_dns(const char *hostname, const char *custom_dns_server, char *ip_buffer,
+                                    size_t buffer_size);
 
 // Platform-specific utilities
 bool c64u_get_user_documents_path(char *path_buffer, size_t buffer_size);

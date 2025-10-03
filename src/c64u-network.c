@@ -4,6 +4,135 @@
 #include "c64u-network.h"
 #include "plugin-support.h"
 
+// Additional includes for enhanced hostname resolution
+#if !defined(_WIN32)
+#include <resolv.h>
+#include <arpa/nameser.h>
+#endif
+
+// Enhanced DNS resolution functions (Linux/macOS)
+#if !defined(_WIN32)
+/**
+ * Direct DNS query to a specific DNS server (like dig @192.168.1.1)
+ * This bypasses systemd-resolved and queries the router/DNS server directly
+ */
+static bool resolve_hostname_direct_dns(const char *hostname, const char *dns_server, char *ip_buffer,
+                                        size_t buffer_size)
+{
+    if (!hostname || !dns_server || !ip_buffer || buffer_size < 16) {
+        return false;
+    }
+
+    struct __res_state res;
+    unsigned char answer[NS_PACKETSZ];
+    ns_msg msg;
+    ns_rr rr;
+
+    obs_log(LOG_DEBUG, "[C64U] Direct DNS query to %s for hostname: %s", dns_server, hostname);
+
+    // Initialize resolver
+    if (res_ninit(&res) != 0) {
+        obs_log(LOG_DEBUG, "[C64U] res_ninit failed for DNS server %s", dns_server);
+        return false;
+    }
+
+    // Set custom DNS server
+    struct sockaddr_in dns_addr;
+    memset(&dns_addr, 0, sizeof(dns_addr));
+    dns_addr.sin_family = AF_INET;
+    dns_addr.sin_port = htons(53);
+
+    if (inet_aton(dns_server, &dns_addr.sin_addr) == 0) {
+        obs_log(LOG_DEBUG, "[C64U] Invalid DNS server IP: %s", dns_server);
+        res_nclose(&res);
+        return false;
+    }
+
+    // Clear existing DNS servers and set our custom one
+    res.nscount = 1;
+    memcpy(&res.nsaddr_list[0], &dns_addr, sizeof(dns_addr));
+
+    // Perform DNS query for A record
+    int len = res_nquery(&res, hostname, ns_c_in, ns_t_a, answer, sizeof(answer));
+    if (len < 0) {
+        obs_log(LOG_DEBUG, "[C64U] Direct DNS query failed for %s via %s (h_errno: %d)", hostname, dns_server, h_errno);
+        res_nclose(&res);
+        return false;
+    }
+
+    // Parse DNS response
+    if (ns_initparse(answer, len, &msg) < 0) {
+        obs_log(LOG_DEBUG, "[C64U] DNS response parsing failed for %s", hostname);
+        res_nclose(&res);
+        return false;
+    }
+
+    int ancount = ns_msg_count(msg, ns_s_an);
+    if (ancount == 0) {
+        obs_log(LOG_DEBUG, "[C64U] No A record found for %s via %s", hostname, dns_server);
+        res_nclose(&res);
+        return false;
+    }
+
+    // Get the first A record
+    for (int i = 0; i < ancount; i++) {
+        if (ns_parserr(&msg, ns_s_an, i, &rr) < 0)
+            continue;
+
+        if (ns_rr_type(rr) == ns_t_a && ns_rr_rdlen(rr) == 4) {
+            struct in_addr addr;
+            memcpy(&addr, ns_rr_rdata(rr), sizeof(addr));
+            const char *ip_str = inet_ntoa(addr);
+
+            if (strlen(ip_str) < buffer_size) {
+                strcpy(ip_buffer, ip_str);
+                obs_log(LOG_INFO, "[C64U] Direct DNS resolved %s -> %s (via %s)", hostname, ip_str, dns_server);
+                res_nclose(&res);
+                return true;
+            }
+        }
+    }
+
+    res_nclose(&res);
+    return false;
+}
+
+/**
+ * Try multiple common DNS servers for hostname resolution
+ */
+static bool resolve_hostname_with_fallback_dns(const char *hostname, const char *custom_dns, char *ip_buffer,
+                                               size_t buffer_size)
+{
+    if (!hostname || !ip_buffer || buffer_size < 16) {
+        return false;
+    }
+
+    // List of DNS servers to try (configured DNS first, then fallback to common routers)
+    const char *dns_servers[8];
+    int dns_count = 0;
+
+    // Add configured DNS server first if provided and not empty
+    if (custom_dns && strlen(custom_dns) > 0) {
+        dns_servers[dns_count++] = custom_dns;
+        obs_log(LOG_DEBUG, "[C64U] Using configured DNS server: %s", custom_dns);
+    }
+
+    // Add common router DNS servers as fallback
+    dns_servers[dns_count++] = "192.168.0.1";
+    dns_servers[dns_count++] = "10.0.0.1";
+    dns_servers[dns_count++] = "172.16.0.1";
+    dns_servers[dns_count] = NULL;
+
+    for (int i = 0; i < dns_count; i++) {
+        if (resolve_hostname_direct_dns(hostname, dns_servers[i], ip_buffer, buffer_size)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+#endif
+
 // Network helper functions
 bool c64u_init_networking(void)
 {
@@ -148,8 +277,15 @@ const char *c64u_get_socket_error_string(int error)
 #endif
 }
 
-// Resolve hostname to IP address with fallback to dotted hostname
+// Enhanced hostname resolution with custom DNS server support
 bool c64u_resolve_hostname(const char *hostname, char *ip_buffer, size_t buffer_size)
+{
+    return c64u_resolve_hostname_with_dns(hostname, NULL, ip_buffer, buffer_size);
+}
+
+// Resolve hostname to IP address with custom DNS server option
+bool c64u_resolve_hostname_with_dns(const char *hostname, const char *custom_dns_server, char *ip_buffer,
+                                    size_t buffer_size)
 {
     if (!hostname || !ip_buffer || buffer_size < 16) {
         return false;
@@ -164,19 +300,19 @@ bool c64u_resolve_hostname(const char *hostname, char *ip_buffer, size_t buffer_
         return true;
     }
 
-    // Try to resolve hostname as-is first
+    obs_log(LOG_DEBUG, "[C64U] Attempting to resolve hostname: %s", hostname);
+
+    // Try system DNS resolution first (works for public hostnames and properly configured local DNS)
     struct addrinfo hints, *result = NULL;
     memset(&hints, 0, sizeof(hints));
     hints.ai_family = AF_INET; // IPv4 only
     hints.ai_socktype = SOCK_STREAM;
 
-    obs_log(LOG_DEBUG, "[C64U] Attempting to resolve hostname: %s", hostname);
-
     int status = getaddrinfo(hostname, NULL, &hints, &result);
     if (status == 0 && result != NULL) {
         struct sockaddr_in *addr_in = (struct sockaddr_in *)result->ai_addr;
         if (inet_ntop(AF_INET, &addr_in->sin_addr, ip_buffer, buffer_size) != NULL) {
-            obs_log(LOG_INFO, "[C64U] Successfully resolved '%s' to IP: %s", hostname, ip_buffer);
+            obs_log(LOG_INFO, "[C64U] System DNS resolved '%s' to IP: %s", hostname, ip_buffer);
             freeaddrinfo(result);
             return true;
         }
@@ -186,8 +322,7 @@ bool c64u_resolve_hostname(const char *hostname, char *ip_buffer, size_t buffer_
         freeaddrinfo(result);
     }
 
-    // If hostname resolution failed, try with dot suffix (for FQDN)
-    // Many networks require FQDN for proper resolution
+    // Try with FQDN (dot suffix)
     char hostname_with_dot[256];
     snprintf(hostname_with_dot, sizeof(hostname_with_dot), "%s.", hostname);
 
@@ -197,7 +332,7 @@ bool c64u_resolve_hostname(const char *hostname, char *ip_buffer, size_t buffer_
     if (status == 0 && result != NULL) {
         struct sockaddr_in *addr_in = (struct sockaddr_in *)result->ai_addr;
         if (inet_ntop(AF_INET, &addr_in->sin_addr, ip_buffer, buffer_size) != NULL) {
-            obs_log(LOG_INFO, "[C64U] Successfully resolved '%s' to IP: %s", hostname_with_dot, ip_buffer);
+            obs_log(LOG_INFO, "[C64U] FQDN resolved '%s' to IP: %s", hostname_with_dot, ip_buffer);
             freeaddrinfo(result);
             return true;
         }
@@ -207,8 +342,21 @@ bool c64u_resolve_hostname(const char *hostname, char *ip_buffer, size_t buffer_
         freeaddrinfo(result);
     }
 
-    obs_log(LOG_WARNING, "[C64U] Failed to resolve hostname '%s' (tried both '%s' and '%s')", hostname, hostname,
-            hostname_with_dot);
+#if !defined(_WIN32)
+    // On Linux/macOS: Try direct DNS server queries (bypasses systemd-resolved issues)
+    obs_log(LOG_DEBUG, "[C64U] System DNS failed, trying direct DNS server queries");
+
+    if (resolve_hostname_with_fallback_dns(hostname, custom_dns_server, ip_buffer, buffer_size)) {
+        return true;
+    }
+
+    // Also try FQDN with direct DNS
+    if (resolve_hostname_with_fallback_dns(hostname_with_dot, custom_dns_server, ip_buffer, buffer_size)) {
+        return true;
+    }
+#endif
+
+    obs_log(LOG_WARNING, "[C64U] Failed to resolve hostname '%s' using all available methods", hostname);
     return false;
 }
 
