@@ -189,6 +189,13 @@ void *c64u_create(obs_data_t *settings, obs_source_t *source)
     context->audio_thread_active = false;
     context->auto_start_attempted = false;
 
+    // Initialize async retry system fields
+    context->retry_thread_active = false;
+    context->needs_retry = false;
+    context->retry_count = 0;
+    context->retry_shutdown = false;
+    context->last_udp_packet_time = os_gettime_ns();
+
     // Initialize logo display
     context->logo_texture = NULL;
     context->logo_load_attempted = false;
@@ -202,10 +209,10 @@ void *c64u_create(obs_data_t *settings, obs_source_t *source)
     C64U_LOG_INFO("C64U source created - C64 IP: %s, OBS IP: %s, Video: %u, Audio: %u", context->ip_address,
                   context->obs_ip_address, context->video_port, context->audio_port);
 
-    // Auto-start streaming after plugin initialization
-    C64U_LOG_INFO("🚀 Auto-starting C64U streaming after plugin initialization...");
-    c64u_start_streaming(context);
-    context->auto_start_attempted = true;
+    // Mark that we want to start streaming, but don't block OBS startup
+    // The actual streaming will be attempted asynchronously
+    C64U_LOG_INFO("🚀 C64U source created - streaming will be attempted asynchronously");
+    context->auto_start_attempted = false; // Will be handled by async mechanism
 
     return context;
 }
@@ -218,15 +225,16 @@ void c64u_destroy(void *data)
 
     C64U_LOG_INFO("Destroying C64U source");
 
+    // Shutdown async retry system first
+    shutdown_async_retry_system(context);
+
     // Stop streaming if active
     if (context->streaming) {
         C64U_LOG_DEBUG("Stopping active streaming during destruction");
         context->streaming = false;
         context->thread_active = false;
 
-        // Send stop commands
-        send_control_command(context, false, 0); // Stop video
-        send_control_command(context, false, 1); // Stop audio
+        // Note: No TCP calls in destroy - async system handles cleanup
 
         // Close sockets
         if (context->video_socket != INVALID_SOCKET_VALUE) {
@@ -383,11 +391,10 @@ void c64u_start_streaming(struct c64u_source *context)
         return;
     }
 
-    // If already streaming, just send start commands again (no need to recreate sockets/threads)
+    // If already streaming, trigger async retry (no TCP calls in OBS thread)
     if (context->streaming) {
-        C64U_LOG_INFO("Already streaming - sending start commands with current config");
-        send_control_command(context, true, 0); // Start video
-        send_control_command(context, true, 1); // Start audio
+        C64U_LOG_INFO("Already streaming - triggering async start commands with current config");
+        send_control_command_async(context, true, 0); // Start video async
         return;
     }
 
@@ -411,9 +418,11 @@ void c64u_start_streaming(struct c64u_source *context)
         return;
     }
 
-    // Send start commands to C64U
-    send_control_command(context, true, 0); // Start video
-    send_control_command(context, true, 1); // Start audio
+    // Initialize async retry system
+    init_async_retry_system(context);
+
+    // Send start commands to C64U asynchronously
+    send_control_command_async(context, true, 0); // Start video async
 
     // Start worker threads
     context->thread_active = true;
@@ -467,9 +476,7 @@ void c64u_stop_streaming(struct c64u_source *context)
     context->streaming = false;
     context->thread_active = false;
 
-    // Send stop commands
-    send_control_command(context, false, 0);
-    send_control_command(context, false, 1);
+    // Note: No TCP stop commands in OBS callback thread - async system handles cleanup
 
     // Close sockets to wake up threads
     if (context->video_socket != INVALID_SOCKET_VALUE) {
@@ -551,13 +558,36 @@ void c64u_render(void *data, gs_effect_t *effect)
     bool frames_timed_out = false;
     if (context->frame_ready && context->last_frame_time > 0) {
         uint64_t frame_age = now - context->last_frame_time;
-        frames_timed_out = (frame_age > 1000000000ULL); // 1 second
+        frames_timed_out = (frame_age > 500000000ULL); // 500ms
+
+        // Trigger async retry when frames timeout
+        if (frames_timed_out) {
+            // Update last UDP packet time to current time to reset detection
+            pthread_mutex_lock(&context->retry_mutex);
+            context->last_udp_packet_time = now;
+            context->needs_retry = true;
+            pthread_cond_signal(&context->retry_cond);
+            pthread_mutex_unlock(&context->retry_mutex);
+        }
     }
 
     bool should_show_logo = !context->streaming || !context->frame_ready || !context->frame_buffer_front ||
                             frames_timed_out;
 
-    // Debug logging to understand why logo is showing
+    // Debug logging (only when debug logging is enabled)
+    if (c64u_debug_logging) {
+        static uint64_t last_frame_debug_log = 0;
+        if (last_frame_debug_log == 0 || (now - last_frame_debug_log) >= 2000000000ULL) { // Every 2 seconds
+            uint64_t frame_age = (context->last_frame_time > 0) ? (now - context->last_frame_time) / 1000000000ULL
+                                                                : 999;
+            C64U_LOG_DEBUG(
+                "🎬 Frame state: should_show_logo=%d, streaming=%d, frame_ready=%d, frames_timed_out=%d, frame_age=%lus",
+                should_show_logo, context->streaming, context->frame_ready, frames_timed_out, frame_age);
+            last_frame_debug_log = now;
+        }
+    }
+
+    // Additional debug when logo should be showing
     static uint64_t last_debug_log = 0;
     if (should_show_logo && (last_debug_log == 0 || (now - last_debug_log) >= 2000000000ULL)) { // Every 2 seconds
         const char *reason = !context->streaming            ? "not_streaming"
@@ -575,22 +605,9 @@ void c64u_render(void *data, gs_effect_t *effect)
         context->frame_ready = false;
     }
 
-    // Self-healing: Retry streaming commands every 1 second when not receiving frames
-    // This covers both: frames timed out during streaming, and initial connection attempts
-    bool should_retry = (context->streaming && frames_timed_out) ||     // Timeout during streaming
-                        (!context->streaming && !context->frame_ready); // Not streaming and no frames
-
-    if (should_retry) {
-        static uint64_t last_retry_time = 0;
-        if (last_retry_time == 0 || (now - last_retry_time) >= 1000000000ULL) { // 1 second
-            const char *retry_reason = context->streaming ? "frame_timeout" : "initial_connection";
-            C64U_LOG_INFO("🔄 Self-healing (%s): Retrying streaming commands to C64U at %s", retry_reason,
-                          context->ip_address);
-            send_control_command(context, true, 0); // Retry video stream
-            send_control_command(context, true, 1); // Retry audio stream
-            last_retry_time = now;
-        }
-    }
+    // REMOVED: Self-healing TCP calls from render thread (causes UI blocking)
+    // Self-healing will be handled by a separate async mechanism
+    // For now, just detect timeout conditions without making network calls
 
     if (should_show_logo) {
         // Show C64U logo centered on black background

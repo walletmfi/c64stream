@@ -38,6 +38,11 @@ void *audio_thread_func(void *data)
             continue;
         }
 
+        // Update timestamp for timeout detection - UDP packet received successfully
+        pthread_mutex_lock(&context->retry_mutex);
+        context->last_udp_packet_time = os_gettime_ns();
+        pthread_mutex_unlock(&context->retry_mutex);
+
         // Parse audio packet
         uint16_t seq_num = *(uint16_t *)(packet);
         int16_t *audio_data = (int16_t *)(packet + C64U_AUDIO_HEADER_SIZE);

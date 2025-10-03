@@ -79,3 +79,89 @@ void send_control_command(struct c64u_source *context, bool enable, uint8_t stre
 
     close(sock);
 }
+
+void send_control_command_async(struct c64u_source *context, bool enable, uint8_t stream_id)
+{
+    (void)enable;    // Mark as used - async retry always sends start commands
+    (void)stream_id; // Mark as used - async retry sends both video and audio
+
+    pthread_mutex_lock(&context->retry_mutex);
+    context->needs_retry = true;
+    pthread_cond_signal(&context->retry_cond);
+    pthread_mutex_unlock(&context->retry_mutex);
+}
+
+void init_async_retry_system(struct c64u_source *context)
+{
+    pthread_mutex_init(&context->retry_mutex, NULL);
+    pthread_cond_init(&context->retry_cond, NULL);
+    context->retry_thread_active = false;
+    context->needs_retry = false;
+    context->retry_count = 0;
+    context->retry_shutdown = false;
+    context->last_udp_packet_time = os_gettime_ns();
+
+    if (pthread_create(&context->retry_thread, NULL, async_retry_thread, context) == 0) {
+        context->retry_thread_active = true;
+        C64U_LOG_INFO("Async retry system initialized");
+    } else {
+        C64U_LOG_ERROR("Failed to create async retry thread");
+    }
+}
+
+void shutdown_async_retry_system(struct c64u_source *context)
+{
+    if (context->retry_thread_active) {
+        pthread_mutex_lock(&context->retry_mutex);
+        context->retry_shutdown = true;
+        pthread_cond_signal(&context->retry_cond);
+        pthread_mutex_unlock(&context->retry_mutex);
+
+        pthread_join(context->retry_thread, NULL);
+        context->retry_thread_active = false;
+        C64U_LOG_INFO("Async retry system shutdown");
+    }
+
+    pthread_mutex_destroy(&context->retry_mutex);
+    pthread_cond_destroy(&context->retry_cond);
+}
+
+void *async_retry_thread(void *data)
+{
+    struct c64u_source *context = (struct c64u_source *)data;
+
+    C64U_LOG_INFO("Async retry thread started");
+
+    while (true) {
+        pthread_mutex_lock(&context->retry_mutex);
+
+        // Wait for retry signal or shutdown
+        while (!context->needs_retry && !context->retry_shutdown) {
+            pthread_cond_wait(&context->retry_cond, &context->retry_mutex);
+        }
+
+        if (context->retry_shutdown) {
+            pthread_mutex_unlock(&context->retry_mutex);
+            break;
+        }
+
+        if (context->needs_retry) {
+            context->needs_retry = false;
+            pthread_mutex_unlock(&context->retry_mutex);
+
+            // Perform async retry - send start commands for both video and audio
+            C64U_LOG_INFO("Async retry attempt %u - sending start commands", context->retry_count);
+            send_control_command(context, true, 0); // Video
+            send_control_command(context, true, 1); // Audio
+            context->retry_count++;
+
+            // Wait 1 second before allowing next retry
+            os_sleep_ms(1000);
+        } else {
+            pthread_mutex_unlock(&context->retry_mutex);
+        }
+    }
+
+    C64U_LOG_INFO("Async retry thread ended");
+    return NULL;
+}

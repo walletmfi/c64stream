@@ -284,6 +284,11 @@ void *video_thread_func(void *data)
             continue;
         }
 
+        // Update timestamp for timeout detection - UDP packet received successfully
+        pthread_mutex_lock(&context->retry_mutex);
+        context->last_udp_packet_time = os_gettime_ns();
+        pthread_mutex_unlock(&context->retry_mutex);
+
         // Debug: Count received packets
         packet_count++;
         // Technical statistics tracking - Video
