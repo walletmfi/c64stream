@@ -133,7 +133,7 @@ void *async_retry_thread(void *data)
 {
     struct c64u_source *context = (struct c64u_source *)data;
 
-    C64U_LOG_DEBUG("Async retry thread started - will continuously retry every 500ms");
+    C64U_LOG_DEBUG("Async retry thread started");
 
     while (true) {
         pthread_mutex_lock(&context->retry_mutex);
