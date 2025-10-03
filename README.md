@@ -17,7 +17,6 @@ The plugin connects directly to the Ultimate's network interface, eliminating th
 - Real-time video streaming (PAL 384x272, NTSC 384x240)
 - Synchronized audio streaming (16-bit stereo, ~48kHz)
 - Network-based connection (UDP/TCP)
-- **Enhanced DNS resolution** - reliable hostname resolution on all platforms (Linux/macOS/Windows)
 - Automatic VIC-II color space conversion
 - Built-in recording capabilities (BMP frames, AVI video, WAV audio)
 
