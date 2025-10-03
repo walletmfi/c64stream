@@ -73,7 +73,7 @@ See the [OBS Plugins Guide](https://obsproject.com/kb/plugins-guide).
 3. **Debug Logging:** Enable detailed logging for debugging connection issues (optional)
 4. **Configure Network Settings:**
    - **C64U Host:** Enter your Ultimate device's hostname (default: `c64u`) or IP address to enable automatic streaming control from OBS (recommended for convenience), or set to `0.0.0.0` to accept streams from any C64 Ultimate on your network (requires manual control from the device)
-   - **OBS Server IP:** IP address where C64 Ultimate sends streams (auto-detected by default)  
+   - **OBS Server IP:** IP address where C64 Ultimate sends streams (auto-detected by default)
    - **Auto-detect OBS IP:** Automatically detect and use OBS server IP in streaming commands (recommended)
 5. **Configure Ports:** Use the default ports (video: 11000, audio: 11001) unless network conflicts require different values
 6. **Render Delay:** Adjust frame buffering (0-100 frames, default 3) to smooth UDP packet loss/reordering
@@ -123,7 +123,7 @@ The plugin supports both **hostnames** and **IP addresses** for the C64U Host fi
 
 **Examples:**
 - `c64u` → resolves to `192.168.1.64` (automatic)
-- `192.168.1.64` → used directly as IP address  
+- `192.168.1.64` → used directly as IP address
 - `retro-basement.local` → resolves via mDNS/Bonjour
 - `ultimate64` → tries both `ultimate64` and `ultimate64.` for resolution
 

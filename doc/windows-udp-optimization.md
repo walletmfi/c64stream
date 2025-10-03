@@ -15,7 +15,7 @@ These errors were **not occurring on Linux** with the same network setup, indica
 
 The C64U Ultimate device sends **extremely high-frequency UDP video packets**:
 - **PAL**: 68 packets/frame × 50 fps = **3,400 packets/second**
-- **NTSC**: 60 packets/frame × 60 fps = **3,600 packets/second**  
+- **NTSC**: 60 packets/frame × 60 fps = **3,600 packets/second**
 - **Packet size**: 780 bytes each
 - **Total bandwidth**: ~2.6 Mbps of UDP traffic
 
@@ -69,10 +69,10 @@ timeBeginPeriod(1);
 ```c
 #ifdef _WIN32
 if (error == WSAEWOULDBLOCK) {
-    Sleep(0); // Yield to other threads, retry immediately  
+    Sleep(0); // Yield to other threads, retry immediately
     continue;
 }
-#else  
+#else
 if (error == EAGAIN || error == EWOULDBLOCK) {
     os_sleep_ms(1); // 1ms delay on Linux (adequate)
     continue;
@@ -96,7 +96,7 @@ To verify the fix:
 2. **After optimization**: Should see dramatic reduction in packet reordering
 3. **Metrics to monitor**:
    - Frequency of "UDP OUT-OF-SEQUENCE" log messages
-   - Video frame delivery consistency  
+   - Video frame delivery consistency
    - Overall stream quality and smoothness
 
 ## Technical Notes
