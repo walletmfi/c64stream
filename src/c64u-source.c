@@ -193,6 +193,7 @@ void *c64u_create(obs_data_t *settings, obs_source_t *source)
     context->retry_thread_active = false;
     context->needs_retry = false;
     context->retry_count = 0;
+    context->consecutive_failures = 0;
     context->retry_shutdown = false;
     context->last_udp_packet_time = os_gettime_ns();
 
@@ -209,9 +210,12 @@ void *c64u_create(obs_data_t *settings, obs_source_t *source)
     C64U_LOG_INFO("C64U source created - C64 IP: %s, OBS IP: %s, Video: %u, Audio: %u", context->ip_address,
                   context->obs_ip_address, context->video_port, context->audio_port);
 
+    // Initialize async retry system immediately to start continuous retry attempts
+    init_async_retry_system(context);
+
     // Mark that we want to start streaming, but don't block OBS startup
-    // The actual streaming will be attempted asynchronously
-    C64U_LOG_INFO("🚀 C64U source created - streaming will be attempted asynchronously");
+    // The async retry system will continuously attempt connection
+    C64U_LOG_INFO("🚀 C64U source created - async retry system will continuously attempt connection");
     context->auto_start_attempted = false; // Will be handled by async mechanism
 
     return context;
@@ -418,11 +422,9 @@ void c64u_start_streaming(struct c64u_source *context)
         return;
     }
 
-    // Initialize async retry system
-    init_async_retry_system(context);
-
-    // Send start commands to C64U asynchronously
+    // Send start commands to C64U asynchronously (async system already initialized in create)
     send_control_command_async(context, true, 0); // Start video async
+    send_control_command_async(context, true, 1); // Start audio async
 
     // Start worker threads
     context->thread_active = true;

@@ -100,6 +100,7 @@ struct c64u_source {
     uint64_t last_udp_packet_time; // Timestamp of last UDP packet
     bool needs_retry;              // Flag indicating retry is needed
     uint32_t retry_count;          // Number of retry attempts
+    uint32_t consecutive_failures; // Number of consecutive TCP failures
     bool retry_shutdown;           // Signal to shutdown retry thread
 
     // Rendering delay

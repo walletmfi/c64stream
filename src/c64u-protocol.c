@@ -1,9 +1,11 @@
 #include <obs-module.h>
 #include <string.h>
+#include <time.h>
 #include <util/platform.h>
 #include "c64u-logging.h"
 #include "c64u-protocol.h"
 #include "c64u-network.h"
+#include "c64u-source.h"
 #include "c64u-types.h"
 
 void send_control_command(struct c64u_source *context, bool enable, uint8_t stream_id)
@@ -130,34 +132,78 @@ void *async_retry_thread(void *data)
 {
     struct c64u_source *context = (struct c64u_source *)data;
 
-    C64U_LOG_INFO("Async retry thread started");
+    C64U_LOG_INFO("Async retry thread started - will continuously retry every 500ms");
 
     while (true) {
         pthread_mutex_lock(&context->retry_mutex);
 
-        // Wait for retry signal or shutdown
-        while (!context->needs_retry && !context->retry_shutdown) {
-            pthread_cond_wait(&context->retry_cond, &context->retry_mutex);
-        }
-
+        // Check for shutdown first
         if (context->retry_shutdown) {
             pthread_mutex_unlock(&context->retry_mutex);
             break;
         }
 
-        if (context->needs_retry) {
+        // Check if we need to retry based on timeout or explicit request
+        uint64_t now = os_gettime_ns();
+        uint64_t time_since_udp = now - context->last_udp_packet_time;
+        bool should_retry = context->needs_retry || (time_since_udp > 500000000ULL); // 500ms timeout
+
+        if (should_retry) {
             context->needs_retry = false;
             pthread_mutex_unlock(&context->retry_mutex);
 
-            // Perform async retry - send start commands for both video and audio
-            C64U_LOG_INFO("Async retry attempt %u - sending start commands", context->retry_count);
-            send_control_command(context, true, 0); // Video
-            send_control_command(context, true, 1); // Audio
+            // Skip if no IP configured
+            if (strcmp(context->ip_address, "0.0.0.0") == 0) {
+                C64U_LOG_DEBUG("Async retry skipped - no C64U IP configured");
+                os_sleep_ms(1000); // Wait longer when no IP configured
+                continue;
+            }
+
+            // Perform async retry - start streaming if not active, otherwise send commands
+            C64U_LOG_INFO("Async retry attempt %u - %s", context->retry_count,
+                          context->streaming ? "sending start commands" : "starting streaming");
+
+            bool tcp_success = false;
+            if (!context->streaming) {
+                // Not streaming - need to create UDP sockets and threads
+                c64u_start_streaming(context);
+                tcp_success = true; // c64u_start_streaming handles TCP commands internally
+            } else {
+                // Already streaming - send start commands and check for success
+                socket_t test_sock = create_tcp_socket(context->ip_address, C64U_CONTROL_PORT);
+                if (test_sock != INVALID_SOCKET_VALUE) {
+                    close(test_sock);                       // Just testing connectivity
+                    send_control_command(context, true, 0); // Video
+                    send_control_command(context, true, 1); // Audio
+                    tcp_success = true;
+                    context->consecutive_failures = 0; // Reset failure counter on success
+                } else {
+                    tcp_success = false;
+                    context->consecutive_failures++;
+                }
+            }
+
             context->retry_count++;
 
-            // Wait 1 second before allowing next retry
-            os_sleep_ms(1000);
+            // Adaptive retry delay based on consecutive failures
+            uint32_t retry_delay = 200; // Base 200ms delay
+            if (context->consecutive_failures > 0 && !tcp_success) {
+                // Progressive backoff: 200ms -> 500ms -> 1s -> 2s -> 3s (max)
+                retry_delay = 200 + (context->consecutive_failures * 300);
+                if (retry_delay > 3000)
+                    retry_delay = 3000; // Cap at 3 seconds
+                C64U_LOG_INFO("TCP connection failed (%u consecutive), using %ums retry delay",
+                              context->consecutive_failures, retry_delay);
+            }
+            os_sleep_ms(retry_delay);
         } else {
+            // Wait up to 100ms for signal, then check timeout again
+            // Use absolute time for better cross-platform compatibility
+            struct timespec timeout_spec;
+            uint64_t now_ns = os_gettime_ns();
+            timeout_spec.tv_sec = (now_ns + 100000000ULL) / 1000000000ULL;  // Convert to seconds
+            timeout_spec.tv_nsec = (now_ns + 100000000ULL) % 1000000000ULL; // Remaining nanoseconds
+            pthread_cond_timedwait(&context->retry_cond, &context->retry_mutex, &timeout_spec);
             pthread_mutex_unlock(&context->retry_mutex);
         }
     }
