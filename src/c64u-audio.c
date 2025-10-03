@@ -13,7 +13,7 @@ void *audio_thread_func(void *data)
     struct c64u_source *context = data;
     uint8_t packet[C64U_AUDIO_PACKET_SIZE];
 
-    C64U_LOG_INFO("Audio receiver thread started on port %u", context->audio_port);
+    C64U_LOG_DEBUG("Audio receiver thread started on port %u", context->audio_port);
 
     while (context->thread_active) {
         ssize_t received = recv(context->audio_socket, (char *)packet, (int)sizeof(packet), 0);
@@ -37,6 +37,11 @@ void *audio_thread_func(void *data)
                              SSIZE_T_CAST(received), C64U_AUDIO_PACKET_SIZE);
             continue;
         }
+
+        // Update timestamp for timeout detection - UDP packet received successfully
+        pthread_mutex_lock(&context->retry_mutex);
+        context->last_udp_packet_time = os_gettime_ns();
+        pthread_mutex_unlock(&context->retry_mutex);
 
         // Parse audio packet
         uint16_t seq_num = *(uint16_t *)(packet);
@@ -104,6 +109,6 @@ void *audio_thread_func(void *data)
         obs_source_output_audio(context->source, &audio_frame);
     }
 
-    C64U_LOG_INFO("Audio thread stopped for C64U source '%s'", obs_source_get_name(context->source));
+    C64U_LOG_DEBUG("Audio thread stopped for C64U source '%s'", obs_source_get_name(context->source));
     return NULL;
 }

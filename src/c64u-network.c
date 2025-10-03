@@ -214,13 +214,106 @@ socket_t create_tcp_socket(const char *ip, uint32_t port)
         return INVALID_SOCKET_VALUE;
     }
 
-    if (connect(sock, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
-        int error = c64u_get_socket_error();
+    // Set socket to non-blocking for timeout control
+#ifdef _WIN32
+    u_long non_blocking = 1;
+    if (ioctlsocket(sock, FIONBIO, &non_blocking) != 0) {
+        obs_log(LOG_ERROR, "[C64U] Failed to set socket non-blocking");
+        close(sock);
+        return INVALID_SOCKET_VALUE;
+    }
+#else
+    int flags = fcntl(sock, F_GETFL, 0);
+    if (flags == -1 || fcntl(sock, F_SETFL, flags | O_NONBLOCK) == -1) {
+        obs_log(LOG_ERROR, "[C64U] Failed to set socket non-blocking");
+        close(sock);
+        return INVALID_SOCKET_VALUE;
+    }
+#endif
+
+    // Attempt connection (will return immediately with EINPROGRESS/WSAEWOULDBLOCK)
+    int connect_result = connect(sock, (struct sockaddr *)&addr, sizeof(addr));
+    if (connect_result == 0) {
+        // Connected immediately (rare case)
+        // Restore blocking mode
+#ifdef _WIN32
+        u_long blocking = 0;
+        ioctlsocket(sock, FIONBIO, &blocking);
+#else
+        fcntl(sock, F_SETFL, flags);
+#endif
+        obs_log(LOG_DEBUG, "[C64U] Connected to C64U at %s:%u", ip, port);
+        return sock;
+    }
+
+    int error = c64u_get_socket_error();
+#ifdef _WIN32
+    if (error != WSAEWOULDBLOCK) {
+#else
+    if (error != EINPROGRESS) {
+#endif
         obs_log(LOG_WARNING, "[C64U] Failed to connect to C64U at %s:%u: %s", ip, port,
                 c64u_get_socket_error_string(error));
         close(sock);
         return INVALID_SOCKET_VALUE;
     }
+
+    // Wait for connection with 1-second timeout
+    fd_set write_fds;
+    FD_ZERO(&write_fds);
+    FD_SET(sock, &write_fds);
+
+    struct timeval timeout;
+    timeout.tv_sec = 1; // 1 second timeout
+    timeout.tv_usec = 0;
+
+#ifdef _WIN32
+    int select_result = select(0, NULL, &write_fds, NULL, &timeout);
+#else
+    int select_result = select(sock + 1, NULL, &write_fds, NULL, &timeout);
+#endif
+    if (select_result == 0) {
+        // Timeout
+        obs_log(LOG_WARNING, "[C64U] Connection to C64U at %s:%u timed out after 1 second", ip, port);
+        close(sock);
+        return INVALID_SOCKET_VALUE;
+    }
+
+    if (select_result < 0) {
+        int select_error = c64u_get_socket_error();
+        obs_log(LOG_ERROR, "[C64U] Select failed during connection to %s:%u: %s", ip, port,
+                c64u_get_socket_error_string(select_error));
+        close(sock);
+        return INVALID_SOCKET_VALUE;
+    }
+
+    // Check if connection succeeded or failed
+    int sock_error;
+    socklen_t len = sizeof(sock_error);
+#ifdef _WIN32
+    if (getsockopt(sock, SOL_SOCKET, SO_ERROR, (char *)&sock_error, &len) != 0) {
+#else
+    if (getsockopt(sock, SOL_SOCKET, SO_ERROR, &sock_error, &len) < 0) {
+#endif
+        obs_log(LOG_ERROR, "[C64U] Failed to get socket error for %s:%u", ip, port);
+        close(sock);
+        return INVALID_SOCKET_VALUE;
+    }
+
+    if (sock_error != 0) {
+        obs_log(LOG_WARNING, "[C64U] Failed to connect to C64U at %s:%u: %s", ip, port,
+                c64u_get_socket_error_string(sock_error));
+        close(sock);
+        return INVALID_SOCKET_VALUE;
+    }
+
+    // Restore blocking mode
+#ifdef _WIN32
+    u_long blocking = 0;
+    ioctlsocket(sock, FIONBIO, &blocking);
+#else
+    fcntl(sock, F_SETFL, flags);
+#endif
 
     obs_log(LOG_DEBUG, "[C64U] Connected to C64U at %s:%u", ip, port);
     return sock;

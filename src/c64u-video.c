@@ -67,6 +67,7 @@ void swap_frame_buffers(struct c64u_source *context)
     context->frame_buffer_front = context->frame_buffer_back;
     context->frame_buffer_back = temp;
     context->frame_ready = true;
+    context->last_frame_time = os_gettime_ns(); // Update timestamp for timeout detection
     context->buffer_swap_pending = false;
 }
 
@@ -103,9 +104,10 @@ void init_delay_queue(struct c64u_source *context)
 {
     if (pthread_mutex_lock(&context->delay_mutex) == 0) {
         // Allocate delay queue buffers if needed (max delay + buffer)
-        uint32_t needed_size = context->render_delay_frames + 10; // Extra buffer for safety
+        uint32_t needed_size = context->render_delay_frames + C64U_RENDER_BUFFER_SAFETY_MARGIN;
 
-        if (context->delayed_frame_queue == NULL || needed_size > 110) { // Current max allocated
+        if (context->delayed_frame_queue == NULL ||
+            needed_size > (C64U_MAX_RENDER_DELAY_FRAMES + C64U_RENDER_BUFFER_SAFETY_MARGIN)) {
             if (context->delayed_frame_queue) {
                 bfree(context->delayed_frame_queue);
             }
@@ -155,7 +157,7 @@ bool enqueue_delayed_frame(struct c64u_source *context, struct frame_assembly *f
         }
     }
 
-    uint32_t max_queue_size = context->render_delay_frames + 10;
+    uint32_t max_queue_size = context->render_delay_frames + C64U_RENDER_BUFFER_SAFETY_MARGIN;
 
     // If queue is full, remove oldest frame
     if (context->delay_queue_size >= max_queue_size) {
@@ -228,7 +230,8 @@ bool dequeue_delayed_frame(struct c64u_source *context)
         pthread_mutex_unlock(&context->frame_mutex);
 
         // Remove frame from queue
-        context->delay_queue_head = (context->delay_queue_head + 1) % (context->render_delay_frames + 10);
+        context->delay_queue_head =
+            (context->delay_queue_head + 1) % (context->render_delay_frames + C64U_RENDER_BUFFER_SAFETY_MARGIN);
         context->delay_queue_size--;
 
         pthread_mutex_unlock(&context->delay_mutex);
@@ -256,9 +259,9 @@ void *video_thread_func(void *data)
     uint8_t packet[C64U_VIDEO_PACKET_SIZE];
     static int packet_count = 0;
 
-    C64U_LOG_INFO("Video receiver thread started on port %u", context->video_port);
+    C64U_LOG_DEBUG("Video receiver thread started on port %u", context->video_port);
     // Video receiver thread initialized
-    C64U_LOG_INFO("🔥 VIDEO THREAD FUNCTION STARTED - Our custom statistics code will run here!");
+    C64U_LOG_DEBUG("Video thread function started");
 
     while (context->thread_active) {
         ssize_t received = recv(context->video_socket, (char *)packet, (int)sizeof(packet), 0);
@@ -282,6 +285,11 @@ void *video_thread_func(void *data)
                              SSIZE_T_CAST(received), C64U_VIDEO_PACKET_SIZE);
             continue;
         }
+
+        // Update timestamp for timeout detection - UDP packet received successfully
+        pthread_mutex_lock(&context->retry_mutex);
+        context->last_udp_packet_time = os_gettime_ns();
+        pthread_mutex_unlock(&context->retry_mutex);
 
         // Debug: Count received packets
         packet_count++;
@@ -618,6 +626,6 @@ void *video_thread_func(void *data)
         pthread_mutex_unlock(&context->assembly_mutex);
     }
 
-    C64U_LOG_INFO("Video receiver thread stopped");
+    C64U_LOG_DEBUG("Video receiver thread stopped");
     return NULL;
 }

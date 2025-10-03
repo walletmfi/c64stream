@@ -3,6 +3,7 @@
 #include <util/platform.h>
 #include <util/threading.h>
 #include <string.h>
+#include <inttypes.h>
 #include <pthread.h>
 #include "c64u-logging.h"
 #include "c64u-source.h"
@@ -13,6 +14,48 @@
 #include "c64u-audio.h"
 #include "c64u-record.h"
 #include "plugin-support.h"
+
+// Helper function to safely close and reset sockets
+static void close_and_reset_sockets(struct c64u_source *context)
+{
+    if (context->video_socket != INVALID_SOCKET_VALUE) {
+        close(context->video_socket);
+        context->video_socket = INVALID_SOCKET_VALUE;
+    }
+    if (context->audio_socket != INVALID_SOCKET_VALUE) {
+        close(context->audio_socket);
+        context->audio_socket = INVALID_SOCKET_VALUE;
+    }
+}
+
+// Load the C64U logo texture from module data directory
+static gs_texture_t *load_logo_texture(void)
+{
+    C64U_LOG_DEBUG("Attempting to load logo texture...");
+
+    // Use obs_module_file() to get the path to the logo in the data directory
+    char *logo_path = obs_module_file("images/c64u-logo.png");
+    if (!logo_path) {
+        C64U_LOG_WARNING("Failed to locate logo file in module data directory");
+        return NULL;
+    }
+
+    C64U_LOG_DEBUG("Logo path resolved to: %s", logo_path);
+
+    // Load texture directly from the data directory
+    gs_texture_t *logo_texture = gs_texture_create_from_file(logo_path);
+
+    if (!logo_texture) {
+        C64U_LOG_WARNING("Failed to load logo texture from: %s", logo_path);
+    } else {
+        uint32_t width = gs_texture_get_width(logo_texture);
+        uint32_t height = gs_texture_get_height(logo_texture);
+        C64U_LOG_DEBUG("Loaded logo texture from: %s (size: %ux%u)", logo_path, width, height);
+    }
+
+    bfree(logo_path);
+    return logo_texture;
+}
 
 void *c64u_create(obs_data_t *settings, obs_source_t *source)
 {
@@ -63,11 +106,16 @@ void *c64u_create(obs_data_t *settings, obs_source_t *source)
             // Save the detected IP to settings for future use
             obs_data_set_string(settings, "obs_ip_address", context->obs_ip_address);
         } else {
-            C64U_LOG_WARNING("Failed to detect OBS IP address, using fallback");
-            strncpy(context->obs_ip_address, "192.168.1.100", sizeof(context->obs_ip_address) - 1);
+            C64U_LOG_WARNING("Failed to detect OBS IP address, will use configured value");
             context->initial_ip_detected = false;
-            obs_data_set_string(settings, "obs_ip_address", context->obs_ip_address);
         }
+    }
+
+    // Ensure we have a valid OBS IP address - use localhost as last resort
+    if (strlen(context->obs_ip_address) == 0) {
+        C64U_LOG_INFO("No OBS IP configured, using localhost as fallback");
+        strncpy(context->obs_ip_address, "127.0.0.1", sizeof(context->obs_ip_address) - 1);
+        obs_data_set_string(settings, "obs_ip_address", context->obs_ip_address);
     }
 
     // Set default ports if not configured
@@ -96,6 +144,7 @@ void *c64u_create(obs_data_t *settings, obs_source_t *source)
     memset(context->frame_buffer_front, 0, frame_size);
     memset(context->frame_buffer_back, 0, frame_size);
     context->frame_ready = false;
+    context->last_frame_time = 0; // Initialize frame timeout detection
 
     // Initialize video format detection
     context->detected_frame_height = 0;
@@ -133,7 +182,7 @@ void *c64u_create(obs_data_t *settings, obs_source_t *source)
     // Initialize rendering delay from settings
     context->render_delay_frames = (uint32_t)obs_data_get_int(settings, "render_delay_frames");
     if (context->render_delay_frames == 0) {
-        context->render_delay_frames = 10; // Default value
+        context->render_delay_frames = C64U_DEFAULT_RENDER_DELAY_FRAMES;
     }
 
     // Initialize delay queue - allocate for maximum delay + some extra buffer
@@ -154,6 +203,18 @@ void *c64u_create(obs_data_t *settings, obs_source_t *source)
     context->audio_thread_active = false;
     context->auto_start_attempted = false;
 
+    // Initialize async retry system fields
+    context->retry_thread_active = false;
+    context->needs_retry = false;
+    context->retry_count = 0;
+    context->consecutive_failures = 0;
+    context->retry_shutdown = false;
+    context->last_udp_packet_time = os_gettime_ns();
+
+    // Initialize logo display
+    context->logo_texture = NULL;
+    context->logo_load_attempted = false;
+
     // Initialize recording module
     c64u_record_init(context);
 
@@ -163,10 +224,13 @@ void *c64u_create(obs_data_t *settings, obs_source_t *source)
     C64U_LOG_INFO("C64U source created - C64 IP: %s, OBS IP: %s, Video: %u, Audio: %u", context->ip_address,
                   context->obs_ip_address, context->video_port, context->audio_port);
 
-    // Auto-start streaming after plugin initialization
-    C64U_LOG_INFO("🚀 Auto-starting C64U streaming after plugin initialization...");
-    c64u_start_streaming(context);
-    context->auto_start_attempted = true;
+    // Initialize async retry system immediately to start continuous retry attempts
+    init_async_retry_system(context);
+
+    // Mark that we want to start streaming, but don't block OBS startup
+    // The async retry system will continuously attempt connection
+    C64U_LOG_INFO("🚀 C64U source created - async retry system will continuously attempt connection");
+    context->auto_start_attempted = false; // Will be handled by async mechanism
 
     return context;
 }
@@ -179,25 +243,19 @@ void c64u_destroy(void *data)
 
     C64U_LOG_INFO("Destroying C64U source");
 
+    // Shutdown async retry system first
+    shutdown_async_retry_system(context);
+
     // Stop streaming if active
     if (context->streaming) {
         C64U_LOG_DEBUG("Stopping active streaming during destruction");
         context->streaming = false;
         context->thread_active = false;
 
-        // Send stop commands
-        send_control_command(context, false, 0); // Stop video
-        send_control_command(context, false, 1); // Stop audio
+        // Note: No TCP calls in destroy - async system handles cleanup
 
         // Close sockets
-        if (context->video_socket != INVALID_SOCKET_VALUE) {
-            close(context->video_socket);
-            context->video_socket = INVALID_SOCKET_VALUE;
-        }
-        if (context->audio_socket != INVALID_SOCKET_VALUE) {
-            close(context->audio_socket);
-            context->audio_socket = INVALID_SOCKET_VALUE;
-        }
+        close_and_reset_sockets(context);
 
         // Wait for threads to finish
         if (context->video_thread_active) {
@@ -212,6 +270,12 @@ void c64u_destroy(void *data)
 
     // Cleanup recording module
     c64u_record_cleanup(context);
+
+    // Cleanup logo texture
+    if (context->logo_texture) {
+        gs_texture_destroy(context->logo_texture);
+        context->logo_texture = NULL;
+    }
 
     // Cleanup resources
     pthread_mutex_destroy(&context->frame_mutex);
@@ -338,11 +402,10 @@ void c64u_start_streaming(struct c64u_source *context)
         return;
     }
 
-    // If already streaming, just send start commands again (no need to recreate sockets/threads)
+    // If already streaming, trigger async retry (no TCP calls in OBS thread)
     if (context->streaming) {
-        C64U_LOG_INFO("Already streaming - sending start commands with current config");
-        send_control_command(context, true, 0); // Start video
-        send_control_command(context, true, 1); // Start audio
+        C64U_LOG_INFO("Already streaming - triggering async start commands with current config");
+        send_control_command_async(context, true, 0); // Start video async
         return;
     }
 
@@ -355,20 +418,13 @@ void c64u_start_streaming(struct c64u_source *context)
 
     if (context->video_socket == INVALID_SOCKET_VALUE || context->audio_socket == INVALID_SOCKET_VALUE) {
         C64U_LOG_ERROR("Failed to create UDP sockets for streaming");
-        if (context->video_socket != INVALID_SOCKET_VALUE) {
-            close(context->video_socket);
-            context->video_socket = INVALID_SOCKET_VALUE;
-        }
-        if (context->audio_socket != INVALID_SOCKET_VALUE) {
-            close(context->audio_socket);
-            context->audio_socket = INVALID_SOCKET_VALUE;
-        }
+        close_and_reset_sockets(context);
         return;
     }
 
-    // Send start commands to C64U
-    send_control_command(context, true, 0); // Start video
-    send_control_command(context, true, 1); // Start audio
+    // Send start commands to C64U asynchronously (async system already initialized in create)
+    send_control_command_async(context, true, 0); // Start video async
+    send_control_command_async(context, true, 1); // Start audio async
 
     // Start worker threads
     context->thread_active = true;
@@ -380,10 +436,7 @@ void c64u_start_streaming(struct c64u_source *context)
         C64U_LOG_ERROR("Failed to create video receiver thread");
         context->streaming = false;
         context->thread_active = false;
-        close(context->video_socket);
-        close(context->audio_socket);
-        context->video_socket = INVALID_SOCKET_VALUE;
-        context->audio_socket = INVALID_SOCKET_VALUE;
+        close_and_reset_sockets(context);
         return;
     }
     context->video_thread_active = true;
@@ -396,10 +449,7 @@ void c64u_start_streaming(struct c64u_source *context)
             pthread_join(context->video_thread, NULL);
             context->video_thread_active = false;
         }
-        close(context->video_socket);
-        close(context->audio_socket);
-        context->video_socket = INVALID_SOCKET_VALUE;
-        context->audio_socket = INVALID_SOCKET_VALUE;
+        close_and_reset_sockets(context);
         return;
     }
     context->audio_thread_active = true;
@@ -422,19 +472,10 @@ void c64u_stop_streaming(struct c64u_source *context)
     context->streaming = false;
     context->thread_active = false;
 
-    // Send stop commands
-    send_control_command(context, false, 0);
-    send_control_command(context, false, 1);
+    // Note: No TCP stop commands in OBS callback thread - async system handles cleanup
 
     // Close sockets to wake up threads
-    if (context->video_socket != INVALID_SOCKET_VALUE) {
-        close(context->video_socket);
-        context->video_socket = INVALID_SOCKET_VALUE;
-    }
-    if (context->audio_socket != INVALID_SOCKET_VALUE) {
-        close(context->audio_socket);
-        context->audio_socket = INVALID_SOCKET_VALUE;
-    }
+    close_and_reset_sockets(context);
 
     // Wait for threads to finish
     if (context->video_thread_active && pthread_join(context->video_thread, NULL) != 0) {
@@ -486,20 +527,175 @@ void c64u_render(void *data, gs_effect_t *effect)
     struct c64u_source *context = data;
     UNUSED_PARAMETER(effect);
 
-    // Track render timing for diagnostic purposes
-    static uint64_t last_render_time = 0;
-    static uint32_t render_calls = 0;
-    uint64_t render_start = os_gettime_ns();
+    if (!context) {
+        C64U_LOG_ERROR("Render called with NULL context!");
+        return;
+    }
 
-    render_calls++;
+    // Lazy load logo texture on first render (when graphics context is available)
+    if (!context->logo_load_attempted) {
+        context->logo_texture = load_logo_texture();
+        context->logo_load_attempted = true;
+    }
 
-    // Note: Auto-start streaming now happens in c64u_create, not on first render
+    // Check if we should show logo:
+    // 1. Not streaming, OR
+    // 2. No frames ready, OR
+    // 3. No frame buffer, OR
+    // 4. Frames have timed out (no new frames for 1 second)
+    uint64_t now = os_gettime_ns();
+    bool frames_timed_out = false;
+    if (context->frame_ready && context->last_frame_time > 0) {
+        uint64_t frame_age = now - context->last_frame_time;
+        frames_timed_out = (frame_age > C64U_FRAME_TIMEOUT_NS);
 
-    // Check if we have streaming data and frame ready
-    if (context->streaming && context->frame_ready && context->frame_buffer_front) {
+        // Trigger async retry when frames timeout
+        if (frames_timed_out) {
+            // Update last UDP packet time to current time to reset detection
+            pthread_mutex_lock(&context->retry_mutex);
+            context->last_udp_packet_time = now;
+            context->needs_retry = true;
+            pthread_cond_signal(&context->retry_cond);
+            pthread_mutex_unlock(&context->retry_mutex);
+        }
+    }
+
+    bool should_show_logo = !context->streaming || !context->frame_ready || !context->frame_buffer_front ||
+                            frames_timed_out;
+
+    // Debug logging (only when debug logging is enabled)
+    if (c64u_debug_logging) {
+        static uint64_t last_frame_debug_log = 0;
+        if (last_frame_debug_log == 0 || (now - last_frame_debug_log) >= C64U_DEBUG_LOG_INTERVAL_NS) {
+            uint64_t frame_age = (context->last_frame_time > 0) ? (now - context->last_frame_time) / 1000000000ULL
+                                                                : 999;
+            C64U_LOG_DEBUG(
+                "🎬 Frame state: should_show_logo=%d, streaming=%d, frame_ready=%d, frames_timed_out=%d, frame_age=%" PRIu64
+                "s",
+                should_show_logo, context->streaming, context->frame_ready, frames_timed_out, frame_age);
+            last_frame_debug_log = now;
+        }
+    }
+
+    // Additional debug when logo should be showing
+    static uint64_t last_debug_log = 0;
+    if (should_show_logo && (last_debug_log == 0 || (now - last_debug_log) >= C64U_DEBUG_LOG_INTERVAL_NS)) {
+        const char *reason = !context->streaming            ? "not_streaming"
+                             : !context->frame_ready        ? "no_frames"
+                             : !context->frame_buffer_front ? "no_buffer"
+                             : frames_timed_out             ? "frame_timeout"
+                                                            : "unknown";
+        C64U_LOG_DEBUG("🖼️ Showing logo (%s): streaming=%d, frame_ready=%d, frames_timed_out=%d, C64_IP='%s'", reason,
+                       context->streaming, context->frame_ready, frames_timed_out, context->ip_address);
+        last_debug_log = now;
+    }
+
+    // Clear frame ready state immediately when frames timeout to show logo
+    if (frames_timed_out) {
+        context->frame_ready = false;
+    }
+
+    // REMOVED: Self-healing TCP calls from render thread (causes UI blocking)
+    // Self-healing will be handled by a separate async mechanism
+    // For now, just detect timeout conditions without making network calls
+
+    if (should_show_logo) {
+        // Show C64U logo centered on black background
+        if (context->logo_texture) {
+            // First draw black background
+            gs_effect_t *solid = obs_get_base_effect(OBS_EFFECT_SOLID);
+            gs_eparam_t *color = gs_effect_get_param_by_name(solid, "color");
+
+            if (solid && color) {
+                gs_technique_t *tech = gs_effect_get_technique(solid, "Solid");
+                if (tech) {
+                    gs_technique_begin(tech);
+                    gs_technique_begin_pass(tech, 0);
+
+                    // Black background
+                    struct vec4 black = {0.0f, 0.0f, 0.0f, 1.0f};
+                    gs_effect_set_vec4(color, &black);
+                    gs_draw_sprite(NULL, 0, context->width, context->height);
+
+                    gs_technique_end_pass(tech);
+                    gs_technique_end(tech);
+                }
+            }
+
+            // Then draw centered logo
+            gs_effect_t *default_effect = obs_get_base_effect(OBS_EFFECT_DEFAULT);
+            if (default_effect) {
+                gs_technique_t *tech = gs_effect_get_technique(default_effect, "Draw");
+                if (tech) {
+                    uint32_t logo_width = gs_texture_get_width(context->logo_texture);
+                    uint32_t logo_height = gs_texture_get_height(context->logo_texture);
+
+                    // Calculate scale to fit logo within canvas while maintaining aspect ratio
+                    float scale_x = (float)context->width / (float)logo_width;
+                    float scale_y = (float)context->height / (float)logo_height;
+                    float scale = (scale_x < scale_y) ? scale_x : scale_y;
+
+                    // Limit scale to max 1.0 (don't enlarge small logos)
+                    if (scale > 1.0f) {
+                        scale = 1.0f;
+                    }
+
+                    // Calculate scaled dimensions
+                    float scaled_width = logo_width * scale;
+                    float scaled_height = logo_height * scale;
+
+                    // Center the scaled logo
+                    float x = (context->width - scaled_width) / 2.0f;
+                    float y = (context->height - scaled_height) / 2.0f;
+
+                    gs_matrix_push();
+                    gs_matrix_translate3f(x, y, 0.0f);
+                    gs_matrix_scale3f(scale, scale, 1.0f);
+
+                    gs_technique_begin(tech);
+                    gs_technique_begin_pass(tech, 0);
+
+                    gs_eparam_t *image = gs_effect_get_param_by_name(default_effect, "image");
+                    gs_effect_set_texture(image, context->logo_texture);
+
+                    gs_draw_sprite(context->logo_texture, 0, logo_width, logo_height);
+
+                    gs_technique_end_pass(tech);
+                    gs_technique_end(tech);
+
+                    gs_matrix_pop();
+                }
+            }
+        } else {
+            // Fallback to colored background if logo failed to load
+            gs_effect_t *solid = obs_get_base_effect(OBS_EFFECT_SOLID);
+            gs_eparam_t *color = gs_effect_get_param_by_name(solid, "color");
+
+            if (solid && color) {
+                gs_technique_t *tech = gs_effect_get_technique(solid, "Solid");
+                if (tech) {
+                    gs_technique_begin(tech);
+                    gs_technique_begin_pass(tech, 0);
+
+                    if (context->streaming) {
+                        // Show yellow if streaming but no frame ready yet
+                        struct vec4 yellow = {0.8f, 0.8f, 0.2f, 1.0f};
+                        gs_effect_set_vec4(color, &yellow);
+                    } else {
+                        // Show dark blue to indicate plugin loaded but no streaming
+                        struct vec4 dark_blue = {0.1f, 0.2f, 0.4f, 1.0f};
+                        gs_effect_set_vec4(color, &dark_blue);
+                    }
+
+                    gs_draw_sprite(NULL, 0, context->width, context->height);
+
+                    gs_technique_end_pass(tech);
+                    gs_technique_end(tech);
+                }
+            }
+        }
+    } else {
         // Render actual C64U video frame from front buffer
-
-        // Lock the frame buffer to ensure thread safety
         if (pthread_mutex_lock(&context->frame_mutex) == 0) {
             // Create texture from front buffer data
             gs_texture_t *texture = gs_texture_create(context->width, context->height, GS_RGBA, 1,
@@ -529,111 +725,7 @@ void c64u_render(void *data, gs_effect_t *effect)
 
             pthread_mutex_unlock(&context->frame_mutex);
         }
-    } else {
-        // Log render starvation - OBS is requesting frames but we have none
-        static uint64_t last_starvation_log = 0;
-        static uint32_t starvation_count = 0;
-        uint64_t now = os_gettime_ns();
-
-        if (context->streaming && !context->frame_ready) {
-            starvation_count++;
-            if (last_starvation_log == 0 || (now - last_starvation_log) >= 1000000000ULL) { // Log every second
-                C64U_LOG_WARNING(
-                    "🍽️ RENDER STARVATION: OBS requesting frames but none ready (%u starved renders in last period)",
-                    starvation_count);
-                starvation_count = 0;
-                last_starvation_log = now;
-            }
-        }
-
-        // Show colored background to indicate plugin state
-        gs_effect_t *solid = obs_get_base_effect(OBS_EFFECT_SOLID);
-        gs_eparam_t *color = gs_effect_get_param_by_name(solid, "color");
-
-        if (solid && color) {
-            gs_technique_t *tech = gs_effect_get_technique(solid, "Solid");
-            if (tech) {
-                gs_technique_begin(tech);
-                gs_technique_begin_pass(tech, 0);
-
-                if (context->streaming) {
-                    // Show yellow if streaming but no frame ready yet
-                    struct vec4 yellow = {0.8f, 0.8f, 0.2f, 1.0f};
-                    gs_effect_set_vec4(color, &yellow);
-                } else {
-                    // Show dark blue to indicate plugin loaded but no streaming
-                    struct vec4 dark_blue = {0.1f, 0.2f, 0.4f, 1.0f};
-                    gs_effect_set_vec4(color, &dark_blue);
-                }
-
-                gs_draw_sprite(NULL, 0, context->width, context->height);
-
-                gs_technique_end_pass(tech);
-                gs_technique_end(tech);
-            }
-        }
     }
-
-    // Log render timing diagnostics every 5 seconds
-    if (last_render_time > 0) {
-        uint64_t render_end = os_gettime_ns();
-        uint64_t render_duration = render_end - render_start;
-        uint64_t render_interval = render_start - last_render_time;
-
-        static uint64_t last_render_log = 0;
-        static uint32_t total_render_calls = 0;
-        static uint64_t total_render_time = 0;
-        static uint64_t min_render_interval = UINT64_MAX;
-        static uint64_t max_render_interval = 0;
-        static uint32_t irregular_renders = 0;
-
-        total_render_calls++;
-        total_render_time += render_duration;
-
-        // Track render call timing irregularities
-        if (render_interval > 0) {
-            uint64_t expected_render_interval = 16666667; // ~60Hz display refresh
-
-            min_render_interval = (render_interval < min_render_interval) ? render_interval : min_render_interval;
-            max_render_interval = (render_interval > max_render_interval) ? render_interval : max_render_interval;
-
-            // Detect irregular render calls that could cause perceived choppiness
-            if (render_interval < expected_render_interval * 0.5 || render_interval > expected_render_interval * 1.5) {
-                irregular_renders++;
-                if (irregular_renders % 10 == 1) { // Log every 10th irregular call to avoid spam
-                    double interval_ms = render_interval / 1000000.0;
-                    C64U_LOG_WARNING("🎭 RENDER IRREGULAR: %.2f ms interval (expected ~16.7ms for 60Hz display)",
-                                     interval_ms);
-                }
-            }
-        }
-
-        if (last_render_log == 0)
-            last_render_log = render_end;
-
-        uint64_t log_diff = render_end - last_render_log;
-        if (log_diff >= 5000000000ULL) { // Every 5 seconds
-            double duration = log_diff / 1000000000.0;
-            double render_fps = total_render_calls / duration;
-            double avg_render_time_ms = total_render_time / (total_render_calls * 1000000.0);
-            double min_interval_ms = min_render_interval / 1000000.0;
-            double max_interval_ms = max_render_interval / 1000000.0;
-
-            C64U_LOG_INFO("🎨 RENDER: %.1f fps | %.2f ms avg render time | %u total calls", render_fps,
-                          avg_render_time_ms, render_calls);
-            C64U_LOG_INFO("🎭 RENDER TIMING: Min interval %.2f ms | Max interval %.2f ms | Irregular calls: %u",
-                          min_interval_ms, max_interval_ms, irregular_renders);
-
-            // Reset counters
-            total_render_calls = 0;
-            total_render_time = 0;
-            min_render_interval = UINT64_MAX;
-            max_render_interval = 0;
-            irregular_renders = 0;
-            last_render_log = render_end;
-        }
-    }
-    last_render_time = render_start;
 }
 
 uint32_t c64u_get_width(void *data)
@@ -694,10 +786,10 @@ obs_properties_t *c64u_properties(void *data)
     obs_property_set_long_description(audio_port_prop, "UDP port for audio stream from C64 Ultimate");
 
     // Rendering Delay
-    obs_property_t *delay_prop =
-        obs_properties_add_int_slider(props, "render_delay_frames", "Render Delay (frames)", 0, 100, 1);
+    obs_property_t *delay_prop = obs_properties_add_int_slider(props, "render_delay_frames", "Render Delay (frames)", 0,
+                                                               C64U_MAX_RENDER_DELAY_FRAMES, 1);
     obs_property_set_long_description(
-        delay_prop, "Delay frames before rendering to smooth UDP packet loss/reordering (default: 10)");
+        delay_prop, "Delay frames before rendering to smooth UDP packet loss/reordering (default: 3)");
 
     // Recording Group (compact layout)
     obs_property_t *recording_group =
@@ -732,18 +824,34 @@ void c64u_defaults(obs_data_t *settings)
     obs_data_set_default_string(settings, "obs_ip_address", ""); // Empty by default, will be auto-detected
     obs_data_set_default_int(settings, "video_port", C64U_DEFAULT_VIDEO_PORT);
     obs_data_set_default_int(settings, "audio_port", C64U_DEFAULT_AUDIO_PORT);
-    obs_data_set_default_int(settings, "render_delay_frames", 10); // Default 10 frames delay
+    obs_data_set_default_int(settings, "render_delay_frames", C64U_DEFAULT_RENDER_DELAY_FRAMES);
 
     // Frame saving defaults
     obs_data_set_default_bool(settings, "save_frames", false); // Disabled by default
 
-    // Platform-specific default recording folder
+    // Platform-specific default recording folder (absolute paths to avoid tilde expansion issues)
+    char *home_dir = getenv("HOME");
 #ifdef _WIN32
     const char *default_folder = "%USERPROFILE%\\Documents\\obs-studio\\c64u\\recordings";
-#elif defined(__APPLE__)
-    const char *default_folder = "~/Documents/obs-studio/c64u/recordings";
+#else
+    // Use automatic (stack) variables instead of static to avoid memory leak reports
+    char platform_path[512];
+#if defined(__APPLE__)
+    if (home_dir) {
+        snprintf(platform_path, sizeof(platform_path), "%s/Documents/obs-studio/c64u/recordings", home_dir);
+    } else {
+        snprintf(platform_path, sizeof(platform_path), "/Users/%s/Documents/obs-studio/c64u/recordings",
+                 getenv("USER") ?: "user");
+    }
 #else // Linux and other Unix-like systems
-    const char *default_folder = "~/Documents/obs-studio/c64u/recordings";
+    if (home_dir) {
+        snprintf(platform_path, sizeof(platform_path), "%s/Documents/obs-studio/c64u/recordings", home_dir);
+    } else {
+        snprintf(platform_path, sizeof(platform_path), "/home/%s/Documents/obs-studio/c64u/recordings",
+                 getenv("USER") ?: "user");
+    }
+#endif
+    const char *default_folder = platform_path;
 #endif
     obs_data_set_default_string(settings, "save_folder", default_folder);
 

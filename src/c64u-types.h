@@ -3,6 +3,7 @@
 
 #include <obs-module.h>
 #include <media-io/audio-io.h>
+#include <graphics/graphics.h>
 #include <pthread.h>
 #include <stdint.h>
 #include <stdbool.h>
@@ -91,6 +92,17 @@ struct c64u_source {
     uint64_t last_frame_time;
     uint64_t frame_interval_ns; // Target frame interval (20ms for 50Hz PAL)
 
+    // Async retry mechanism for network recovery
+    pthread_t retry_thread;        // Background thread for async retries
+    bool retry_thread_active;      // Is retry thread running?
+    pthread_mutex_t retry_mutex;   // Mutex for retry state
+    pthread_cond_t retry_cond;     // Condition variable for retry signaling
+    uint64_t last_udp_packet_time; // Timestamp of last UDP packet
+    bool needs_retry;              // Flag indicating retry is needed
+    uint32_t retry_count;          // Number of retry attempts
+    uint32_t consecutive_failures; // Number of consecutive TCP failures
+    bool retry_shutdown;           // Signal to shutdown retry thread
+
     // Rendering delay
     uint32_t render_delay_frames;   // Delay in frames before making buffer available to OBS
     uint32_t *delayed_frame_queue;  // Circular buffer for delayed frames
@@ -102,6 +114,10 @@ struct c64u_source {
 
     // Auto-start control
     bool auto_start_attempted;
+
+    // Logo display for network issues
+    gs_texture_t *logo_texture; // Loaded logo texture
+    bool logo_load_attempted;   // Have we tried to load the logo?
 
     // Frame saving for analysis
     bool save_frames;
