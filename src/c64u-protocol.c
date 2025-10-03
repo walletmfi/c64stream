@@ -187,12 +187,12 @@ void *async_retry_thread(void *data)
             context->retry_count++;
 
             // Adaptive retry delay based on consecutive failures
-            uint32_t retry_delay = 300; // Base 300ms delay
+            uint32_t retry_delay = 100; // Base 100ms delay
             if (context->consecutive_failures > 0 && !tcp_success) {
-                // Exponential backoff: 300ms * 1.5^failures, capped at 3000ms
-                retry_delay = 300;
+                // Exponential backoff: 100ms * 1.3^failures, capped at 3000ms
+                retry_delay = 100;
                 for (uint32_t i = 0; i < context->consecutive_failures && retry_delay < 3000; i++) {
-                    retry_delay = (retry_delay * 3) / 2; // Multiply by 1.5
+                    retry_delay = (uint32_t)(retry_delay * 1.3); // Multiply by 1.3
                 }
                 if (retry_delay > 3000)
                     retry_delay = 3000; // Cap at 3 seconds
