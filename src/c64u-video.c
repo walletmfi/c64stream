@@ -9,6 +9,12 @@
 #include "c64u-network.h"
 #include "c64u-record.h"
 
+#ifdef _WIN32
+#include <windows.h>
+#include <timeapi.h>
+#pragma comment(lib, "winmm.lib") // For timeBeginPeriod/timeEndPeriod
+#endif
+
 #include "c64u-protocol.h"
 
 // VIC-II color palette (16 colors) in RGBA format
@@ -260,8 +266,23 @@ void *video_thread_func(void *data)
     static int packet_count = 0;
 
     C64U_LOG_DEBUG("Video receiver thread started on port %u", context->video_port);
+
+#ifdef _WIN32
+    // Windows: Increase thread priority for video receiver to reduce scheduling delays
+    // High-frequency UDP packet reception (3400+ packets/sec) benefits from higher priority
+    HANDLE thread_handle = GetCurrentThread();
+    if (SetThreadPriority(thread_handle, THREAD_PRIORITY_ABOVE_NORMAL)) {
+        C64U_LOG_DEBUG("Set video receiver thread to above-normal priority on Windows");
+    } else {
+        C64U_LOG_WARNING("Failed to set video receiver thread priority on Windows");
+    }
+
+    // Windows: Set thread to use high-resolution timing for better scheduling precision
+    timeBeginPeriod(1); // Request 1ms timer resolution
+#endif
+
     // Video receiver thread initialized
-    C64U_LOG_DEBUG("Video thread function started");
+    C64U_LOG_DEBUG("Video thread function started with optimized scheduling");
 
     while (context->thread_active) {
         ssize_t received = recv(context->video_socket, (char *)packet, (int)sizeof(packet), 0);
@@ -270,12 +291,17 @@ void *video_thread_func(void *data)
             int error = c64u_get_socket_error();
 #ifdef _WIN32
             if (error == WSAEWOULDBLOCK) {
-#else
-            if (error == EAGAIN || error == EWOULDBLOCK) {
-#endif
-                os_sleep_ms(1); // 1ms delay
+                // Windows: Use shorter sleep for high-frequency packet streams
+                // C64U sends 3400+ packets/sec, so 1ms sleep can miss multiple packets
+                Sleep(0); // Yield to other threads, then retry immediately
                 continue;
             }
+#else
+            if (error == EAGAIN || error == EWOULDBLOCK) {
+                os_sleep_ms(1); // 1ms delay on Linux (usually works fine)
+                continue;
+            }
+#endif
             C64U_LOG_ERROR("Video socket error: %s", c64u_get_socket_error_string(error));
             break;
         }
@@ -627,5 +653,11 @@ void *video_thread_func(void *data)
     }
 
     C64U_LOG_DEBUG("Video receiver thread stopped");
+
+#ifdef _WIN32
+    // Windows: Restore default timer resolution
+    timeEndPeriod(1);
+#endif
+
     return NULL;
 }

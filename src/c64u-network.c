@@ -157,6 +157,41 @@ socket_t create_udp_socket(uint32_t port)
         return INVALID_SOCKET_VALUE;
     }
 
+    // Configure UDP socket buffer sizes for high-frequency packet reception
+    // C64U video stream: ~3400 packets/sec × 780 bytes = ~2.6 Mbps
+    // We need large enough buffers to handle temporary bursts and OS scheduling delays
+#ifdef _WIN32
+    // Windows: Increase receive buffer to handle high packet rates
+    // Default Windows UDP buffer is often only 8KB, insufficient for C64U video streams
+    int recv_buffer_size = 2 * 1024 * 1024; // 2MB receive buffer
+    if (setsockopt(sock, SOL_SOCKET, SO_RCVBUF, (char *)&recv_buffer_size, sizeof(recv_buffer_size)) < 0) {
+        int error = c64u_get_socket_error();
+        obs_log(LOG_WARNING, "[C64U] Failed to set UDP receive buffer size to %d bytes: %s", recv_buffer_size,
+                c64u_get_socket_error_string(error));
+    } else {
+        obs_log(LOG_DEBUG, "[C64U] Set UDP receive buffer to %d bytes for high-frequency packet handling",
+                recv_buffer_size);
+    }
+
+    // Windows: Disable UDP checksum validation for performance (optional optimization)
+    // This can reduce CPU overhead for high-frequency UDP streams
+    BOOL udp_nochecksum = FALSE; // Keep checksums enabled for reliability
+    if (setsockopt(sock, IPPROTO_UDP, UDP_NOCHECKSUM, (char *)&udp_nochecksum, sizeof(udp_nochecksum)) < 0) {
+        // This option may not be available on all Windows versions, so don't log an error
+        obs_log(LOG_DEBUG, "[C64U] UDP_NOCHECKSUM option not supported on this system");
+    }
+#else
+    // Linux/macOS: Also increase receive buffer, but usually less critical than Windows
+    int recv_buffer_size = 1 * 1024 * 1024; // 1MB receive buffer (Linux default is often larger)
+    if (setsockopt(sock, SOL_SOCKET, SO_RCVBUF, &recv_buffer_size, sizeof(recv_buffer_size)) < 0) {
+        int error = c64u_get_socket_error();
+        obs_log(LOG_WARNING, "[C64U] Failed to set UDP receive buffer size to %d bytes: %s", recv_buffer_size,
+                c64u_get_socket_error_string(error));
+    } else {
+        obs_log(LOG_DEBUG, "[C64U] Set UDP receive buffer to %d bytes", recv_buffer_size);
+    }
+#endif
+
     struct sockaddr_in addr;
     memset(&addr, 0, sizeof(addr));
     addr.sin_family = AF_INET;
@@ -185,7 +220,9 @@ socket_t create_udp_socket(uint32_t port)
     }
 #endif
 
-    obs_log(LOG_DEBUG, "[C64U] Created UDP socket on port %u", port);
+    obs_log(LOG_INFO,
+            "[C64U] Created optimized UDP socket on port %u with large receive buffer for high-frequency packets",
+            port);
     return sock;
 }
 
