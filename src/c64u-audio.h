@@ -7,4 +7,4 @@ struct c64u_source;
 // Audio thread function
 void *audio_thread_func(void *data);
 
-#endif  // C64U_AUDIO_H
+#endif // C64U_AUDIO_H

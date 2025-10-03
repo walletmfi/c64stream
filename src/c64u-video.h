@@ -36,4 +36,4 @@ void clear_delay_queue(struct c64u_source *context);
 // Video thread function
 void *video_thread_func(void *data);
 
-#endif  // C64U_VIDEO_H
+#endif // C64U_VIDEO_H
