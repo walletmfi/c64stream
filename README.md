@@ -68,8 +68,8 @@ See the [OBS Plugins Guide](https://obsproject.com/kb/plugins-guide).
 
 **Getting Your C64 on Stream:**
 
-1. **Add Source:** In OBS, create a new source and select "C64 Ultimate Stream" from the available types
-2. **Open Properties:** Select the "C64 Ultimate Stream" source in your sources list, then click the "Properties" button to open the configuration dialog
+1. **Add Source:** In OBS, create a new source and select "C64U" from the available types
+2. **Open Properties:** Select the "C64U" source in your sources list, then click the "Properties" button to open the configuration dialog
 3. **Debug Logging:** Enable detailed logging for debugging connection issues (optional)
 4. **Configure Network Settings:**
    - **C64 Ultimate IP:** Enter your Ultimate device's IP address to enable automatic streaming control from OBS (recommended for convenience), or set to `0.0.0.0` to accept streams from any C64 Ultimate on your network (requires manual control from the device)
