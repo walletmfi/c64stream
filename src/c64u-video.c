@@ -104,9 +104,10 @@ void init_delay_queue(struct c64u_source *context)
 {
     if (pthread_mutex_lock(&context->delay_mutex) == 0) {
         // Allocate delay queue buffers if needed (max delay + buffer)
-        uint32_t needed_size = context->render_delay_frames + 10; // Extra buffer for safety
+        uint32_t needed_size = context->render_delay_frames + C64U_RENDER_BUFFER_SAFETY_MARGIN;
 
-        if (context->delayed_frame_queue == NULL || needed_size > 110) { // Current max allocated
+        if (context->delayed_frame_queue == NULL ||
+            needed_size > (C64U_MAX_RENDER_DELAY_FRAMES + C64U_RENDER_BUFFER_SAFETY_MARGIN)) {
             if (context->delayed_frame_queue) {
                 bfree(context->delayed_frame_queue);
             }
@@ -156,7 +157,7 @@ bool enqueue_delayed_frame(struct c64u_source *context, struct frame_assembly *f
         }
     }
 
-    uint32_t max_queue_size = context->render_delay_frames + 10;
+    uint32_t max_queue_size = context->render_delay_frames + C64U_RENDER_BUFFER_SAFETY_MARGIN;
 
     // If queue is full, remove oldest frame
     if (context->delay_queue_size >= max_queue_size) {
@@ -229,7 +230,8 @@ bool dequeue_delayed_frame(struct c64u_source *context)
         pthread_mutex_unlock(&context->frame_mutex);
 
         // Remove frame from queue
-        context->delay_queue_head = (context->delay_queue_head + 1) % (context->render_delay_frames + 10);
+        context->delay_queue_head =
+            (context->delay_queue_head + 1) % (context->render_delay_frames + C64U_RENDER_BUFFER_SAFETY_MARGIN);
         context->delay_queue_size--;
 
         pthread_mutex_unlock(&context->delay_mutex);

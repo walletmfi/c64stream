@@ -3,6 +3,7 @@
 #include <util/platform.h>
 #include <util/threading.h>
 #include <string.h>
+#include <inttypes.h>
 #include <pthread.h>
 #include "c64u-logging.h"
 #include "c64u-source.h"
@@ -13,6 +14,19 @@
 #include "c64u-audio.h"
 #include "c64u-record.h"
 #include "plugin-support.h"
+
+// Helper function to safely close and reset sockets
+static void close_and_reset_sockets(struct c64u_source *context)
+{
+    if (context->video_socket != INVALID_SOCKET_VALUE) {
+        close(context->video_socket);
+        context->video_socket = INVALID_SOCKET_VALUE;
+    }
+    if (context->audio_socket != INVALID_SOCKET_VALUE) {
+        close(context->audio_socket);
+        context->audio_socket = INVALID_SOCKET_VALUE;
+    }
+}
 
 // Load the C64U logo texture from module data directory
 static gs_texture_t *load_logo_texture(void)
@@ -168,7 +182,7 @@ void *c64u_create(obs_data_t *settings, obs_source_t *source)
     // Initialize rendering delay from settings
     context->render_delay_frames = (uint32_t)obs_data_get_int(settings, "render_delay_frames");
     if (context->render_delay_frames == 0) {
-        context->render_delay_frames = 10; // Default value
+        context->render_delay_frames = C64U_DEFAULT_RENDER_DELAY_FRAMES;
     }
 
     // Initialize delay queue - allocate for maximum delay + some extra buffer
@@ -241,14 +255,7 @@ void c64u_destroy(void *data)
         // Note: No TCP calls in destroy - async system handles cleanup
 
         // Close sockets
-        if (context->video_socket != INVALID_SOCKET_VALUE) {
-            close(context->video_socket);
-            context->video_socket = INVALID_SOCKET_VALUE;
-        }
-        if (context->audio_socket != INVALID_SOCKET_VALUE) {
-            close(context->audio_socket);
-            context->audio_socket = INVALID_SOCKET_VALUE;
-        }
+        close_and_reset_sockets(context);
 
         // Wait for threads to finish
         if (context->video_thread_active) {
@@ -411,14 +418,7 @@ void c64u_start_streaming(struct c64u_source *context)
 
     if (context->video_socket == INVALID_SOCKET_VALUE || context->audio_socket == INVALID_SOCKET_VALUE) {
         C64U_LOG_ERROR("Failed to create UDP sockets for streaming");
-        if (context->video_socket != INVALID_SOCKET_VALUE) {
-            close(context->video_socket);
-            context->video_socket = INVALID_SOCKET_VALUE;
-        }
-        if (context->audio_socket != INVALID_SOCKET_VALUE) {
-            close(context->audio_socket);
-            context->audio_socket = INVALID_SOCKET_VALUE;
-        }
+        close_and_reset_sockets(context);
         return;
     }
 
@@ -436,10 +436,7 @@ void c64u_start_streaming(struct c64u_source *context)
         C64U_LOG_ERROR("Failed to create video receiver thread");
         context->streaming = false;
         context->thread_active = false;
-        close(context->video_socket);
-        close(context->audio_socket);
-        context->video_socket = INVALID_SOCKET_VALUE;
-        context->audio_socket = INVALID_SOCKET_VALUE;
+        close_and_reset_sockets(context);
         return;
     }
     context->video_thread_active = true;
@@ -452,10 +449,7 @@ void c64u_start_streaming(struct c64u_source *context)
             pthread_join(context->video_thread, NULL);
             context->video_thread_active = false;
         }
-        close(context->video_socket);
-        close(context->audio_socket);
-        context->video_socket = INVALID_SOCKET_VALUE;
-        context->audio_socket = INVALID_SOCKET_VALUE;
+        close_and_reset_sockets(context);
         return;
     }
     context->audio_thread_active = true;
@@ -481,14 +475,7 @@ void c64u_stop_streaming(struct c64u_source *context)
     // Note: No TCP stop commands in OBS callback thread - async system handles cleanup
 
     // Close sockets to wake up threads
-    if (context->video_socket != INVALID_SOCKET_VALUE) {
-        close(context->video_socket);
-        context->video_socket = INVALID_SOCKET_VALUE;
-    }
-    if (context->audio_socket != INVALID_SOCKET_VALUE) {
-        close(context->audio_socket);
-        context->audio_socket = INVALID_SOCKET_VALUE;
-    }
+    close_and_reset_sockets(context);
 
     // Wait for threads to finish
     if (context->video_thread_active && pthread_join(context->video_thread, NULL) != 0) {
@@ -560,7 +547,7 @@ void c64u_render(void *data, gs_effect_t *effect)
     bool frames_timed_out = false;
     if (context->frame_ready && context->last_frame_time > 0) {
         uint64_t frame_age = now - context->last_frame_time;
-        frames_timed_out = (frame_age > 500000000ULL); // 500ms
+        frames_timed_out = (frame_age > C64U_FRAME_TIMEOUT_NS);
 
         // Trigger async retry when frames timeout
         if (frames_timed_out) {
@@ -579,11 +566,12 @@ void c64u_render(void *data, gs_effect_t *effect)
     // Debug logging (only when debug logging is enabled)
     if (c64u_debug_logging) {
         static uint64_t last_frame_debug_log = 0;
-        if (last_frame_debug_log == 0 || (now - last_frame_debug_log) >= 2000000000ULL) { // Every 2 seconds
+        if (last_frame_debug_log == 0 || (now - last_frame_debug_log) >= C64U_DEBUG_LOG_INTERVAL_NS) {
             uint64_t frame_age = (context->last_frame_time > 0) ? (now - context->last_frame_time) / 1000000000ULL
                                                                 : 999;
             C64U_LOG_DEBUG(
-                "🎬 Frame state: should_show_logo=%d, streaming=%d, frame_ready=%d, frames_timed_out=%d, frame_age=%lus",
+                "🎬 Frame state: should_show_logo=%d, streaming=%d, frame_ready=%d, frames_timed_out=%d, frame_age=%" PRIu64
+                "s",
                 should_show_logo, context->streaming, context->frame_ready, frames_timed_out, frame_age);
             last_frame_debug_log = now;
         }
@@ -591,7 +579,7 @@ void c64u_render(void *data, gs_effect_t *effect)
 
     // Additional debug when logo should be showing
     static uint64_t last_debug_log = 0;
-    if (should_show_logo && (last_debug_log == 0 || (now - last_debug_log) >= 2000000000ULL)) { // Every 2 seconds
+    if (should_show_logo && (last_debug_log == 0 || (now - last_debug_log) >= C64U_DEBUG_LOG_INTERVAL_NS)) {
         const char *reason = !context->streaming            ? "not_streaming"
                              : !context->frame_ready        ? "no_frames"
                              : !context->frame_buffer_front ? "no_buffer"
@@ -798,10 +786,10 @@ obs_properties_t *c64u_properties(void *data)
     obs_property_set_long_description(audio_port_prop, "UDP port for audio stream from C64 Ultimate");
 
     // Rendering Delay
-    obs_property_t *delay_prop =
-        obs_properties_add_int_slider(props, "render_delay_frames", "Render Delay (frames)", 0, 100, 1);
+    obs_property_t *delay_prop = obs_properties_add_int_slider(props, "render_delay_frames", "Render Delay (frames)", 0,
+                                                               C64U_MAX_RENDER_DELAY_FRAMES, 1);
     obs_property_set_long_description(
-        delay_prop, "Delay frames before rendering to smooth UDP packet loss/reordering (default: 10)");
+        delay_prop, "Delay frames before rendering to smooth UDP packet loss/reordering (default: 3)");
 
     // Recording Group (compact layout)
     obs_property_t *recording_group =
@@ -836,7 +824,7 @@ void c64u_defaults(obs_data_t *settings)
     obs_data_set_default_string(settings, "obs_ip_address", ""); // Empty by default, will be auto-detected
     obs_data_set_default_int(settings, "video_port", C64U_DEFAULT_VIDEO_PORT);
     obs_data_set_default_int(settings, "audio_port", C64U_DEFAULT_AUDIO_PORT);
-    obs_data_set_default_int(settings, "render_delay_frames", 10); // Default 10 frames delay
+    obs_data_set_default_int(settings, "render_delay_frames", C64U_DEFAULT_RENDER_DELAY_FRAMES);
 
     // Frame saving defaults
     obs_data_set_default_bool(settings, "save_frames", false); // Disabled by default
@@ -845,24 +833,25 @@ void c64u_defaults(obs_data_t *settings)
     char *home_dir = getenv("HOME");
 #ifdef _WIN32
     const char *default_folder = "%USERPROFILE%\\Documents\\obs-studio\\c64u\\recordings";
-#elif defined(__APPLE__)
-    static char mac_path[512];
+#else
+    // Use automatic (stack) variables instead of static to avoid memory leak reports
+    char platform_path[512];
+#if defined(__APPLE__)
     if (home_dir) {
-        snprintf(mac_path, sizeof(mac_path), "%s/Documents/obs-studio/c64u/recordings", home_dir);
+        snprintf(platform_path, sizeof(platform_path), "%s/Documents/obs-studio/c64u/recordings", home_dir);
     } else {
-        snprintf(mac_path, sizeof(mac_path), "/Users/%s/Documents/obs-studio/c64u/recordings",
+        snprintf(platform_path, sizeof(platform_path), "/Users/%s/Documents/obs-studio/c64u/recordings",
                  getenv("USER") ?: "user");
     }
-    const char *default_folder = mac_path;
 #else // Linux and other Unix-like systems
-    static char linux_path[512];
     if (home_dir) {
-        snprintf(linux_path, sizeof(linux_path), "%s/Documents/obs-studio/c64u/recordings", home_dir);
+        snprintf(platform_path, sizeof(platform_path), "%s/Documents/obs-studio/c64u/recordings", home_dir);
     } else {
-        snprintf(linux_path, sizeof(linux_path), "/home/%s/Documents/obs-studio/c64u/recordings",
+        snprintf(platform_path, sizeof(platform_path), "/home/%s/Documents/obs-studio/c64u/recordings",
                  getenv("USER") ?: "user");
     }
-    const char *default_folder = linux_path;
+#endif
+    const char *default_folder = platform_path;
 #endif
     obs_data_set_default_string(settings, "save_folder", default_folder);
 

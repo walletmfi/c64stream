@@ -4,6 +4,15 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+// Rendering defaults
+#define C64U_DEFAULT_RENDER_DELAY_FRAMES 3  // Default frame delay to smooth UDP packet loss/reordering
+#define C64U_MAX_RENDER_DELAY_FRAMES 100    // Maximum allowed render delay frames
+#define C64U_RENDER_BUFFER_SAFETY_MARGIN 10 // Extra buffer frames for queue safety
+
+// Timing constants (nanoseconds)
+#define C64U_FRAME_TIMEOUT_NS 500000000ULL       // 500ms - timeout for frame freshness detection
+#define C64U_DEBUG_LOG_INTERVAL_NS 2000000000ULL // 2 seconds - interval for debug logging
+
 // Forward declarations
 struct c64u_source;
 struct frame_assembly;

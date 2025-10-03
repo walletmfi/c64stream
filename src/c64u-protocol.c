@@ -7,6 +7,7 @@
 #include "c64u-network.h"
 #include "c64u-source.h"
 #include "c64u-types.h"
+#include "c64u-video.h"
 
 void send_control_command(struct c64u_source *context, bool enable, uint8_t stream_id)
 {
@@ -146,7 +147,7 @@ void *async_retry_thread(void *data)
         // Check if we need to retry based on timeout or explicit request
         uint64_t now = os_gettime_ns();
         uint64_t time_since_udp = now - context->last_udp_packet_time;
-        bool should_retry = context->needs_retry || (time_since_udp > 500000000ULL); // 500ms timeout
+        bool should_retry = context->needs_retry || (time_since_udp > C64U_FRAME_TIMEOUT_NS);
 
         if (should_retry) {
             context->needs_retry = false;
