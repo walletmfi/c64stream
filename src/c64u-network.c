@@ -148,6 +148,70 @@ const char *c64u_get_socket_error_string(int error)
 #endif
 }
 
+// Resolve hostname to IP address with fallback to dotted hostname
+bool c64u_resolve_hostname(const char *hostname, char *ip_buffer, size_t buffer_size)
+{
+    if (!hostname || !ip_buffer || buffer_size < 16) {
+        return false;
+    }
+
+    // If it's already an IP address, copy it directly
+    struct sockaddr_in sa;
+    if (inet_pton(AF_INET, hostname, &sa.sin_addr) == 1) {
+        strncpy(ip_buffer, hostname, buffer_size - 1);
+        ip_buffer[buffer_size - 1] = '\0';
+        obs_log(LOG_DEBUG, "[C64U] Input '%s' is already an IP address", hostname);
+        return true;
+    }
+
+    // Try to resolve hostname as-is first
+    struct addrinfo hints, *result = NULL;
+    memset(&hints, 0, sizeof(hints));
+    hints.ai_family = AF_INET; // IPv4 only
+    hints.ai_socktype = SOCK_STREAM;
+
+    obs_log(LOG_DEBUG, "[C64U] Attempting to resolve hostname: %s", hostname);
+
+    int status = getaddrinfo(hostname, NULL, &hints, &result);
+    if (status == 0 && result != NULL) {
+        struct sockaddr_in *addr_in = (struct sockaddr_in *)result->ai_addr;
+        if (inet_ntop(AF_INET, &addr_in->sin_addr, ip_buffer, buffer_size) != NULL) {
+            obs_log(LOG_INFO, "[C64U] Successfully resolved '%s' to IP: %s", hostname, ip_buffer);
+            freeaddrinfo(result);
+            return true;
+        }
+    }
+
+    if (result) {
+        freeaddrinfo(result);
+    }
+
+    // If hostname resolution failed, try with dot suffix (for FQDN)
+    // Many networks require FQDN for proper resolution
+    char hostname_with_dot[256];
+    snprintf(hostname_with_dot, sizeof(hostname_with_dot), "%s.", hostname);
+
+    obs_log(LOG_DEBUG, "[C64U] Trying FQDN resolution: %s", hostname_with_dot);
+
+    status = getaddrinfo(hostname_with_dot, NULL, &hints, &result);
+    if (status == 0 && result != NULL) {
+        struct sockaddr_in *addr_in = (struct sockaddr_in *)result->ai_addr;
+        if (inet_ntop(AF_INET, &addr_in->sin_addr, ip_buffer, buffer_size) != NULL) {
+            obs_log(LOG_INFO, "[C64U] Successfully resolved '%s' to IP: %s", hostname_with_dot, ip_buffer);
+            freeaddrinfo(result);
+            return true;
+        }
+    }
+
+    if (result) {
+        freeaddrinfo(result);
+    }
+
+    obs_log(LOG_WARNING, "[C64U] Failed to resolve hostname '%s' (tried both '%s' and '%s')", hostname, hostname,
+            hostname_with_dot);
+    return false;
+}
+
 socket_t create_udp_socket(uint32_t port)
 {
     socket_t sock = socket(AF_INET, SOCK_DGRAM, 0);

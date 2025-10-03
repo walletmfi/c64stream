@@ -12,7 +12,7 @@
 #define C64U_CONTROL_PORT 64
 #define C64U_DEFAULT_VIDEO_PORT 11000
 #define C64U_DEFAULT_AUDIO_PORT 11001
-#define C64U_DEFAULT_IP "0.0.0.0"
+#define C64U_DEFAULT_HOST "c64u"
 
 // Video format constants
 #define C64U_PAL_WIDTH 384

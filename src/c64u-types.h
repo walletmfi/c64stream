@@ -31,7 +31,8 @@ struct c64u_source {
     obs_source_t *source;
 
     // Configuration
-    char ip_address[64];     // C64 IP Address (C64 Ultimate device)
+    char hostname[64];       // C64U hostname or IP as entered by user
+    char ip_address[64];     // C64U IP Address (resolved from hostname)
     char obs_ip_address[64]; // OBS IP Address (this machine)
     bool auto_detect_ip;
     bool initial_ip_detected; // Flag to track if initial IP detection was done

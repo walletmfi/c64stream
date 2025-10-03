@@ -55,8 +55,9 @@ typedef int socket_t;
 bool c64u_init_networking(void);
 void c64u_cleanup_networking(void);
 
-// IP detection
+// IP detection and hostname resolution
 bool c64u_detect_local_ip(char *ip_buffer, size_t buffer_size);
+bool c64u_resolve_hostname(const char *hostname, char *ip_buffer, size_t buffer_size);
 
 // Socket operations
 socket_t create_udp_socket(uint32_t port);
