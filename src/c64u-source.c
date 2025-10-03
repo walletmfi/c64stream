@@ -743,7 +743,7 @@ uint32_t c64u_get_height(void *data)
 const char *c64u_get_name(void *unused)
 {
     UNUSED_PARAMETER(unused);
-    return "C64U Display";
+    return obs_module_text("C64UDisplay");
 }
 
 obs_properties_t *c64u_properties(void *data)
