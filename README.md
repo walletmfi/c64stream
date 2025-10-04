@@ -51,6 +51,9 @@ New-NetFirewallRule -DisplayName "C64U" -Direction Inbound -Protocol UDP -LocalP
 2. Install `c64u-plugin-for-obs-*-macos-universal.pkg` to `~/Library/Application Support/obs-studio/plugins`
 3. Restart OBS Studio
 
+> [!NOTE]
+> macOS support is currently under active development and is not yet fully functional. We're working to resolve compatibility issues and will update this documentation when macOS builds are stable.
+
 **Linux (Ubuntu/Debian):**
 1. Close OBS Studio
 2. Install `c64u-plugin-for-obs-*-x86_64-linux-gnu.deb` to `~/.config/obs-studio/plugins` by running:
