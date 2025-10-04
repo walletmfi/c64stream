@@ -67,7 +67,7 @@ if(AUTHORITATIVE_VERSION)
     WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
     RESULT_VARIABLE sed_result
   )
-  
+
   if(sed_result EQUAL 0)
     execute_process(
       COMMAND ${CMAKE_COMMAND} -E rename "${CMAKE_SOURCE_DIR}/buildspec.json.tmp" "${CMAKE_SOURCE_DIR}/buildspec.json"
