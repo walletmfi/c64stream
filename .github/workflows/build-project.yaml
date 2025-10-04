@@ -69,9 +69,9 @@ jobs:
           plugin_name="$(jq -r '.name' buildspec.json)"
           plugin_display_name="$(jq -r '.displayName // empty' buildspec.json)"
 
-          # For PR builds, calculate the same development version that CMake uses
+          # Version resolution logic - match CMakeLists.txt behavior exactly
           if [[ "${GITHUB_EVENT_NAME}" == "pull_request" ]]; then
-            # Match CMake logic: MAJOR.MINOR.(9000 + GITHUB_RUN_NUMBER)
+            # For PR builds, calculate the same development version that CMake uses
             base_version="$(jq -r '.version' buildspec.json)"
             IFS='.' read -r major minor patch <<< "${base_version}"
             if [[ -n "${GITHUB_RUN_NUMBER}" ]]; then
@@ -82,7 +82,15 @@ jobs:
               plugin_version="${major}.${minor}.999"
             fi
           else
-            plugin_version="$(jq -r '.version' buildspec.json)"
+            # For non-PR builds, use git tag detection (same logic as CMakeLists.txt)
+            git_version_tag=$(git describe --tags --always --dirty 2>/dev/null || echo "")
+            if [[ "${git_version_tag}" =~ ^v?([0-9]+\.[0-9]+\.[0-9]+) ]]; then
+              # Extract version number from tag (e.g., "v1.2.3" -> "1.2.3", "1.2.3-dirty" -> "1.2.3")
+              plugin_version=$(echo "${git_version_tag}" | sed -E 's/^v?([0-9]+\.[0-9]+\.[0-9]+).*/\1/')
+            else
+              # Fallback to buildspec.json version if no proper git tag is available
+              plugin_version="$(jq -r '.version' buildspec.json)"
+            fi
           fi
 
           if [[ "${plugin_display_name}" ]]; then
