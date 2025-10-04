@@ -3,7 +3,7 @@
 ## Problem Analysis
 
 ### Symptoms
-On Windows, the C64U plugin was experiencing frequent UDP packet out-of-sequence errors:
+On Windows, C64 Stream was experiencing frequent UDP packet out-of-sequence errors:
 ```
 [C64] 🔴 UDP OUT-OF-SEQUENCE: Expected seq 23887, got 23903 (skipped 16 packets)
 [C64] 🔴 UDP OUT-OF-SEQUENCE: Expected seq 23905, got 23912 (skipped 7 packets)

@@ -3,13 +3,13 @@
 
 Bridge your Commodore 64 Ultimate directly to [OBS Studio](https://obsproject.com/) for seamless streaming and recording over your network connection.
 
-<img src="./doc/img/c64stream.png" alt="C64U Logo" width="200"/>
+<img src="./doc/img/c64stream.png" alt="C64 Stream Logo" width="200"/>
 
 This plugin implements a native OBS source that receives video and audio streams from C64 Ultimate devices (Commodore 64 Ultimate or Ultimate 64) via the Ultimate's built-in data streaming capability.
 
 The plugin connects directly to the Ultimate's network interface, eliminating the need for capture cards or composite video connections.
 
-![C64U Main Screen](./doc/img/ObsMainScreen.png "C64U Main Screen")
+![C64 Stream Main Screen](./doc/img/ObsMainScreen.png "C64 Stream Main Screen")
 
 
 **Features:**
@@ -67,7 +67,7 @@ See the [OBS Plugins Guide](https://obsproject.com/kb/plugins-guide).
 
 ### Configuration ⚙️
 
-![C64U Configuration](./doc/img/ObsPluginProperties.png "C64U Configuration")
+![C64 Stream Configuration](./doc/img/ObsPluginProperties.png "C64 Stream Configuration")
 
 **Getting Your C64 on Stream:**
 
@@ -75,8 +75,8 @@ See the [OBS Plugins Guide](https://obsproject.com/kb/plugins-guide).
 2. **Open Properties:** Select the "C64 Stream" source in your sources list, then click the "Properties" button to open the configuration dialog
 3. **Debug Logging:** Enable detailed logging for debugging connection issues (optional)
 4. **Configure Network Settings:**
-   - **DNS Server IP:** IP address of DNS server for resolving device hostnames (default: `192.168.1.1` for most home routers). Used when the C64U Host is a hostname rather than an IP address.
-   - **C64U Host:** Enter your Ultimate device's hostname (default: `c64u`) or IP address to enable automatic streaming control from OBS (recommended for convenience), or set to `0.0.0.0` to accept streams from any C64 Ultimate on your network (requires manual control from the device)
+   - **DNS Server IP:** IP address of DNS server for resolving device hostnames (default: `192.168.1.1` for most home routers). Used when the C64 Ultimate Host is a hostname rather than an IP address.
+   - **C64 Ultimate Host:** Enter your Ultimate device's hostname (default: `c64u`) or IP address to enable automatic streaming control from OBS (recommended for convenience), or set to `0.0.0.0` to accept streams from any C64 Ultimate on your network (requires manual control from the device)
    - **OBS Server IP:** IP address where C64 Ultimate sends streams (auto-detected by default)
    - **Auto-detect OBS IP:** Automatically detect and use OBS server IP in streaming commands (recommended)
 5. **Configure Ports:** Use the default ports (video: 11000, audio: 11001) unless network conflicts require different values
@@ -112,7 +112,7 @@ For comprehensive configuration details, refer to the [official C64 Ultimate doc
 
 ### Hostname vs IP Address 🌐
 
-The plugin supports both **hostnames** and **IP addresses** for the C64U Host field with enhanced DNS resolution that works reliably across all platforms:
+The plugin supports both **hostnames** and **IP addresses** for the C64 Ultimate Host field with enhanced DNS resolution that works reliably across all platforms:
 
 **Using Hostnames (Recommended):**
 - **Default:** `c64u` - The plugin will try to resolve this hostname to an IP address

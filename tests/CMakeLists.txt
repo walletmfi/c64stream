@@ -2,7 +2,7 @@
 # 
 # This directory contains the following test components:
 # - test_vic_colors.c: Unit tests for VIC-II color conversion (local builds only)
-# - c64_mock_server.c: Mock C64U device for testing plugin connectivity (local builds only) 
+# - c64_mock_server.c: Mock C64 Ultimate device for testing plugin connectivity (local builds only) 
 # - test_integration.c: Full integration tests with real OBS (disabled by default)
 # - CMakeLists.txt: This build configuration with automatic CI detection
 #
@@ -12,7 +12,7 @@
 #
 cmake_minimum_required(VERSION 3.28)
 
-project(c64u-tests)
+project(c64stream-tests)
 
 # Enable testing
 enable_testing()

@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Comprehensive Windows Build Verification Script
-# This script cross-compiles the ENTIRE C64U OBS Plugin for Windows using MinGW
+# This script cross-compiles the ENTIRE C64 Stream Plugin for Windows using MinGW
 # to mimic the GitHub CI environment and catch Windows build errors locally
 
 set -e
@@ -9,7 +9,7 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-echo "🪟 C64U OBS Plugin - Windows Build Verification"
+echo "🪟 C64 Stream Plugin - Windows Build Verification"
 echo "=================================================="
 echo "Project root: $PROJECT_ROOT"
 echo "Testing Windows compatibility by cross-compiling entire plugin..."

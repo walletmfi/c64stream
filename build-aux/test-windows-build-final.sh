@@ -8,7 +8,7 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-echo "🪟 C64U OBS Plugin - Windows Build Verification"
+echo "🪟 C64 Stream Plugin - Windows Build Verification"
 echo "=============================================="
 echo "Testing Windows compilation with real OBS Studio headers"
 echo ""

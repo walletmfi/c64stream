@@ -8,7 +8,7 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-echo "🪟 C64U OBS Plugin - Precise Windows CI Simulation"
+echo "🪟 C64 Stream Plugin - Precise Windows CI Simulation"
 echo "=================================================="
 echo "Replicating GitHub Actions windows-2022 environment using Docker"
 echo ""
@@ -211,7 +211,7 @@ CMD ["windows-ci-build.sh"]
 EOF
 
 echo "🔨 Building Windows CI simulation Docker image..."
-docker build -f "$DOCKERFILE" -t c64u-windows-ci "$PROJECT_ROOT"
+docker build -f "$DOCKERFILE" -t c64stream-windows-ci "$PROJECT_ROOT"
 
 echo ""
 echo "🚀 Running Windows CI simulation..."
@@ -221,7 +221,7 @@ echo "  2. cmake --build --preset windows-x64 --config RelWithDebInfo --parallel
 echo ""
 
 # Run the simulation
-if docker run --rm -v "$PROJECT_ROOT:/workspace" c64u-windows-ci; then
+if docker run --rm -v "$PROJECT_ROOT:/workspace" c64stream-windows-ci; then
     echo ""
     echo "🎉 SUCCESS: Windows CI simulation passed!"
     echo ""
@@ -247,7 +247,7 @@ fi
 
 # Clean up
 echo "🧹 Cleaning up Docker image..."
-docker rmi c64u-windows-ci 2>/dev/null || true
+docker rmi c64stream-windows-ci 2>/dev/null || true
 rm -rf "$BUILD_DIR"
 
 echo ""

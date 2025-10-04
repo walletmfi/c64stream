@@ -8,7 +8,7 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-echo "🪟 C64U OBS Plugin - Final Windows Compatibility Test"
+echo "🪟 C64 Stream Plugin - Final Windows Compatibility Test"
 echo "===================================================="
 echo "Testing the specific Windows compatibility fixes we made"
 echo ""
@@ -175,7 +175,7 @@ struct test_frame_assembly {
     atomic_bool_t complete;
 };
 
-struct test_c64u_source {
+struct test_c64_source {
     atomic_uint64_t packets_received;
     atomic_uint32_t frames_assembled;
     atomic_uint16_t current_frame;
@@ -189,7 +189,7 @@ int main() {
         .complete = ATOMIC_VAR_INIT(false)
     };
 
-    struct test_c64u_source source = {
+    struct test_c64_source source = {
         .packets_received = ATOMIC_VAR_INIT(0),
         .frames_assembled = ATOMIC_VAR_INIT(0),
         .current_frame = ATOMIC_VAR_INIT(0),

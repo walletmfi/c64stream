@@ -53,7 +53,7 @@ This project supports three distinct build configurations optimized for differen
 **Components built:**
 - Plugin binary (`c64stream.so/.dll/.dylib`)
 - Unit tests (`test_vic_colors`) for VIC-II color conversion
-- Mock C64U server (`c64_mock_server`) for protocol testing
+- Mock C64 Ultimate server (`c64_mock_server`) for protocol testing
 - Integration tests (`test_integration`) using OBS libraries
 
 **Ubuntu/Linux:**
@@ -195,7 +195,7 @@ cd build_x86_64 && ./test_vic_colors
 
 **Integration Testing** (requires OBS):
 ```bash
-# Test with mock C64U server
+# Test with mock C64 Ultimate server
 cd build_x86_64
 ./c64_mock_server --port 1234 &
 ./test_integration --server-port 1234
@@ -218,7 +218,7 @@ c64stream/
 ├── tests/
 │   ├── CMakeLists.txt          # Test build configuration with CI detection
 │   ├── test_vic_colors.c       # Unit tests for VIC color conversion
-│   ├── c64_mock_server.c      # Mock C64U device for testing
+│   ├── c64_mock_server.c      # Mock C64 Ultimate device for testing
 │   └── test_integration.c      # Integration tests with real OBS
 ├── .github/
 │   ├── workflows/              # CI/CD automation
@@ -243,7 +243,7 @@ c64stream/
 
 **Development Issues:**
 - **Plugin not loading:** Check OBS logs, verify plugin path
-- **No C64U connection:** Verify network configuration; check IP address if using specific device, firewall settings
+- **No C64 Ultimate connection:** Verify network configuration; check IP address if using specific device, firewall settings
 - **Build performance:** Use `ccache` for faster rebuilds
 
 ### Contributing

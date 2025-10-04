@@ -344,10 +344,10 @@ cmake --build --preset <preset> --target package
 
 ### Plugin Implementation Context:
 The C64 Ultimate device streams video and audio data over network connections. Key implementation areas:
-- **Network streaming:** Implement UDP/TCP clients to receive C64U data streams
-- **Video format conversion:** Convert C64U video format to OBS-compatible frames
-- **Audio handling:** Process C64U audio streams for OBS audio sources
-- **Configuration UI:** Allow users to specify C64U device IP/connection settings
+- **Network streaming:** Implement UDP/TCP clients to receive C64 Ultimate data streams
+- **Video format conversion:** Convert C64 Ultimate video format to OBS-compatible frames
+- **Audio handling:** Process C64 Ultimate audio streams for OBS audio sources
+- **Configuration UI:** Allow users to specify C64 Ultimate device IP/connection settings
 - **Error handling:** Robust connection management and fallback behavior
 
 ### Making Changes:

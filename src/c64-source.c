@@ -85,7 +85,7 @@ static gs_texture_t *load_logo_texture(void)
     C64_LOG_DEBUG("Attempting to load logo texture...");
 
     // Use obs_module_file() to get the path to the logo in the data directory
-    char *logo_path = obs_module_file("images/c64s-logo.png");
+    char *logo_path = obs_module_file("images/c64stream-logo.png");
     if (!logo_path) {
         C64_LOG_WARNING("Failed to locate logo file in module data directory");
         return NULL;
@@ -504,7 +504,7 @@ void c64_start_streaming(struct c64_source *context)
         return;
     }
 
-    // Send start commands to C64U
+    // Send start commands to C64 Ultimate
     c64_send_control_command(context, true, 0); // Start video
     c64_send_control_command(context, true, 1); // Start audio
 
@@ -796,15 +796,9 @@ void c64_render(void *data, gs_effect_t *effect)
                     gs_technique_begin(tech);
                     gs_technique_begin_pass(tech, 0);
 
-                    if (context->streaming) {
-                        // Show yellow if streaming but no frame ready yet
-                        struct vec4 yellow = {0.8f, 0.8f, 0.2f, 1.0f};
-                        gs_effect_set_vec4(color, &yellow);
-                    } else {
-                        // Show dark blue to indicate plugin loaded but no streaming
-                        struct vec4 dark_blue = {0.1f, 0.2f, 0.4f, 1.0f};
-                        gs_effect_set_vec4(color, &dark_blue);
-                    }
+                    // Show Commodore dark blue if logo cannot be found
+                    struct vec4 commodore_blue = {0.02f, 0.16f, 0.42f, 1.0f}; // #053DA8 - classic C64 blue
+                    gs_effect_set_vec4(color, &commodore_blue);
 
                     gs_draw_sprite(NULL, 0, context->width, context->height);
 
