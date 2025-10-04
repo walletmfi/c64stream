@@ -862,7 +862,7 @@ uint32_t c64_get_height(void *data)
 const char *c64_get_name(void *unused)
 {
     UNUSED_PARAMETER(unused);
-    return obs_module_text("C64SDisplay");
+    return obs_module_text("C64Stream");
 }
 
 obs_properties_t *c64_properties(void *data)
