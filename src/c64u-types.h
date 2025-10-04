@@ -18,14 +18,15 @@ struct frame_packet {
     bool received;
 };
 
-// Frame assembly structure
+// Frame assembly structure (optimized for lock-free operations)
 struct frame_assembly {
     uint16_t frame_num;
     uint16_t expected_packets;
-    uint16_t received_packets;
-    struct frame_packet packets[68]; // C64U_MAX_PACKETS_PER_FRAME
-    bool complete;
+    _Atomic uint16_t received_packets; // Atomic counter for lock-free access
+    struct frame_packet packets[68];   // C64U_MAX_PACKETS_PER_FRAME
+    _Atomic bool complete;             // Atomic completion flag
     uint64_t start_time;
+    _Atomic uint64_t packets_received_mask; // Bitmask of received packets (for 64 packets max)
 };
 
 struct c64u_source {
@@ -116,6 +117,15 @@ struct c64u_source {
 
     // Auto-start control
     bool auto_start_attempted;
+
+    // Performance optimization: Atomic counters for hot path statistics
+    _Atomic uint64_t video_packets_received; // Total video packets received
+    _Atomic uint64_t video_bytes_received;   // Total video bytes received
+    _Atomic uint32_t video_sequence_errors;  // Sequence number errors (out-of-order, drops)
+    _Atomic uint32_t video_frames_processed; // Total video frames processed
+    _Atomic uint64_t audio_packets_received; // Total audio packets received
+    _Atomic uint64_t audio_bytes_received;   // Total audio bytes received
+    uint64_t last_stats_log_time;            // Last time statistics were logged (non-atomic)
 
     // Logo display for network issues
     gs_texture_t *logo_texture; // Loaded logo texture

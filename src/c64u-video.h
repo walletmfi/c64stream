@@ -33,6 +33,19 @@ bool enqueue_delayed_frame(struct c64u_source *context, struct frame_assembly *f
 bool dequeue_delayed_frame(struct c64u_source *context);
 void clear_delay_queue(struct c64u_source *context);
 
+// Performance optimization functions
+void process_video_statistics_batch(struct c64u_source *context, uint64_t current_time);
+void process_audio_statistics_batch(struct c64u_source *context, uint64_t current_time);
+
+// Lock-free frame assembly functions
+void init_frame_assembly_lockfree(struct frame_assembly *frame, uint16_t frame_num);
+bool try_add_packet_lockfree(struct frame_assembly *frame, uint16_t packet_index);
+bool is_frame_complete_lockfree(struct frame_assembly *frame);
+
+// Color conversion optimization functions
+void init_color_conversion_lut(void);
+void convert_pixels_optimized(const uint8_t *src, uint32_t *dst, int pixel_pairs);
+
 // Video thread function
 void *video_thread_func(void *data);
 

@@ -74,6 +74,13 @@ void *c64u_create(obs_data_t *settings, obs_source_t *source)
         networking_initialized = true;
     }
 
+    // Initialize color conversion optimization on first use
+    static bool color_lut_initialized = false;
+    if (!color_lut_initialized) {
+        init_color_conversion_lut();
+        color_lut_initialized = true;
+    }
+
     struct c64u_source *context = bzalloc(sizeof(struct c64u_source));
     if (!context) {
         C64U_LOG_ERROR("Failed to allocate memory for source context");
@@ -221,6 +228,15 @@ void *c64u_create(obs_data_t *settings, obs_source_t *source)
     context->video_thread_active = false;
     context->audio_thread_active = false;
     context->auto_start_attempted = false;
+
+    // Initialize performance optimization atomic counters
+    atomic_store_explicit(&context->video_packets_received, 0, memory_order_relaxed);
+    atomic_store_explicit(&context->video_bytes_received, 0, memory_order_relaxed);
+    atomic_store_explicit(&context->video_sequence_errors, 0, memory_order_relaxed);
+    atomic_store_explicit(&context->video_frames_processed, 0, memory_order_relaxed);
+    atomic_store_explicit(&context->audio_packets_received, 0, memory_order_relaxed);
+    atomic_store_explicit(&context->audio_bytes_received, 0, memory_order_relaxed);
+    context->last_stats_log_time = os_gettime_ns();
 
     // Initialize async retry system fields
     context->retry_thread_active = false;
