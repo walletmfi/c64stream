@@ -25,6 +25,36 @@
     <link rel="manifest" href="manifest.json">
     <link rel="icon" type="image/png" href="images/c64u-obs.png">
     <style>
+        :root {
+            /* Light mode colors */
+            --bg-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            --content-bg: white;
+            --text-color: #333;
+            --text-color-light: #666;
+            --feature-bg: #f8f9fa;
+            --feature-border: #667eea;
+            --quick-start-bg: #e8f4fd;
+            --quick-start-border: #42a5f5;
+            --quick-start-title: #1976d2;
+            --quick-start-text: #555;
+            --quick-start-link: #1976d2;
+        }
+
+        [data-theme="dark"] {
+            /* Dark mode colors */
+            --bg-gradient: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+            --content-bg: #1a1a1a;
+            --text-color: #e0e0e0;
+            --text-color-light: #b0b0b0;
+            --feature-bg: #2a2a2a;
+            --feature-border: #4a90e2;
+            --quick-start-bg: #1e2a3a;
+            --quick-start-border: #3498db;
+            --quick-start-title: #5dade2;
+            --quick-start-text: #b0b0b0;
+            --quick-start-link: #5dade2;
+        }
+
         * {
             margin: 0;
             padding: 0;
@@ -34,15 +64,45 @@
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
             line-height: 1.6;
-            color: #333;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: var(--text-color);
+            background: var(--bg-gradient);
             min-height: 100vh;
+            transition: all 0.3s ease;
         }
 
         .container {
             max-width: 1200px;
             margin: 0 auto;
             padding: 2rem;
+            position: relative;
+        }
+
+        .theme-toggle {
+            position: absolute;
+            top: 1rem;
+            right: 1rem;
+            background: rgba(255, 255, 255, 0.2);
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50px;
+            padding: 0.5rem 1rem;
+            color: white;
+            cursor: pointer;
+            font-size: 0.9rem;
+            font-weight: 500;
+            transition: all 0.3s ease;
+            backdrop-filter: blur(10px);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .theme-toggle:hover {
+            background: rgba(255, 255, 255, 0.3);
+            transform: translateY(-1px);
+        }
+
+        .theme-icon {
+            font-size: 1.1rem;
         }
 
         header {
@@ -74,11 +134,12 @@
         }
 
         .main-content {
-            background: white;
+            background: var(--content-bg);
             border-radius: 20px;
             padding: 3rem;
             box-shadow: 0 20px 60px rgba(0,0,0,0.1);
             margin-bottom: 2rem;
+            transition: background-color 0.3s ease;
         }
 
         .screenshot {
@@ -101,20 +162,21 @@
         }
 
         .feature {
-            background: #f8f9fa;
+            background: var(--feature-bg);
             padding: 2rem;
             border-radius: 15px;
-            border-left: 4px solid #667eea;
+            border-left: 4px solid var(--feature-border);
+            transition: background-color 0.3s ease;
         }
 
         .feature h3 {
-            color: #333;
+            color: var(--text-color);
             margin-bottom: 1rem;
             font-size: 1.2rem;
         }
 
         .feature p {
-            color: #666;
+            color: var(--text-color-light);
             line-height: 1.5;
         }
 
@@ -163,6 +225,36 @@
             text-decoration: underline;
         }
 
+        .quick-start {
+            background: var(--quick-start-bg);
+            border-left: 4px solid var(--quick-start-border);
+            padding: 2rem;
+            border-radius: 15px;
+            margin-top: 3rem;
+            transition: background-color 0.3s ease;
+        }
+
+        .quick-start h3 {
+            color: var(--quick-start-title);
+            margin-bottom: 1rem;
+        }
+
+        .quick-start p {
+            color: var(--quick-start-text);
+            line-height: 1.6;
+        }
+
+        .quick-start a {
+            color: var(--quick-start-link);
+            text-decoration: none;
+            font-weight: 600;
+        }
+
+        .cta-section h2 {
+            margin-bottom: 2rem;
+            color: var(--text-color);
+        }
+
         @media (max-width: 768px) {
             h1 {
                 font-size: 2rem;
@@ -179,11 +271,23 @@
             .container {
                 padding: 1rem;
             }
+
+            .theme-toggle {
+                top: 0.5rem;
+                right: 0.5rem;
+                padding: 0.4rem 0.8rem;
+                font-size: 0.8rem;
+            }
         }
     </style>
 </head>
 <body>
     <div class="container">
+        <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle dark mode">
+            <span class="theme-icon">🌙</span>
+            <span class="theme-text">Dark</span>
+        </button>
+        
         <header>
             <img src="images/c64u-obs.png" alt="C64 Ultimate OBS Plugin Logo" class="logo">
             <h1>C64 Ultimate OBS Plugin</h1>
@@ -221,14 +325,14 @@
             </div>
 
             <div class="cta-section">
-                <h2 style="margin-bottom: 2rem; color: #333;">Ready to Start Streaming?</h2>
+                <h2>Ready to Start Streaming?</h2>
                 <a href="https://github.com/chrisgleissner/c64u-obs/releases" class="btn">Download Latest Release</a>
                 <a href="https://github.com/chrisgleissner/c64u-obs" class="btn btn-secondary">View on GitHub</a>
             </div>
 
-            <div style="background: #e8f4fd; padding: 2rem; border-radius: 15px; margin-top: 3rem; border-left: 4px solid #42a5f5;">
-                <h3 style="color: #1976d2; margin-bottom: 1rem;">Quick Start</h3>
-                <p style="color: #555; line-height: 1.6;">
+            <div class="quick-start">
+                <h3>Quick Start</h3>
+                <p>
                     1. Download the plugin for your platform from the releases page<br>
                     2. Install following the platform-specific instructions<br>
                     3. Add "C64U" source in OBS Studio<br>
@@ -236,7 +340,7 @@
                     5. Start streaming your C64!
                 </p>
                 <p style="margin-top: 1rem;">
-                    <a href="https://github.com/chrisgleissner/c64u-obs/blob/main/README.md" style="color: #1976d2; text-decoration: none; font-weight: 600;">📖 Read Full Documentation →</a>
+                    <a href="https://github.com/chrisgleissner/c64u-obs/blob/main/README.md">📖 Read Full Documentation →</a>
                 </p>
             </div>
         </div>
@@ -249,5 +353,51 @@
             </p>
         </footer>
     </div>
+
+    <script>
+        // Initialize dark mode as default
+        document.documentElement.setAttribute('data-theme', 'dark');
+        
+        function toggleTheme() {
+            const currentTheme = document.documentElement.getAttribute('data-theme');
+            const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+            
+            document.documentElement.setAttribute('data-theme', newTheme);
+            
+            // Update button text and icon
+            const themeButton = document.querySelector('.theme-toggle');
+            const themeIcon = themeButton.querySelector('.theme-icon');
+            const themeText = themeButton.querySelector('.theme-text');
+            
+            if (newTheme === 'dark') {
+                themeIcon.textContent = '🌙';
+                themeText.textContent = 'Dark';
+            } else {
+                themeIcon.textContent = '☀️';
+                themeText.textContent = 'Light';
+            }
+            
+            // Save preference to localStorage
+            localStorage.setItem('theme', newTheme);
+        }
+        
+        // Load saved theme preference or default to dark
+        document.addEventListener('DOMContentLoaded', function() {
+            const savedTheme = localStorage.getItem('theme') || 'dark';
+            document.documentElement.setAttribute('data-theme', savedTheme);
+            
+            const themeButton = document.querySelector('.theme-toggle');
+            const themeIcon = themeButton.querySelector('.theme-icon');
+            const themeText = themeButton.querySelector('.theme-text');
+            
+            if (savedTheme === 'dark') {
+                themeIcon.textContent = '🌙';
+                themeText.textContent = 'Dark';
+            } else {
+                themeIcon.textContent = '☀️';
+                themeText.textContent = 'Light';
+            }
+        });
+    </script>
 </body>
 </html>
