@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-This repository provides an OBS Studio source plugin for streaming video and audio from a Commodore 64 Ultimate device to OBS Studio. The plugin implements streaming capabilities according to the C64 Ultimate data streams specification. See `doc/c64u-stream-spec.md` for a concise technical specification, or the [official documentation](https://1541u-documentation.readthedocs.io/en/latest/data_streams.html#data_streams) for full details.
+This repository provides an OBS Studio source plugin for streaming video and audio from a Commodore 64 Ultimate device to OBS Studio. The plugin implements streaming capabilities according to the C64 Ultimate data streams specification. See `doc/c64-stream-spec.md` for a concise technical specification, or the [official documentation](https://1541u-documentation.readthedocs.io/en/latest/data_streams.html#data_streams) for full details.
 
 ### Debug Build Tips:
 - Use `RelWithDebInfo` configuration for debugging with symbols
@@ -210,7 +210,7 @@ clang-format --dry-run --Werror src/*.c src/*.h
 & "C:\Program Files\LLVM\bin\clang-format.exe" -i src/*.c src/*.h
 
 # Alternative: Format specific file
-& "C:\Program Files\LLVM\bin\clang-format.exe" -i src/c64u-source.c
+& "C:\Program Files\LLVM\bin\clang-format.exe" -i src/c64-source.c
 
 # Check CMake formatting (requires gersemi via pip)
 gersemi --check CMakeLists.txt cmake/
@@ -355,7 +355,7 @@ The C64 Ultimate device streams video and audio data over network connections. K
 2. **Test on target platform** - Use appropriate preset
 3. **Update buildspec.json** if adding dependencies
 4. **Plugin logic goes in modular source files** - Use focused modules in src/
-5. **Use C64_LOG_*() macros** for logging (defined in c64u-logging.h)
+5. **Use C64_LOG_*() macros** for logging (defined in c64-logging.h)
 6. **Verify all files end with newline** - Critical for macOS builds
 7. **DO NOT create markdown documentation files during development** - Keep workspace clean, document in existing files only
 
@@ -375,7 +375,7 @@ The C64 Ultimate device streams video and audio data over network connections. K
 ### Platform-Specific Code Patterns
 The plugin uses conditional compilation extensively for cross-platform compatibility. Follow these established patterns:
 
-#### Networking (c64u-network.h/c):
+#### Networking (c64-network.h/c):
 - **Windows**: Uses WinSock2 (`winsock2.h`, `ws2tcpip.h`) with `WSAStartup()`/`WSACleanup()`
 - **POSIX**: Uses standard BSD sockets (`sys/socket.h`, `netinet/in.h`)
 - **Socket types**: `SOCKET` (Windows) vs `int` (POSIX) - use `socket_t` typedef
@@ -393,7 +393,7 @@ The plugin uses conditional compilation extensively for cross-platform compatibi
 
 ### Platform Default Directories
 When setting default user directories, use platform conventions:
-- **Windows**: `%USERPROFILE%\Documents\obs-studio\c64u\recordings` or `%APPDATA%\obs-studio\c64u\recordings`
+- **Windows**: `%USERPROFILE%\Documents\obs-studio\c64stream\recordings` or `%APPDATA%\obs-studio\c64stream\recordings`
 - **macOS**: `~/Documents/obs-studio/c64stream/recordings` or `~/Movies/obs-studio/c64stream/recordings`
 - **Linux**: `~/Documents/obs-studio/c64stream/recordings` or `~/.local/share/obs-studio/c64stream/recordings`
 

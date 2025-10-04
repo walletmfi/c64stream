@@ -368,7 +368,7 @@ main() {
     log_info ""
     log_info "Next steps:"
     log_info "  - Install plugin: See tools/install-plugin.sh"
-    log_info "  - Test with OBS: Start OBS and add C64U source"
+    log_info "  - Test with OBS: Start OBS and add C64 Stream source"
     log_info "  - Package: cmake --build <build_dir> --target package"
 }
 

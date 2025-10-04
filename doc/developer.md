@@ -323,7 +323,7 @@ The project generates `compile_commands.json` for IDE support:
 
 ### Platform-Specific Code Patterns
 
-#### Networking (from c64u-network.h)
+#### Networking (from c64-network.h)
 ```c
 #ifdef _WIN32
     #include <winsock2.h>
@@ -350,7 +350,7 @@ The project generates `compile_commands.json` for IDE support:
 #endif
 ```
 
-#### Data Types (from c64u-network.h)
+#### Data Types (from c64-network.h)
 ```c
 #ifdef _WIN32
     // Define ssize_t for MSVC (MinGW has it, but MSVC doesn't)
@@ -380,7 +380,7 @@ The project generates `compile_commands.json` for IDE support:
 ```cmake
 # Windows networking libraries (handled via pragma in headers)
 if(WIN32)
-    # Libraries linked via #pragma comment in c64u-network.h
+    # Libraries linked via #pragma comment in c64-network.h
     # ws2_32.lib and iphlpapi.lib
 elseif(UNIX)
     # POSIX libraries
@@ -446,7 +446,7 @@ See [`windows-local-build.md`](windows-local-build.md) for comprehensive Windows
 
 ### Resources
 
-- **C64U Stream Spec:** [`doc/c64u-stream-spec.md`](c64u-stream-spec.md)
+- **C64 Stream Spec:** [`doc/c64-stream-spec.md`](c64-stream-spec.md)
 - **Official Documentation:** [C64 Ultimate Data Streams](https://1541u-documentation.readthedocs.io/en/latest/data_streams.html#data_streams)
 - **OBS Plugin Development:** [OBS Studio Plugin Guide](https://obsproject.com/wiki/Plugin-Development)
 - **Build System:** Based on [OBS Plugin Template](https://github.com/obsproject/obs-plugintemplate)

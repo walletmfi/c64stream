@@ -1,5 +1,5 @@
 {
-    // VS Code launch configurations for debugging C64U plugin with OBS Studio
+    // VS Code launch configurations for debugging C64 Stream plugin with OBS Studio
     //
     // F5 will automatically select the correct configuration based on your platform:
     // - Windows: Uses cppvsdbg debugger with Visual Studio debugging
