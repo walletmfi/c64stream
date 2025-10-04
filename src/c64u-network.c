@@ -553,25 +553,47 @@ socket_t create_tcp_socket(const char *ip, uint32_t port)
         return INVALID_SOCKET_VALUE;
     }
 
-    // Wait for connection with 1-second timeout
+    // Two-stage timeout: fast for local networks, fallback for internet connections
     fd_set write_fds;
     FD_ZERO(&write_fds);
     FD_SET(sock, &write_fds);
 
-    struct timeval timeout;
-    timeout.tv_sec = 1; // 1 second timeout
-    timeout.tv_usec = 0;
+    // First try: 100ms timeout for local network responsiveness
+    struct timeval timeout_fast;
+    timeout_fast.tv_sec = 0;
+    timeout_fast.tv_usec = 100000; // 100 milliseconds
 
 #ifdef _WIN32
-    int select_result = select(0, NULL, &write_fds, NULL, &timeout);
+    int select_result = select(0, NULL, &write_fds, NULL, &timeout_fast);
 #else
-    int select_result = select(sock + 1, NULL, &write_fds, NULL, &timeout);
+    int select_result = select(sock + 1, NULL, &write_fds, NULL, &timeout_fast);
 #endif
+
     if (select_result == 0) {
-        // Timeout
-        obs_log(LOG_WARNING, "[C64U] Connection to C64U at %s:%u timed out after 1 second", ip, port);
-        close(sock);
-        return INVALID_SOCKET_VALUE;
+        // Fast timeout - try longer timeout for internet connections
+        obs_log(LOG_DEBUG, "[C64U] Fast connection attempt to %s:%u timed out, trying slower timeout...", ip, port);
+
+        // Reset the fd_set for second attempt
+        FD_ZERO(&write_fds);
+        FD_SET(sock, &write_fds);
+
+        // Second try: 1.5 second timeout for internet connections
+        struct timeval timeout_slow;
+        timeout_slow.tv_sec = 1;       // 1 second
+        timeout_slow.tv_usec = 500000; // + 500 milliseconds = 1.5s total
+
+#ifdef _WIN32
+        select_result = select(0, NULL, &write_fds, NULL, &timeout_slow);
+#else
+        select_result = select(sock + 1, NULL, &write_fds, NULL, &timeout_slow);
+#endif
+
+        if (select_result == 0) {
+            // Both timeouts failed
+            obs_log(LOG_WARNING, "[C64U] Connection to C64U at %s:%u timed out after 1.6 seconds total", ip, port);
+            close(sock);
+            return INVALID_SOCKET_VALUE;
+        }
     }
 
     if (select_result < 0) {

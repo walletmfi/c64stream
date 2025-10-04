@@ -303,17 +303,10 @@ void *c64u_create(obs_data_t *settings, obs_source_t *source)
     // Initialize recording for this source
     c64u_record_init(context);
 
-    // Start initial connection attempt to restore automatic reconnect functionality
-    C64U_LOG_INFO("C64U source created successfully - starting initial connection");
-    c64u_start_streaming(context);
-
-    return context;
-
-    C64U_LOG_INFO("C64U source created - C64U host: %s (IP: %s), OBS IP: %s, Video: %u, Audio: %u", context->hostname,
-                  context->ip_address, context->obs_ip_address, context->video_port, context->audio_port);
-
-    // Timeout detection now handled in render callback - no separate thread needed\n    \n    // Mark that we want to start streaming, but don't block OBS startup\n    // The render callback will handle timeout detection and retry logic\n    C64U_LOG_INFO("🚀 C64U source created - render callback will handle connection management");
-    context->auto_start_attempted = false; // Will be handled by async mechanism
+    // Start initial connection asynchronously to avoid blocking OBS startup
+    C64U_LOG_INFO("C64U source created successfully - queuing async initial connection");
+    context->retry_in_progress = true; // Prevent render thread from also starting retry
+    obs_queue_task(OBS_TASK_UI, c64u_async_retry_task, context, false);
 
     return context;
 }
@@ -663,44 +656,23 @@ void c64u_render(void *data, gs_effect_t *effect)
         needs_initial_connection = true;
     }
 
-    // Retry logic based on working 0.4.3 approach with adaptive backoff
+    // Simple retry detection: render thread detects need, delegates to async task
     if (frames_timed_out || needs_initial_connection) {
-        // Calculate adaptive retry delay (like 0.4.3): 100ms base, exponential backoff on failures, capped at 3000ms
         static uint64_t last_retry_time = 0;
-        uint64_t retry_delay_ms = 100; // Base 100ms delay
-
-        if (context->consecutive_failures > 0) {
-            // Exponential backoff: 100ms * 1.3^failures, capped at 3000ms
-            for (uint32_t i = 0; i < context->consecutive_failures && retry_delay_ms < 3000; i++) {
-                retry_delay_ms = (uint64_t)(retry_delay_ms * 1.3); // Multiply by 1.3
-            }
-            if (retry_delay_ms > 3000)
-                retry_delay_ms = 3000; // Cap at 3 seconds
-        }
-
-        uint64_t retry_delay_ns = retry_delay_ms * 1000000ULL; // Convert to nanoseconds
         uint64_t time_since_last_retry = now - last_retry_time;
 
-        // Only retry/connect if:
-        // 1. Enough time has passed (adaptive backoff)
-        // 2. No retry is already in progress
-        // 3. Valid IP is configured
-        if ((needs_initial_connection || time_since_last_retry >= retry_delay_ns) && !context->retry_in_progress &&
-            strcmp(context->ip_address, "0.0.0.0") != 0) {
+        // Simple timing: 1 second between retries, no complex backoff needed
+        // The async task will handle the actual TCP timeouts and failures
+        bool should_retry = (time_since_last_retry >= 1000000000ULL) &&  // 1 second between retries
+                            !context->retry_in_progress &&               // Don't overlap retries
+                            strcmp(context->ip_address, "0.0.0.0") != 0; // Valid IP configured
 
+        if (should_retry) {
             last_retry_time = now;
             context->retry_in_progress = true;
 
-            if (needs_initial_connection) {
-                C64U_LOG_INFO("🔌 Initial connection attempt to C64U %s", context->ip_address);
-            } else if (frames_timed_out) {
-                uint64_t frame_age = now - context->last_frame_time;
-                C64U_LOG_INFO("🔄 Frame timeout (age: %llu ms) - retry %u with %llums delay to C64U %s",
-                              (unsigned long long)(frame_age / 1000000ULL), context->retry_count + 1,
-                              (unsigned long long)retry_delay_ms, context->ip_address);
-            }
-
-            // Queue async retry task
+            // Just delegate to async task - keep render thread fast
+            C64U_LOG_INFO("� Connection needed - delegating to async task");
             obs_queue_task(OBS_TASK_UI, c64u_async_retry_task, context, false);
         }
     } else if (context->frame_ready && context->last_frame_time > 0) {
