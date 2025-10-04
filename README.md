@@ -75,7 +75,7 @@ See the [OBS Plugins Guide](https://obsproject.com/kb/plugins-guide).
 2. **Open Properties:** Select the "C64 Stream" source in your sources list, then click the "Properties" button to open the configuration dialog
 3. **Debug Logging:** Enable detailed logging for debugging connection issues (optional)
 4. **Configure Network Settings:**
-   - **DNS Server IP:** IP address of DNS server for resolving device hostnames (default: `192.168.1.1` for most home routers). Used when the C64U Host is a hostname rather than an IP address. 
+   - **DNS Server IP:** IP address of DNS server for resolving device hostnames (default: `192.168.1.1` for most home routers). Used when the C64U Host is a hostname rather than an IP address.
    - **C64U Host:** Enter your Ultimate device's hostname (default: `c64u`) or IP address to enable automatic streaming control from OBS (recommended for convenience), or set to `0.0.0.0` to accept streams from any C64 Ultimate on your network (requires manual control from the device)
    - **OBS Server IP:** IP address where C64 Ultimate sends streams (auto-detected by default)
    - **Auto-detect OBS IP:** Automatically detect and use OBS server IP in streaming commands (recommended)
@@ -186,7 +186,7 @@ All recording files are organized into session folders with timestamps:
 ### Recording Configuration
 
 - **Output Folder Defaults:**
-  - **Windows:** `%USERPROFILE%\Documents\obs-studio\c64u\recordings`
+  - **Windows:** `%USERPROFILE%\Documents\obs-studio\c64stream\recordings`
   - **macOS:** `~/Documents/obs-studio/c64stream/recordings`
   - **Linux:** `~/Documents/obs-studio/c64stream/recordings`
 - **Automatic Session Management:** New session folder created each time recording is enabled

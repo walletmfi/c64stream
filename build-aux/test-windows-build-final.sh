@@ -70,7 +70,7 @@ fi
 # Set up include paths for OBS headers
 OBS_INCLUDE_DIRS=(
     "$PWD/$OBS_DIR/libobs"
-    "$PWD/$OBS_DIR/libobs-frontend-api"  
+    "$PWD/$OBS_DIR/libobs-frontend-api"
 )
 
 # Verify we have the key headers
@@ -90,7 +90,7 @@ WINDOWS_CFLAGS=(
     "-Wall"
     "-Werror"
     "-Wno-unknown-pragmas"  # MinGW doesn't support #pragma comment
-    "-D_WIN32" 
+    "-D_WIN32"
     "-DWIN32"
     "-D_WINDOWS"
     "-DUNICODE"
@@ -104,7 +104,7 @@ for include_dir in "${OBS_INCLUDE_DIRS[@]}"; do
     WINDOWS_CFLAGS+=("-I$include_dir")
 done
 
-# Windows libraries (matching c64u-network.h pragmas)  
+# Windows libraries (matching c64-network.h pragmas)
 WINDOWS_LIBS="-lws2_32 -lwinmm -lkernel32 -luser32"
 
 echo "  ✅ Configured Windows compilation flags"
@@ -121,8 +121,8 @@ cat > test_windows_core.c << 'EOF'
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
 
-#include "../src/c64u-network.h"  // Must come before atomic due to winsock
-#include "../src/c64u-atomic.h"
+#include "../src/c64-network.h"  // Must come before atomic due to winsock
+#include "../src/c64-atomic.h"
 #include <stdio.h>
 
 // Test compilation only - don't actually call socket functions
@@ -130,12 +130,12 @@ int test_headers_only() {
     atomic_uint32_t counter = ATOMIC_VAR_INIT(0);
     atomic_store(&counter, 42);
     uint32_t value = atomic_load(&counter);
-    
+
     // Test that socket types are defined correctly
     struct sockaddr_in addr;
     addr.sin_family = AF_INET;
     addr.sin_port = htons(1234);
-    
+
     printf("Headers test: atomic=%u, sockaddr_in size=%zu\n", value, sizeof(addr));
     return 0;
 }
@@ -152,18 +152,18 @@ else
     exit 1
 fi
 
-# Test 2: Plugin source files with OBS headers  
+# Test 2: Plugin source files with OBS headers
 echo "  → Testing plugin source files with OBS headers..."
 
 # Test each source file individually
 SOURCE_FILES=(
-    "c64u-color.c"
-    "c64u-network.c"
-    "c64u-protocol.c"  
-    "c64u-video.c"
-    "c64u-audio.c"
-    "c64u-record.c"
-    "c64u-source.c"
+    "c64-color.c"
+    "c64-network.c"
+    "c64-protocol.c"
+    "c64-video.c"
+    "c64-audio.c"
+    "c64-record.c"
+    "c64-source.c"
     "plugin-main.c"
 )
 
@@ -171,7 +171,7 @@ for src_file in "${SOURCE_FILES[@]}"; do
     if [ -f "../src/$src_file" ]; then
         echo "    → Compiling $src_file..."
         obj_file="${src_file%.c}.o"
-        
+
         if x86_64-w64-mingw32-gcc "${WINDOWS_CFLAGS[@]}" -c -o "$obj_file" "../src/$src_file"; then
             echo "      ✅ $src_file compiled successfully"
         else
@@ -188,14 +188,14 @@ OBJECT_FILES=($(ls *.o 2>/dev/null || true))
 if [ ${#OBJECT_FILES[@]} -gt 0 ]; then
     echo "    → Found ${#OBJECT_FILES[@]} object files to link"
     echo "    → Attempting to create plugin DLL..."
-    
+
     # Try to create the DLL (may fail due to missing runtime libs, but that's ok)
-    if x86_64-w64-mingw32-gcc "${WINDOWS_CFLAGS[@]}" $WINDOWS_LIBS -shared -o c64u-plugin-for-obs.dll "${OBJECT_FILES[@]}" 2>/dev/null; then
-        echo "    ✅ Plugin linking successful - generated c64u-plugin-for-obs.dll"
-        
+    if x86_64-w64-mingw32-gcc "${WINDOWS_CFLAGS[@]}" $WINDOWS_LIBS -shared -o c64stream.dll "${OBJECT_FILES[@]}" 2>/dev/null; then
+        echo "    ✅ Plugin linking successful - generated c64stream.dll"
+
         # Verify the DLL
-        if [ -f "c64u-plugin-for-obs.dll" ]; then
-            dll_size=$(stat -c%s "c64u-plugin-for-obs.dll")
+        if [ -f "c64stream.dll" ]; then
+            dll_size=$(stat -c%s "c64stream.dll")
             echo "    ✅ Plugin DLL size: $dll_size bytes"
         fi
     else

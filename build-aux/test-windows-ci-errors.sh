@@ -51,8 +51,8 @@ echo "  → Test 1: Missing atomic_*_explicit functions..."
 cat > test_explicit_atomics.c << 'EOF'
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
-#include "../src/c64u-network.h"
-#include "../src/c64u-atomic.h"
+#include "../src/c64-network.h"
+#include "../src/c64-atomic.h"
 #include <stdio.h>
 
 int main() {
@@ -95,7 +95,7 @@ echo "  → Test 2: Missing memory_order constants..."
 cat > test_memory_orders.c << 'EOF'
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
-#include "../src/c64u-atomic.h"
+#include "../src/c64-atomic.h"
 #include <stdio.h>
 
 int main() {
@@ -128,7 +128,7 @@ echo "  → Test 3: atomic_fetch_or_explicit function..."
 cat > test_fetch_or.c << 'EOF'
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
-#include "../src/c64u-atomic.h"
+#include "../src/c64-atomic.h"
 #include <stdio.h>
 
 int main() {
@@ -158,10 +158,10 @@ echo "  → Test 4: Atomic struct operations..."
 cat > test_atomic_structs.c << 'EOF'
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
-#include "../src/c64u-atomic.h"
+#include "../src/c64-atomic.h"
 #include <stdio.h>
 
-// Simulate frame assembly structure like in c64u-video.c
+// Simulate frame assembly structure like in c64-video.c
 struct test_frame {
     atomic_uint16_t received_packets;
     uint16_t expected_packets;
@@ -210,8 +210,8 @@ cat > test_architecture.c << 'EOF'
 #define NOMINMAX
 
 // Include order that was causing issues
-#include "../src/c64u-network.h"  // This includes Windows headers
-#include "../src/c64u-atomic.h"   // This should define architecture
+#include "../src/c64-network.h"  // This includes Windows headers
+#include "../src/c64-atomic.h"   // This should define architecture
 
 #include <stdio.h>
 

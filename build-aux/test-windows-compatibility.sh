@@ -33,12 +33,12 @@ echo ""
 echo "🔍 Testing Windows-specific header compatibility..."
 
 # Test atomic headers
-echo "Testing c64u-atomic.h Windows compatibility..."
+echo "Testing c64-atomic.h Windows compatibility..."
 cat > "$BUILD_DIR/test_atomic.c" << 'EOF'
 // Test Windows atomic compatibility
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
-#include "../src/c64u-atomic.h"
+#include "../src/c64-atomic.h"
 #include <stdio.h>
 
 int main() {
@@ -51,10 +51,10 @@ int main() {
 EOF
 
 # Test network headers
-echo "Testing c64u-network.h Windows compatibility..."
+echo "Testing c64-network.h Windows compatibility..."
 cat > "$BUILD_DIR/test_network.c" << 'EOF'
 // Test Windows network compatibility
-#include "../src/c64u-network.h"
+#include "../src/c64-network.h"
 #include <stdio.h>
 
 int main() {
@@ -71,8 +71,8 @@ cat > "$BUILD_DIR/test_header_order.c" << 'EOF'
 #define NOMINMAX
 
 // This is the order that was causing sockaddr redefinition errors:
-#include "../src/c64u-network.h"  // This includes winsock2.h
-#include "../src/c64u-atomic.h"   // This should not cause conflicts now
+#include "../src/c64-network.h"  // This includes winsock2.h
+#include "../src/c64-atomic.h"   // This should not cause conflicts now
 #include <stdio.h>
 
 int main() {
@@ -96,27 +96,27 @@ WINDOWS_CFLAGS=(
     "-D_CRT_NONSTDC_NO_WARNINGS"
 )
 
-# Libraries needed (matching c64u-network.h pragmas)
+# Libraries needed (matching c64-network.h pragmas)
 WINDOWS_LIBS="-lws2_32 -liphlpapi -lwinmm"
 
 echo ""
 echo "🔨 Compiling Windows-specific tests..."
 
 # Test atomic header
-echo "  → Testing c64u-atomic.h..."
+echo "  → Testing c64-atomic.h..."
 if x86_64-w64-mingw32-gcc "${WINDOWS_CFLAGS[@]}" -o "$BUILD_DIR/test_atomic.exe" "$BUILD_DIR/test_atomic.c"; then
-    echo "    ✅ c64u-atomic.h compiles successfully"
+    echo "    ✅ c64-atomic.h compiles successfully"
 else
-    echo "    ❌ c64u-atomic.h compilation failed"
+    echo "    ❌ c64-atomic.h compilation failed"
     exit 1
 fi
 
 # Test network header
-echo "  → Testing c64u-network.h..."
+echo "  → Testing c64-network.h..."
 if x86_64-w64-mingw32-gcc "${WINDOWS_CFLAGS[@]}" $WINDOWS_LIBS -o "$BUILD_DIR/test_network.exe" "$BUILD_DIR/test_network.c"; then
-    echo "    ✅ c64u-network.h compiles successfully"
+    echo "    ✅ c64-network.h compiles successfully"
 else
-    echo "    ❌ c64u-network.h compilation failed"
+    echo "    ❌ c64-network.h compilation failed"
     exit 1
 fi
 
@@ -133,17 +133,17 @@ echo ""
 echo "🧪 Testing Windows-specific code patterns..."
 
 # Create test files that simulate the actual plugin code without OBS dependencies
-echo "  → Testing c64u-color.c pattern (without OBS dependency)..."
+echo "  → Testing c64-color.c pattern (without OBS dependency)..."
 cat > "$BUILD_DIR/test_color_pattern.c" << 'EOF'
-// Simulate c64u-color.c without OBS dependency
+// Simulate c64-color.c without OBS dependency
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
 
-#include "../src/c64u-atomic.h"
+#include "../src/c64-atomic.h"
 #include <stdint.h>
 #include <stdio.h>
 
-// Simulate the VIC-II color conversion that c64u-color.c does
+// Simulate the VIC-II color conversion that c64-color.c does
 uint32_t test_rgb_conversion(uint8_t vic_color) {
     // Simple test of the RGB conversion logic
     return 0xFF000000 | (vic_color << 16) | (vic_color << 8) | vic_color;
@@ -163,11 +163,11 @@ else
     exit 1
 fi
 
-echo "  → Testing c64u-network.c pattern (without OBS dependency)..."
+echo "  → Testing c64-network.c pattern (without OBS dependency)..."
 cat > "$BUILD_DIR/test_network_pattern.c" << 'EOF'
-// Simulate c64u-network.c without OBS dependency
-#include "../src/c64u-network.h"
-#include "../src/c64u-atomic.h"
+// Simulate c64-network.c without OBS dependency
+#include "../src/c64-network.h"
+#include "../src/c64-atomic.h"
 #include <stdio.h>
 
 // Simulate network socket operations
@@ -212,8 +212,8 @@ cat > "$BUILD_DIR/test_sockaddr.c" << 'EOF'
 #define NOMINMAX
 
 // This is the order that was causing problems:
-#include "../src/c64u-network.h"  // This includes winsock2.h
-#include "../src/c64u-atomic.h"   // This should not conflict
+#include "../src/c64-network.h"  // This includes winsock2.h
+#include "../src/c64-atomic.h"   // This should not conflict
 
 int main() {
     printf("Sockaddr redefinition test passed\n");
@@ -235,8 +235,8 @@ cat > "$BUILD_DIR/test_atomics_usage.c" << 'EOF'
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
 
-#include "../src/c64u-atomic.h"
-#include "../src/c64u-types.h"
+#include "../src/c64-atomic.h"
+#include "../src/c64-types.h"
 
 int main() {
     // Test the types we actually use in the plugin

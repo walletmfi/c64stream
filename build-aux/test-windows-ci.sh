@@ -157,7 +157,7 @@ add_compile_options(
     -fms-extensions
 )
 
-# Windows libraries (matching c64u-network.h pragmas)
+# Windows libraries (matching c64-network.h pragmas)
 link_libraries(ws2_32 iphlpapi winmm)
 
 # Find root paths
@@ -189,7 +189,7 @@ echo ""
 echo "✅ Windows CI simulation completed!"
 
 # Verify output
-if [ -f "build_x64/c64u-plugin-for-obs.dll" ] || [ -f "build_x64/c64u-plugin-for-obs.exe" ] || [ -f "build_x64/libc64u-plugin-for-obs.a" ]; then
+if [ -f "build_x64/c64stream.dll" ] || [ -f "build_x64/c64stream.exe" ] || [ -f "build_x64/libc64stream.a" ]; then
     echo "✅ Build output generated successfully"
     ls -la build_x64/ | grep -E "\.(dll|exe|a)$" || echo "Build artifacts:"
     ls -la build_x64/

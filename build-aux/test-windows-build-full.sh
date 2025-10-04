@@ -132,13 +132,13 @@ echo "Building all source files:"
 # List the source files we're building
 SOURCE_FILES=(
     "src/plugin-main.c"
-    "src/c64u-network.c"
-    "src/c64u-protocol.c"
-    "src/c64u-video.c"
-    "src/c64u-color.c"
-    "src/c64u-audio.c"
-    "src/c64u-source.c"
-    "src/c64u-record.c"
+    "src/c64-network.c"
+    "src/c64-protocol.c"
+    "src/c64-video.c"
+    "src/c64-color.c"
+    "src/c64-audio.c"
+    "src/c64-source.c"
+    "src/c64-record.c"
 )
 
 for src in "${SOURCE_FILES[@]}"; do
@@ -166,7 +166,7 @@ else
 fi
 
 # Verify the output
-PLUGIN_DLL="c64u-plugin-for-obs.dll"
+PLUGIN_DLL="c64stream.dll"
 if [ -f "$PLUGIN_DLL" ]; then
     echo ""
     echo "🎉 SUCCESS: Plugin binary created!"
@@ -210,7 +210,7 @@ cat > "$TEST_C" << 'EOF'
 #define _WINDOWS
 #define UNICODE
 #define _UNICODE
-#include "../src/c64u-atomic.h"
+#include "../src/c64-atomic.h"
 
 int main() {
     // Test atomic types from our plugin
