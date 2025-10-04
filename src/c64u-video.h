@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 #include <stdbool.h>
+#include "c64u-color.h"
 
 // Rendering defaults
 #define C64U_DEFAULT_RENDER_DELAY_FRAMES 3  // Default frame delay to smooth UDP packet loss/reordering
@@ -16,9 +17,6 @@
 // Forward declarations
 struct c64u_source;
 struct frame_assembly;
-
-// VIC color palette (BGRA values for OBS) - converted from grab.py RGB values
-extern const uint32_t vic_colors[16];
 
 // Helper functions for frame assembly
 void init_frame_assembly(struct frame_assembly *frame, uint16_t frame_num);
@@ -41,10 +39,6 @@ void process_audio_statistics_batch(struct c64u_source *context, uint64_t curren
 void init_frame_assembly_lockfree(struct frame_assembly *frame, uint16_t frame_num);
 bool try_add_packet_lockfree(struct frame_assembly *frame, uint16_t packet_index);
 bool is_frame_complete_lockfree(struct frame_assembly *frame);
-
-// Color conversion optimization functions
-void init_color_conversion_lut(void);
-void convert_pixels_optimized(const uint8_t *src, uint32_t *dst, int pixel_pairs);
 
 // Video thread function
 void *video_thread_func(void *data);
