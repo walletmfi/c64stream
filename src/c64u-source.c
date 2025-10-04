@@ -44,7 +44,7 @@ static void c64u_async_retry_task(void *data)
         tcp_success = true; // c64u_start_streaming handles TCP commands internally
     } else {
         // Already streaming - test connectivity and send start commands (like 0.4.3)
-        // Use quick connectivity test (50ms timeout) instead of blocking TCP socket creation
+        // Use quick connectivity test (250ms timeout) instead of blocking TCP socket creation
         if (c64u_test_connectivity(context->ip_address, C64U_CONTROL_PORT)) {
             c64u_send_control_command(context, true, 0); // Video
             c64u_send_control_command(context, true, 1); // Audio
@@ -318,7 +318,7 @@ void c64u_destroy(void *data)
 
     C64U_LOG_INFO("Destroying C64U source");
 
-    // No retry thread to shutdown - using render callback approach
+    // No retry thread to shutdown - using async delegation approach
 
     // Stop streaming if active
     if (context->streaming) {
@@ -342,10 +342,8 @@ void c64u_destroy(void *data)
         }
     }
 
-    // Cleanup recording module
     c64u_record_cleanup(context);
 
-    // Cleanup logo texture
     if (context->logo_texture) {
         gs_texture_destroy(context->logo_texture);
         context->logo_texture = NULL;

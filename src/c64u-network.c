@@ -484,7 +484,7 @@ socket_t c64u_create_udp_socket(uint32_t port)
     return sock;
 }
 
-// Quick connectivity test with minimal timeout (for async retry tasks)
+// Quick connectivity test with moderate timeout (for async retry tasks)
 bool c64u_test_connectivity(const char *ip, uint32_t port)
 {
     if (!ip || strlen(ip) == 0) {
@@ -524,7 +524,6 @@ bool c64u_test_connectivity(const char *ip, uint32_t port)
     // Attempt connection (will return immediately with EINPROGRESS/WSAEWOULDBLOCK)
     int connect_result = connect(sock, (struct sockaddr *)&addr, sizeof(addr));
     if (connect_result == 0) {
-        // Connected immediately
         close(sock);
         return true;
     }
@@ -539,7 +538,7 @@ bool c64u_test_connectivity(const char *ip, uint32_t port)
         return false;
     }
 
-    // Universal moderate timeout for quick connectivity tests
+    // Universal moderate timeout for connectivity tests
     // 250ms: Fast enough to prevent UI blocking, long enough for most real connections
     fd_set write_fds;
     FD_ZERO(&write_fds);

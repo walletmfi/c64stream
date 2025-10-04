@@ -50,7 +50,7 @@ void c64u_swap_frame_buffers(struct c64u_source *context)
         c64u_record_video_frame(context, context->frame_buffer_back);
     }
 
-    // Atomically swap front and back buffers
+    // Swap front and back buffers
     uint32_t *temp = context->frame_buffer_front;
     context->frame_buffer_front = context->frame_buffer_back;
     context->frame_buffer_back = temp;
@@ -302,7 +302,7 @@ void c64u_process_audio_statistics_batch(struct c64u_source *context, uint64_t c
         return; // Not time yet for statistics processing
     }
 
-    // Atomically read and reset audio counters
+    // Read and reset audio counters
     uint64_t packets_received = context->audio_packets_received;
     uint64_t bytes_received = context->audio_bytes_received;
     context->audio_packets_received = 0;
@@ -321,7 +321,7 @@ void c64u_process_audio_statistics_batch(struct c64u_source *context, uint64_t c
 // Lock-free frame assembly optimization functions
 void c64u_init_frame_assembly_lockfree(struct frame_assembly *frame, uint16_t frame_num)
 {
-    // Initialize frame with atomic fields
+    // Initialize frame structure
     memset(frame, 0, sizeof(struct frame_assembly));
     frame->frame_num = frame_num;
     frame->start_time = os_gettime_ns();
@@ -337,7 +337,7 @@ bool c64u_try_add_packet_lockfree(struct frame_assembly *frame, uint16_t packet_
         return false;
     }
 
-    // Use atomic operations to set the packet bit and increment counter
+    // Set the packet bit and increment counter
     uint64_t packet_mask = 1ULL << packet_index;
     uint64_t old_mask = frame->packets_received_mask;
     frame->packets_received_mask |= packet_mask;
@@ -347,7 +347,7 @@ bool c64u_try_add_packet_lockfree(struct frame_assembly *frame, uint16_t packet_
         return false; // Duplicate packet
     }
 
-    // Increment packet counter atomically
+    // Increment packet counter
     frame->received_packets++;
 
     return true; // Successfully added new packet
@@ -355,7 +355,7 @@ bool c64u_try_add_packet_lockfree(struct frame_assembly *frame, uint16_t packet_
 
 bool c64u_is_frame_complete_lockfree(struct frame_assembly *frame)
 {
-    // Load current packet count atomically
+    // Load current packet count
     uint16_t received = frame->received_packets;
 
     // Frame is complete when we have all expected packets
@@ -453,7 +453,7 @@ void *c64u_video_thread_func(void *data)
         static bool first_video = true;
 
         if (!first_video && seq_num != (uint16_t)(last_video_seq + 1)) {
-            // Increment sequence error counter atomically
+            // Increment sequence error counter
             context->video_sequence_errors++;
 
             // Log sequence errors (keep for debugging, but move details out of hot path)

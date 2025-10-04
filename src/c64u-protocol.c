@@ -50,7 +50,7 @@ void c64u_send_control_command(struct c64u_source *context, bool enable, uint8_t
         cmd[3] = 0x00;
         cmd[4] = 0x00; // Duration: 0 = forever (little endian)
         cmd[5] = 0x00;
-        memcpy(&cmd[6], ip_port_str, ip_port_len); // Copy IP:PORT string
+        memcpy(&cmd[6], ip_port_str, ip_port_len);
 
         int cmd_len = 6 + (int)ip_port_len;
         C64U_LOG_INFO("Sending start command for stream %u to %s with client destination: %s", stream_id,
