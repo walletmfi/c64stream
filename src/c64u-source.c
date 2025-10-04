@@ -5,6 +5,7 @@
 #include <string.h>
 #include <inttypes.h>
 #include <pthread.h>
+#include <stdatomic.h>
 #include "c64u-logging.h"
 #include "c64u-source.h"
 #include "c64u-types.h"
@@ -227,7 +228,7 @@ void *c64u_create(obs_data_t *settings, obs_source_t *source)
     context->retry_count = 0;
     context->consecutive_failures = 0;
     context->retry_shutdown = false;
-    context->last_udp_packet_time = os_gettime_ns();
+    atomic_store_explicit(&context->last_udp_packet_time, os_gettime_ns(), memory_order_relaxed);
 
     // Initialize logo display
     context->logo_texture = NULL;
@@ -583,12 +584,12 @@ void c64u_render(void *data, gs_effect_t *effect)
 
         // Trigger async retry when frames timeout
         if (frames_timed_out) {
-            // Update last UDP packet time to current time to reset detection
+            // Update last UDP packet time atomically and signal retry
+            atomic_store_explicit(&context->last_udp_packet_time, now, memory_order_relaxed);
             pthread_mutex_lock(&context->retry_mutex);
-            context->last_udp_packet_time = now;
             context->needs_retry = true;
-            pthread_cond_signal(&context->retry_cond);
             pthread_mutex_unlock(&context->retry_mutex);
+            pthread_cond_signal(&context->retry_cond);
         }
     }
 

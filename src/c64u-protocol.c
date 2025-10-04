@@ -1,6 +1,8 @@
 #include <obs-module.h>
 #include <string.h>
 #include <time.h>
+#include <errno.h>
+#include <stdatomic.h>
 #include <util/platform.h>
 #include "c64u-logging.h"
 #include "c64u-protocol.h"
@@ -102,7 +104,7 @@ void init_async_retry_system(struct c64u_source *context)
     context->needs_retry = false;
     context->retry_count = 0;
     context->retry_shutdown = false;
-    context->last_udp_packet_time = os_gettime_ns();
+    atomic_store_explicit(&context->last_udp_packet_time, os_gettime_ns(), memory_order_relaxed);
 
     if (pthread_create(&context->retry_thread, NULL, async_retry_thread, context) == 0) {
         context->retry_thread_active = true;
@@ -133,7 +135,7 @@ void *async_retry_thread(void *data)
 {
     struct c64u_source *context = (struct c64u_source *)data;
 
-    C64U_LOG_DEBUG("Async retry thread started");
+    C64U_LOG_DEBUG("Async retry thread started - using event-driven deadline-based waiting");
 
     while (true) {
         pthread_mutex_lock(&context->retry_mutex);
@@ -146,7 +148,8 @@ void *async_retry_thread(void *data)
 
         // Check if we need to retry based on timeout or explicit request
         uint64_t now = os_gettime_ns();
-        uint64_t time_since_udp = now - context->last_udp_packet_time;
+        uint64_t last_packet_time = atomic_load_explicit(&context->last_udp_packet_time, memory_order_relaxed);
+        uint64_t time_since_udp = now - last_packet_time;
         bool should_retry = context->needs_retry || (time_since_udp > C64U_FRAME_TIMEOUT_NS);
 
         if (should_retry) {
@@ -187,10 +190,9 @@ void *async_retry_thread(void *data)
             context->retry_count++;
 
             // Adaptive retry delay based on consecutive failures
-            uint32_t retry_delay = 100; // Base 100ms delay
             if (context->consecutive_failures > 0 && !tcp_success) {
                 // Exponential backoff: 100ms * 1.3^failures, capped at 3000ms
-                retry_delay = 100;
+                uint32_t retry_delay = 100;
                 for (uint32_t i = 0; i < context->consecutive_failures && retry_delay < 3000; i++) {
                     retry_delay = (uint32_t)(retry_delay * 1.3); // Multiply by 1.3
                 }
@@ -198,17 +200,26 @@ void *async_retry_thread(void *data)
                     retry_delay = 3000; // Cap at 3 seconds
                 C64U_LOG_DEBUG("TCP connection failed (%u consecutive), using %ums retry delay",
                                context->consecutive_failures, retry_delay);
+                os_sleep_ms(retry_delay);
             }
-            os_sleep_ms(retry_delay);
         } else {
-            // Wait up to 100ms for signal, then check timeout again
-            // Use absolute time for better cross-platform compatibility
+            // Calculate deadline based on when the next timeout would occur
+            // deadline = last_packet_time + C64U_FRAME_TIMEOUT_NS
+            uint64_t deadline_ns = last_packet_time + C64U_FRAME_TIMEOUT_NS;
             struct timespec timeout_spec;
-            uint64_t now_ns = os_gettime_ns();
-            timeout_spec.tv_sec = (now_ns + 100000000ULL) / 1000000000ULL;  // Convert to seconds
-            timeout_spec.tv_nsec = (now_ns + 100000000ULL) % 1000000000ULL; // Remaining nanoseconds
-            pthread_cond_timedwait(&context->retry_cond, &context->retry_mutex, &timeout_spec);
+            timeout_spec.tv_sec = deadline_ns / 1000000000ULL;  // Convert to seconds
+            timeout_spec.tv_nsec = deadline_ns % 1000000000ULL; // Remaining nanoseconds
+
+            // Wait until the deadline or until signaled by packet arrival
+            int wait_result = pthread_cond_timedwait(&context->retry_cond, &context->retry_mutex, &timeout_spec);
             pthread_mutex_unlock(&context->retry_mutex);
+
+            // Log when we wake up naturally due to timeout vs signal
+            if (wait_result == ETIMEDOUT) {
+                C64U_LOG_DEBUG("Retry thread woke up due to timeout deadline");
+            } else if (wait_result == 0) {
+                C64U_LOG_DEBUG("Retry thread woke up due to packet arrival signal");
+            }
         }
     }
 
