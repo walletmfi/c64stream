@@ -77,7 +77,7 @@ jobs:
             'windows-x64;zip|exe'
             'macos-universal;tar.xz|pkg'
             'ubuntu-24.04-x86_64;tar.xz|deb|ddeb'
-            'sources;tar.xz'
+            'ubuntu-24.04-sources;tar.xz'
           )
 
           for variant_data in "${variants[@]}"; do
