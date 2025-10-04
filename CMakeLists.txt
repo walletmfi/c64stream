@@ -2,24 +2,30 @@ cmake_minimum_required(VERSION 3.28...3.30)
 
 include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/common/bootstrap.cmake" NO_POLICY_SCOPE)
 
-# Determine authoritative version from git tag first
-execute_process(
-  COMMAND git describe --tags --always --dirty
-  WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-  OUTPUT_VARIABLE GIT_VERSION_TAG
-  OUTPUT_STRIP_TRAILING_WHITESPACE
-  ERROR_QUIET
-)
-
-# Extract clean version number from git tag for project version
-if(GIT_VERSION_TAG AND GIT_VERSION_TAG MATCHES "^v?([0-9]+\\.[0-9]+\\.[0-9]+)")
-  # Extract version number from tag (e.g., "v1.2.3" -> "1.2.3", "1.2.3-dirty" -> "1.2.3")
-  string(REGEX REPLACE "^v?([0-9]+\\.[0-9]+\\.[0-9]+).*" "\\1" AUTHORITATIVE_VERSION "${GIT_VERSION_TAG}")
-  message(STATUS "Using git tag version: ${AUTHORITATIVE_VERSION}")
+# Determine authoritative version from git tag first (skip for PR builds)
+if(DEFINED ENV{GITHUB_EVENT_NAME} AND "$ENV{GITHUB_EVENT_NAME}" STREQUAL "pull_request")
+  # For PR builds, always use "dev" version regardless of git tags
+  set(AUTHORITATIVE_VERSION "dev")
+  message(STATUS "PR build detected, using development version: ${AUTHORITATIVE_VERSION}")
 else()
-  # Fallback to buildspec.json version if no proper git tag is available
-  set(AUTHORITATIVE_VERSION "${_version}")
-  message(STATUS "No git tag found, using buildspec.json version: ${AUTHORITATIVE_VERSION}")
+  execute_process(
+    COMMAND git describe --tags --always --dirty
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+    OUTPUT_VARIABLE GIT_VERSION_TAG
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+    ERROR_QUIET
+  )
+
+  # Extract clean version number from git tag for project version
+  if(GIT_VERSION_TAG AND GIT_VERSION_TAG MATCHES "^v?([0-9]+\\.[0-9]+\\.[0-9]+)")
+    # Extract version number from tag (e.g., "v1.2.3" -> "1.2.3", "1.2.3-dirty" -> "1.2.3")
+    string(REGEX REPLACE "^v?([0-9]+\\.[0-9]+\\.[0-9]+).*" "\\1" AUTHORITATIVE_VERSION "${GIT_VERSION_TAG}")
+    message(STATUS "Using git tag version: ${AUTHORITATIVE_VERSION}")
+  else()
+    # Fallback to buildspec.json version if no proper git tag is available
+    set(AUTHORITATIVE_VERSION "${_version}")
+    message(STATUS "No git tag found, using buildspec.json version: ${AUTHORITATIVE_VERSION}")
+  endif()
 endif()
 
 project(${_name} VERSION ${AUTHORITATIVE_VERSION})
@@ -37,8 +43,8 @@ include(helpers)
 
 add_library(${CMAKE_PROJECT_NAME} MODULE)
 
-# Update buildspec.json with authoritative version if it came from git tag
-if(GIT_VERSION_TAG AND GIT_VERSION_TAG MATCHES "^v?([0-9]+\\.[0-9]+\\.[0-9]+)")
+# Update buildspec.json with authoritative version if it came from git tag (skip for PR builds)
+if(GIT_VERSION_TAG AND GIT_VERSION_TAG MATCHES "^v?([0-9]+\\.[0-9]+\\.[0-9]+)" AND NOT (DEFINED ENV{GITHUB_EVENT_NAME} AND "$ENV{GITHUB_EVENT_NAME}" STREQUAL "pull_request"))
   # Update buildspec.json with the git tag version to keep it in sync
   # Use sed to update only line 41 (the main project version, not dependency versions)
   execute_process(

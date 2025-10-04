@@ -68,7 +68,13 @@ jobs:
 
           plugin_name="$(jq -r '.name' buildspec.json)"
           plugin_display_name="$(jq -r '.displayName // empty' buildspec.json)"
-          plugin_version="$(jq -r '.version' buildspec.json)"
+          
+          # For PR builds, use development version to match CMake behavior
+          if [[ "${GITHUB_EVENT_NAME}" == "pull_request" ]]; then
+            plugin_version="dev"
+          else
+            plugin_version="$(jq -r '.version' buildspec.json)"
+          fi
 
           if [[ "${plugin_display_name}" ]]; then
             echo "pluginName=${plugin_display_name}" >> $GITHUB_OUTPUT
