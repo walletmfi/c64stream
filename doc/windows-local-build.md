@@ -275,7 +275,7 @@ cmake --preset windows-x64  # Not windows-ci-x64
 Before submitting changes, verify your build meets all requirements:
 
 - [ ] Build completes without errors
-- [ ] Build completes without warnings (CI uses `-Werror`)  
+- [ ] Build completes without warnings (CI uses `-Werror`)
 - [ ] Code passes clang-format validation
 - [ ] Plugin loads successfully in OBS Studio
 - [ ] Plugin shows up in Sources list

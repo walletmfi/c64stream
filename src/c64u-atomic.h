@@ -39,11 +39,11 @@ typedef struct {
 } atomic_uint32_t;
 
 typedef struct {
-    volatile uint16_t value;
+    volatile uint32_t value; // Use 32-bit for compatibility with Interlocked functions
 } atomic_uint16_t;
 
 typedef struct {
-    volatile bool value;
+    volatile uint32_t value; // Use 32-bit for compatibility with Interlocked functions
 } atomic_bool_t;
 
 // Memory ordering constants (unused on Windows, but defined for consistency)
@@ -60,11 +60,11 @@ typedef enum { memory_order_relaxed = 0 } memory_order;
 #define atomic_exchange_explicit_u32(obj, val, order) InterlockedExchange((LONG volatile *)&(obj)->value, (LONG)(val))
 
 #define atomic_load_explicit_u16(obj, order) ((uint16_t)((obj)->value))
-#define atomic_store_explicit_u16(obj, val, order) InterlockedExchange16((SHORT volatile *)&(obj)->value, (SHORT)(val))
-#define atomic_fetch_add_explicit_u16(obj, val, order) InterlockedAdd16((SHORT volatile *)&(obj)->value, (SHORT)(val)) - (SHORT)(val)
+#define atomic_store_explicit_u16(obj, val, order) InterlockedExchange((LONG volatile *)&(obj)->value, (LONG)(val))
+#define atomic_fetch_add_explicit_u16(obj, val, order) InterlockedExchangeAdd((LONG volatile *)&(obj)->value, (LONG)(val))
 
 #define atomic_load_explicit_bool(obj, order) ((bool)((obj)->value))
-#define atomic_store_explicit_bool(obj, val, order) InterlockedExchange8((char volatile *)&(obj)->value, (char)(val))
+#define atomic_store_explicit_bool(obj, val, order) InterlockedExchange((LONG volatile *)&(obj)->value, (LONG)(val))
 
 // Initialize atomic variables
 #define ATOMIC_VAR_INIT(val) { (val) }
@@ -97,6 +97,40 @@ typedef _Atomic bool atomic_bool_t;
 
 #define atomic_load_explicit_bool(obj, order) atomic_load_explicit(obj, order)
 #define atomic_store_explicit_bool(obj, val, order) atomic_store_explicit(obj, val, order)
+
+#endif
+
+#ifdef _WIN32
+// Windows: Convenience macros for relaxed memory ordering
+#define atomic_load(obj) atomic_load_explicit_u32(obj, memory_order_relaxed)
+#define atomic_store(obj, val) atomic_store_explicit_u32(obj, val, memory_order_relaxed)
+#define atomic_fetch_add(obj, val) atomic_fetch_add_explicit_u32(obj, val, memory_order_relaxed)
+#define atomic_exchange(obj, val) atomic_exchange_explicit_u32(obj, val, memory_order_relaxed)
+
+#define atomic_load_u64(obj) atomic_load_explicit_u64(obj, memory_order_relaxed)
+#define atomic_store_u64(obj, val) atomic_store_explicit_u64(obj, val, memory_order_relaxed)
+#define atomic_fetch_add_u64(obj, val) atomic_fetch_add_explicit_u64(obj, val, memory_order_relaxed)
+
+#define atomic_load_u16(obj) atomic_load_explicit_u16(obj, memory_order_relaxed)
+#define atomic_store_u16(obj, val) atomic_store_explicit_u16(obj, val, memory_order_relaxed)
+#define atomic_fetch_add_u16(obj, val) atomic_fetch_add_explicit_u16(obj, val, memory_order_relaxed)
+
+#define atomic_load_bool(obj) atomic_load_explicit_bool(obj, memory_order_relaxed)
+#define atomic_store_bool(obj, val) atomic_store_explicit_bool(obj, val, memory_order_relaxed)
+
+#else
+// POSIX: Use standard C11 atomic functions directly - they already exist
+// Define the typed versions using standard functions
+#define atomic_load_u64(obj) atomic_load_explicit(obj, memory_order_relaxed)
+#define atomic_store_u64(obj, val) atomic_store_explicit(obj, val, memory_order_relaxed)
+#define atomic_fetch_add_u64(obj, val) atomic_fetch_add_explicit(obj, val, memory_order_relaxed)
+
+#define atomic_load_u16(obj) atomic_load_explicit(obj, memory_order_relaxed)
+#define atomic_store_u16(obj, val) atomic_store_explicit(obj, val, memory_order_relaxed)
+#define atomic_fetch_add_u16(obj, val) atomic_fetch_add_explicit(obj, val, memory_order_relaxed)
+
+#define atomic_load_bool(obj) atomic_load_explicit(obj, memory_order_relaxed)
+#define atomic_store_bool(obj, val) atomic_store_explicit(obj, val, memory_order_relaxed)
 
 #endif
 

@@ -469,7 +469,7 @@ Before announcing completion, verify ALL of the following:
 - [ ] **Linux build succeeds** without errors or warnings
 - [ ] **Windows build succeeds** using one of the above methods
 - [ ] **Code formatting passes**: `./build-aux/run-clang-format --check`
-- [ ] **CMake formatting passes**: `./build-aux/run-gersemi --check`  
+- [ ] **CMake formatting passes**: `./build-aux/run-gersemi --check`
 - [ ] **No compilation warnings** in either platform
 - [ ] **Atomic types work correctly** (if atomic changes were made)
 - [ ] **Header inclusion order is correct** (if header changes were made)
@@ -486,7 +486,7 @@ If either Linux or Windows build fails:
 ### Documentation Requirements
 
 When announcing completion of changes that affect build processes:
-- **Reference the appropriate build documentation**: 
+- **Reference the appropriate build documentation**:
   - Linux/general: `doc/developer.md`
   - Windows-specific: `doc/windows-local-build.md`
   - Cross-platform: Cross-Platform Development Guidelines (above)
