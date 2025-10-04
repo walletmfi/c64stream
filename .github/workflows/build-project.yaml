@@ -66,9 +66,9 @@ jobs:
           done
           echo "commitHash=${GITHUB_SHA:0:9}" >> $GITHUB_OUTPUT
 
-          plugin_name="$(grep 'name' buildspec.json | sed -E -e 's/^.+"name":[^"]+"(.+)",?$/\1/g')"
-          plugin_display_name="$(grep 'displayName' buildspec.json | sed -E -e 's/^.+"displayName":[^"]+"(.+)",?$/\1/g' || echo "")"
-          plugin_version="$(grep 'version' buildspec.json | sed -E -e 's/^.+"version":[^"]+"(.+)",?$/\1/g')"
+          plugin_name="$(jq -r '.name' buildspec.json)"
+          plugin_display_name="$(jq -r '.displayName // empty' buildspec.json)"
+          plugin_version="$(jq -r '.version' buildspec.json)"
 
           if [[ "${plugin_display_name}" ]]; then
             echo "pluginName=${plugin_display_name}" >> $GITHUB_OUTPUT
