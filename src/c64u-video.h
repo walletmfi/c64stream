@@ -19,28 +19,28 @@ struct c64u_source;
 struct frame_assembly;
 
 // Helper functions for frame assembly
-void init_frame_assembly(struct frame_assembly *frame, uint16_t frame_num);
-bool is_frame_complete(struct frame_assembly *frame);
-bool is_frame_timeout(struct frame_assembly *frame);
-void swap_frame_buffers(struct c64u_source *context);
-void assemble_frame_to_buffer(struct c64u_source *context, struct frame_assembly *frame);
+void c64u_init_frame_assembly(struct frame_assembly *frame, uint16_t frame_num);
+bool c64u_is_frame_complete(struct frame_assembly *frame);
+bool c64u_is_frame_timeout(struct frame_assembly *frame);
+void c64u_swap_frame_buffers(struct c64u_source *context);
+void c64u_assemble_frame_to_buffer(struct c64u_source *context, struct frame_assembly *frame);
 
 // Delay queue management
-void init_delay_queue(struct c64u_source *context);
-bool enqueue_delayed_frame(struct c64u_source *context, struct frame_assembly *frame, uint16_t sequence_num);
-bool dequeue_delayed_frame(struct c64u_source *context);
-void clear_delay_queue(struct c64u_source *context);
+void c64u_init_delay_queue(struct c64u_source *context);
+bool c64u_enqueue_delayed_frame(struct c64u_source *context, struct frame_assembly *frame, uint16_t sequence_num);
+bool c64u_dequeue_delayed_frame(struct c64u_source *context);
+void c64u_clear_delay_queue(struct c64u_source *context);
 
 // Performance optimization functions
-void process_video_statistics_batch(struct c64u_source *context, uint64_t current_time);
-void process_audio_statistics_batch(struct c64u_source *context, uint64_t current_time);
+void c64u_process_video_statistics_batch(struct c64u_source *context, uint64_t current_time);
+void c64u_process_audio_statistics_batch(struct c64u_source *context, uint64_t current_time);
 
 // Lock-free frame assembly functions
-void init_frame_assembly_lockfree(struct frame_assembly *frame, uint16_t frame_num);
-bool try_add_packet_lockfree(struct frame_assembly *frame, uint16_t packet_index);
-bool is_frame_complete_lockfree(struct frame_assembly *frame);
+void c64u_init_frame_assembly_lockfree(struct frame_assembly *frame, uint16_t frame_num);
+bool c64u_try_add_packet_lockfree(struct frame_assembly *frame, uint16_t packet_index);
+bool c64u_is_frame_complete_lockfree(struct frame_assembly *frame);
 
 // Video thread function
-void *video_thread_func(void *data);
+void *c64u_video_thread_func(void *data);
 
 #endif // C64U_VIDEO_H

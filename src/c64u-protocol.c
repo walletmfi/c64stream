@@ -11,16 +11,16 @@
 #include "c64u-types.h"
 #include "c64u-video.h"
 
-void send_control_command(struct c64u_source *context, bool enable, uint8_t stream_id)
+void c64u_send_control_command(struct c64u_source *context, bool enable, uint8_t stream_id)
 {
     if (strcmp(context->ip_address, "0.0.0.0") == 0) {
         C64U_LOG_DEBUG("Skipping control command - no IP configured (0.0.0.0)");
         return;
     }
 
-    socket_t sock = create_tcp_socket(context->ip_address, C64U_CONTROL_PORT);
+    socket_t sock = c64u_create_tcp_socket(context->ip_address, C64U_CONTROL_PORT);
     if (sock == INVALID_SOCKET_VALUE) {
-        return; // Error already logged in create_tcp_socket
+        return; // Error already logged in c64u_create_tcp_socket
     }
 
     if (enable) {

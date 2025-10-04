@@ -76,9 +76,9 @@ bool c64u_resolve_hostname_with_dns(const char *hostname, const char *custom_dns
 bool c64u_get_user_documents_path(char *path_buffer, size_t buffer_size);
 
 // Socket operations
-socket_t create_udp_socket(uint32_t port);
-socket_t create_tcp_socket(const char *ip, uint32_t port);
-bool c64u_test_connectivity_quick(const char *ip, uint32_t port);
+socket_t c64u_create_udp_socket(uint32_t port);
+socket_t c64u_create_tcp_socket(const char *ip, uint32_t port);
+bool c64u_test_connectivity(const char *ip, uint32_t port);
 
 // Error handling
 int c64u_get_socket_error(void);

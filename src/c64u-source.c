@@ -45,9 +45,9 @@ static void c64u_async_retry_task(void *data)
     } else {
         // Already streaming - test connectivity and send start commands (like 0.4.3)
         // Use quick connectivity test (50ms timeout) instead of blocking TCP socket creation
-        if (c64u_test_connectivity_quick(context->ip_address, C64U_CONTROL_PORT)) {
-            send_control_command(context, true, 0); // Video
-            send_control_command(context, true, 1); // Audio
+        if (c64u_test_connectivity(context->ip_address, C64U_CONTROL_PORT)) {
+            c64u_send_control_command(context, true, 0); // Video
+            c64u_send_control_command(context, true, 1); // Audio
             tcp_success = true;
             context->consecutive_failures = 0; // Reset failure counter on success
         } else {
@@ -127,7 +127,7 @@ void *c64u_create(obs_data_t *settings, obs_source_t *source)
     // Initialize color conversion optimization on first use
     static bool color_lut_initialized = false;
     if (!color_lut_initialized) {
-        init_color_conversion_lut();
+        c64u_init_color_conversion_lut();
         color_lut_initialized = true;
     }
 
@@ -497,8 +497,8 @@ void c64u_start_streaming(struct c64u_source *context)
     close_and_reset_sockets(context);
 
     // Create fresh UDP sockets (critical for reconnection after C64U restart)
-    context->video_socket = create_udp_socket(context->video_port);
-    context->audio_socket = create_udp_socket(context->audio_port);
+    context->video_socket = c64u_create_udp_socket(context->video_port);
+    context->audio_socket = c64u_create_udp_socket(context->audio_port);
 
     if (context->video_socket == INVALID_SOCKET_VALUE || context->audio_socket == INVALID_SOCKET_VALUE) {
         C64U_LOG_ERROR("Failed to create UDP sockets for streaming");
@@ -507,8 +507,8 @@ void c64u_start_streaming(struct c64u_source *context)
     }
 
     // Send start commands to C64U
-    send_control_command(context, true, 0); // Start video
-    send_control_command(context, true, 1); // Start audio
+    c64u_send_control_command(context, true, 0); // Start video
+    c64u_send_control_command(context, true, 1); // Start audio
 
     // Stop existing threads before creating new ones (handles reconnection case)
     if (context->streaming) {
@@ -530,7 +530,7 @@ void c64u_start_streaming(struct c64u_source *context)
     context->thread_active = true;
     context->streaming = true;
 
-    if (pthread_create(&context->video_thread, NULL, video_thread_func, context) != 0) {
+    if (pthread_create(&context->video_thread, NULL, c64u_video_thread_func, context) != 0) {
         C64U_LOG_ERROR("Failed to create video receiver thread");
         context->streaming = false;
         context->thread_active = false;
@@ -553,7 +553,7 @@ void c64u_start_streaming(struct c64u_source *context)
     context->audio_thread_active = true;
 
     // Initialize delay queue for rendering delay
-    init_delay_queue(context);
+    c64u_init_delay_queue(context);
 
     C64U_LOG_INFO("C64U streaming started successfully");
 }
@@ -615,7 +615,7 @@ void c64u_stop_streaming(struct c64u_source *context)
     }
 
     // Clear delay queue
-    clear_delay_queue(context);
+    c64u_clear_delay_queue(context);
 
     C64U_LOG_INFO("C64U streaming stopped");
 }

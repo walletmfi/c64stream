@@ -406,7 +406,7 @@ bool c64u_get_user_documents_path(char *path_buffer, size_t buffer_size)
 #endif
 }
 
-socket_t create_udp_socket(uint32_t port)
+socket_t c64u_create_udp_socket(uint32_t port)
 {
     socket_t sock = socket(AF_INET, SOCK_DGRAM, 0);
     if (sock == INVALID_SOCKET_VALUE) {
@@ -485,7 +485,7 @@ socket_t create_udp_socket(uint32_t port)
 }
 
 // Quick connectivity test with minimal timeout (for async retry tasks)
-bool c64u_test_connectivity_quick(const char *ip, uint32_t port)
+bool c64u_test_connectivity(const char *ip, uint32_t port)
 {
     if (!ip || strlen(ip) == 0) {
         return false;
@@ -577,7 +577,7 @@ bool c64u_test_connectivity_quick(const char *ip, uint32_t port)
     return (sock_error == 0);
 }
 
-socket_t create_tcp_socket(const char *ip, uint32_t port)
+socket_t c64u_create_tcp_socket(const char *ip, uint32_t port)
 {
     if (!ip || strlen(ip) == 0) {
         obs_log(LOG_ERROR, "[C64U] Invalid IP address provided");

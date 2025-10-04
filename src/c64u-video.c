@@ -20,34 +20,34 @@
 #include "c64u-protocol.h"
 
 // Helper functions for frame assembly (updated to use lock-free implementation)
-void init_frame_assembly(struct frame_assembly *frame, uint16_t frame_num)
+void c64u_init_frame_assembly(struct frame_assembly *frame, uint16_t frame_num)
 {
     // Delegate to lock-free implementation for performance
-    init_frame_assembly_lockfree(frame, frame_num);
+    c64u_init_frame_assembly_lockfree(frame, frame_num);
 }
 
-bool is_frame_complete(struct frame_assembly *frame)
+bool c64u_is_frame_complete(struct frame_assembly *frame)
 {
     // Delegate to lock-free implementation for performance
-    return is_frame_complete_lockfree(frame);
+    return c64u_is_frame_complete_lockfree(frame);
 }
 
-bool is_frame_timeout(struct frame_assembly *frame)
+bool c64u_is_frame_timeout(struct frame_assembly *frame)
 {
     uint64_t elapsed = (os_gettime_ns() - frame->start_time) / 1000000; // Convert to ms
     return elapsed > C64U_FRAME_TIMEOUT_MS;
 }
 
-void swap_frame_buffers(struct c64u_source *context)
+void c64u_swap_frame_buffers(struct c64u_source *context)
 {
     // Save frame to disk if enabled (before swap to avoid race conditions)
     if (context->save_frames) {
-        save_frame_as_bmp(context, context->frame_buffer_back);
+        c64u_save_frame_as_bmp(context, context->frame_buffer_back);
     }
 
     // Record frame to video file if recording is enabled
     if (context->record_video) {
-        record_video_frame(context, context->frame_buffer_back);
+        c64u_record_video_frame(context, context->frame_buffer_back);
     }
 
     // Atomically swap front and back buffers
@@ -59,7 +59,7 @@ void swap_frame_buffers(struct c64u_source *context)
     context->buffer_swap_pending = false;
 }
 
-void assemble_frame_to_buffer(struct c64u_source *context, struct frame_assembly *frame)
+void c64u_assemble_frame_to_buffer(struct c64u_source *context, struct frame_assembly *frame)
 {
     // Assemble complete frame into back buffer
     for (int i = 0; i < C64U_MAX_PACKETS_PER_FRAME; i++) {
@@ -75,13 +75,13 @@ void assemble_frame_to_buffer(struct c64u_source *context, struct frame_assembly
             uint8_t *src_line = packet->packet_data + (line * C64U_BYTES_PER_LINE);
 
             // Optimized color conversion using lookup table
-            convert_pixels_optimized(src_line, dst_line, C64U_BYTES_PER_LINE);
+            c64u_convert_pixels_optimized(src_line, dst_line, C64U_BYTES_PER_LINE);
         }
     }
 }
 
 // Delay queue management functions
-void init_delay_queue(struct c64u_source *context)
+void c64u_init_delay_queue(struct c64u_source *context)
 {
     if (pthread_mutex_lock(&context->delay_mutex) == 0) {
         // Allocate delay queue buffers if needed (max delay + buffer)
@@ -123,7 +123,7 @@ void init_delay_queue(struct c64u_source *context)
     }
 }
 
-bool enqueue_delayed_frame(struct c64u_source *context, struct frame_assembly *frame, uint16_t sequence_num)
+bool c64u_enqueue_delayed_frame(struct c64u_source *context, struct frame_assembly *frame, uint16_t sequence_num)
 {
     if (pthread_mutex_lock(&context->delay_mutex) != 0) {
         return false;
@@ -132,7 +132,7 @@ bool enqueue_delayed_frame(struct c64u_source *context, struct frame_assembly *f
     // Initialize delay queue if not already done
     if (context->delayed_frame_queue == NULL) {
         pthread_mutex_unlock(&context->delay_mutex);
-        init_delay_queue(context);
+        c64u_init_delay_queue(context);
         if (pthread_mutex_lock(&context->delay_mutex) != 0) {
             return false;
         }
@@ -170,7 +170,7 @@ bool enqueue_delayed_frame(struct c64u_source *context, struct frame_assembly *f
             uint8_t *src_line = packet->packet_data + (line * C64U_BYTES_PER_LINE);
 
             // Optimized color conversion using lookup table
-            convert_pixels_optimized(src_line, dst_line, C64U_BYTES_PER_LINE);
+            c64u_convert_pixels_optimized(src_line, dst_line, C64U_BYTES_PER_LINE);
         }
     }
 
@@ -182,7 +182,7 @@ bool enqueue_delayed_frame(struct c64u_source *context, struct frame_assembly *f
     return true;
 }
 
-bool dequeue_delayed_frame(struct c64u_source *context)
+bool c64u_dequeue_delayed_frame(struct c64u_source *context)
 {
     if (pthread_mutex_lock(&context->delay_mutex) != 0) {
         return false;
@@ -216,7 +216,7 @@ bool dequeue_delayed_frame(struct c64u_source *context)
     return false;
 }
 
-void clear_delay_queue(struct c64u_source *context)
+void c64u_clear_delay_queue(struct c64u_source *context)
 {
     if (pthread_mutex_lock(&context->delay_mutex) == 0) {
         context->delay_queue_size = 0;
@@ -227,7 +227,7 @@ void clear_delay_queue(struct c64u_source *context)
 }
 
 // Performance optimization: Batch process video statistics to reduce hot path overhead
-void process_video_statistics_batch(struct c64u_source *context, uint64_t current_time)
+void c64u_process_video_statistics_batch(struct c64u_source *context, uint64_t current_time)
 {
     // Only process statistics every 5 seconds to minimize overhead
     static const uint64_t STATS_INTERVAL_NS = 5000000000ULL; // 5 seconds
@@ -293,7 +293,7 @@ void process_video_statistics_batch(struct c64u_source *context, uint64_t curren
 }
 
 // Performance optimization: Batch process audio statistics
-void process_audio_statistics_batch(struct c64u_source *context, uint64_t current_time)
+void c64u_process_audio_statistics_batch(struct c64u_source *context, uint64_t current_time)
 {
     static const uint64_t STATS_INTERVAL_NS = 5000000000ULL; // 5 seconds
 
@@ -319,7 +319,7 @@ void process_audio_statistics_batch(struct c64u_source *context, uint64_t curren
 }
 
 // Lock-free frame assembly optimization functions
-void init_frame_assembly_lockfree(struct frame_assembly *frame, uint16_t frame_num)
+void c64u_init_frame_assembly_lockfree(struct frame_assembly *frame, uint16_t frame_num)
 {
     // Initialize frame with atomic fields
     memset(frame, 0, sizeof(struct frame_assembly));
@@ -330,7 +330,7 @@ void init_frame_assembly_lockfree(struct frame_assembly *frame, uint16_t frame_n
     frame->packets_received_mask = 0;
 }
 
-bool try_add_packet_lockfree(struct frame_assembly *frame, uint16_t packet_index)
+bool c64u_try_add_packet_lockfree(struct frame_assembly *frame, uint16_t packet_index)
 {
     // Check if packet index is valid
     if (packet_index >= C64U_MAX_PACKETS_PER_FRAME) {
@@ -353,7 +353,7 @@ bool try_add_packet_lockfree(struct frame_assembly *frame, uint16_t packet_index
     return true; // Successfully added new packet
 }
 
-bool is_frame_complete_lockfree(struct frame_assembly *frame)
+bool c64u_is_frame_complete_lockfree(struct frame_assembly *frame)
 {
     // Load current packet count atomically
     uint16_t received = frame->received_packets;
@@ -378,7 +378,7 @@ bool is_frame_complete_lockfree(struct frame_assembly *frame)
 }
 
 // Video thread function
-void *video_thread_func(void *data)
+void *c64u_video_thread_func(void *data)
 {
     struct c64u_source *context = data;
     uint8_t packet[C64U_VIDEO_PACKET_SIZE];
@@ -473,7 +473,7 @@ void *video_thread_func(void *data)
 
         // Batch process statistics every N packets or time interval (moved out of hot path)
         uint64_t now = os_gettime_ns();
-        process_video_statistics_batch(context, now);
+        c64u_process_video_statistics_batch(context, now);
 
         // Validate packet data
         if (lines_per_packet != C64U_LINES_PER_PACKET || pixels_per_line != C64U_PIXELS_PER_LINE ||
@@ -512,8 +512,9 @@ void *video_thread_func(void *data)
                 context->last_capture_time = capture_time;
                 // Complete previous frame if it exists and is reasonably complete
                 if (context->current_frame.received_packets > 0) {
-                    if (is_frame_complete(&context->current_frame) || is_frame_timeout(&context->current_frame)) {
-                        if (is_frame_complete(&context->current_frame)) {
+                    if (c64u_is_frame_complete(&context->current_frame) ||
+                        c64u_is_frame_timeout(&context->current_frame)) {
+                        if (c64u_is_frame_complete(&context->current_frame)) {
                             // Handle frame completion with delay queue for timeout case
                             if (context->last_completed_frame != context->current_frame.frame_num) {
                                 C64U_LOG_DEBUG(
@@ -526,8 +527,8 @@ void *video_thread_func(void *data)
                                 // If no delay configured, process frame immediately
                                 if (context->render_delay_frames == 0) {
                                     if (pthread_mutex_lock(&context->frame_mutex) == 0) {
-                                        assemble_frame_to_buffer(context, &context->current_frame);
-                                        swap_frame_buffers(context);
+                                        c64u_assemble_frame_to_buffer(context, &context->current_frame);
+                                        c64u_swap_frame_buffers(context);
                                         context->last_completed_frame = context->current_frame.frame_num;
                                         // Track diagnostics consistently
                                         context->frames_completed++;
@@ -543,7 +544,7 @@ void *video_thread_func(void *data)
                                     }
                                 } else {
                                     // Add frame to delay queue
-                                    if (enqueue_delayed_frame(context, &context->current_frame, seq_num)) {
+                                    if (c64u_enqueue_delayed_frame(context, &context->current_frame, seq_num)) {
                                         context->last_completed_frame = context->current_frame.frame_num;
                                         context->frames_completed++;
 
@@ -552,10 +553,10 @@ void *video_thread_func(void *data)
                                                        context->render_delay_frames);
 
                                         // Try to dequeue a delayed frame if queue has enough frames
-                                        if (dequeue_delayed_frame(context)) {
+                                        if (c64u_dequeue_delayed_frame(context)) {
                                             // Successfully dequeued a frame, make it available to OBS
                                             if (pthread_mutex_lock(&context->frame_mutex) == 0) {
-                                                swap_frame_buffers(context);
+                                                c64u_swap_frame_buffers(context);
                                                 context->buffer_swaps++;
                                                 context->frames_delivered_to_obs++;
                                                 context->total_pipeline_latency += (os_gettime_ns() - capture_time);
@@ -590,7 +591,7 @@ void *video_thread_func(void *data)
                 }
 
                 // Start new frame
-                init_frame_assembly(&context->current_frame, frame_num);
+                c64u_init_frame_assembly(&context->current_frame, frame_num);
             }
 
             // Add packet to current frame (calculate packet index from line number)
@@ -650,15 +651,15 @@ void *video_thread_func(void *data)
             }
 
             // Check if frame is complete
-            if (is_frame_complete(&context->current_frame)) {
+            if (c64u_is_frame_complete(&context->current_frame)) {
                 // Handle frame completion with delay queue
                 if (context->last_completed_frame != context->current_frame.frame_num) {
 
                     // If no delay configured, process frame immediately
                     if (context->render_delay_frames == 0) {
                         if (pthread_mutex_lock(&context->frame_mutex) == 0) {
-                            assemble_frame_to_buffer(context, &context->current_frame);
-                            swap_frame_buffers(context);
+                            c64u_assemble_frame_to_buffer(context, &context->current_frame);
+                            c64u_swap_frame_buffers(context);
                             context->last_completed_frame = context->current_frame.frame_num;
                             // Track diagnostics (only once per completed frame!)
                             context->frames_completed++;
@@ -670,16 +671,16 @@ void *video_thread_func(void *data)
                         }
                     } else {
                         // Add frame to delay queue
-                        if (enqueue_delayed_frame(context, &context->current_frame, seq_num)) {
+                        if (c64u_enqueue_delayed_frame(context, &context->current_frame, seq_num)) {
                             context->last_completed_frame = context->current_frame.frame_num;
                             context->frames_completed++;
                             context->video_frames_processed++;
 
                             // Try to dequeue a delayed frame if queue has enough frames
-                            if (dequeue_delayed_frame(context)) {
+                            if (c64u_dequeue_delayed_frame(context)) {
                                 // Successfully dequeued a frame, make it available to OBS
                                 if (pthread_mutex_lock(&context->frame_mutex) == 0) {
-                                    swap_frame_buffers(context);
+                                    c64u_swap_frame_buffers(context);
                                     context->buffer_swaps++;
                                     context->frames_delivered_to_obs++;
                                     context->total_pipeline_latency += (os_gettime_ns() - capture_time);
@@ -691,7 +692,7 @@ void *video_thread_func(void *data)
                 }
 
                 // Reset for next frame
-                init_frame_assembly(&context->current_frame, 0);
+                c64u_init_frame_assembly(&context->current_frame, 0);
             }
         }
 

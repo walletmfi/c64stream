@@ -63,7 +63,7 @@ void *audio_thread_func(void *data)
 
         // Batch process audio statistics (moved out of hot path)
         uint64_t audio_now = os_gettime_ns();
-        process_audio_statistics_batch(context, audio_now);
+        c64u_process_audio_statistics_batch(context, audio_now);
 
         // Send audio to OBS (192 stereo samples = 384 16-bit values)
         struct obs_source_audio audio_frame = {0};
@@ -76,8 +76,8 @@ void *audio_thread_func(void *data)
 
         // Record audio data if recording is enabled
         if (context->record_video) {
-            record_audio_data(context, (const uint8_t *)audio_data,
-                              192 * 2 * 2); // 192 stereo samples * 2 bytes per sample
+            c64u_record_audio_data(context, (const uint8_t *)audio_data,
+                                   192 * 2 * 2); // 192 stereo samples * 2 bytes per sample
         }
 
         obs_source_output_audio(context->source, &audio_frame);
