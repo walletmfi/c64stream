@@ -287,7 +287,7 @@
             <span class="theme-icon">🌙</span>
             <span class="theme-text">Dark</span>
         </button>
-        
+
         <header>
             <img src="images/c64u-obs.png" alt="C64 Ultimate OBS Plugin Logo" class="logo">
             <h1>C64 Ultimate OBS Plugin</h1>
@@ -320,7 +320,7 @@
                 </div>
                 <div class="feature">
                     <h3>⚡ Cross Platform</h3>
-                    <p>Supports Windows, macOS, and Linux with easy installation packages for each platform.</p>
+                    <p>Supports Windows and Linux with easy installation packages. macOS support is in active development.</p>
                 </div>
             </div>
 
@@ -357,18 +357,18 @@
     <script>
         // Initialize dark mode as default
         document.documentElement.setAttribute('data-theme', 'dark');
-        
+
         function toggleTheme() {
             const currentTheme = document.documentElement.getAttribute('data-theme');
             const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
-            
+
             document.documentElement.setAttribute('data-theme', newTheme);
-            
+
             // Update button text and icon
             const themeButton = document.querySelector('.theme-toggle');
             const themeIcon = themeButton.querySelector('.theme-icon');
             const themeText = themeButton.querySelector('.theme-text');
-            
+
             if (newTheme === 'dark') {
                 themeIcon.textContent = '🌙';
                 themeText.textContent = 'Dark';
@@ -376,20 +376,20 @@
                 themeIcon.textContent = '☀️';
                 themeText.textContent = 'Light';
             }
-            
+
             // Save preference to localStorage
             localStorage.setItem('theme', newTheme);
         }
-        
+
         // Load saved theme preference or default to dark
         document.addEventListener('DOMContentLoaded', function() {
             const savedTheme = localStorage.getItem('theme') || 'dark';
             document.documentElement.setAttribute('data-theme', savedTheme);
-            
+
             const themeButton = document.querySelector('.theme-toggle');
             const themeIcon = themeButton.querySelector('.theme-icon');
             const themeText = themeButton.querySelector('.theme-text');
-            
+
             if (savedTheme === 'dark') {
                 themeIcon.textContent = '🌙';
                 themeText.textContent = 'Dark';

@@ -13,7 +13,7 @@ execute_process(
 
 # Extract clean version number from git tag for project version
 if(GIT_VERSION_TAG AND GIT_VERSION_TAG MATCHES "^v?([0-9]+\\.[0-9]+\\.[0-9]+)")
-  # Extract version number from tag (e.g., "v1.2.3" -> "1.2.3", "1.2.3-dirty" -> "1.2.3") 
+  # Extract version number from tag (e.g., "v1.2.3" -> "1.2.3", "1.2.3-dirty" -> "1.2.3")
   string(REGEX REPLACE "^v?([0-9]+\\.[0-9]+\\.[0-9]+).*" "\\1" AUTHORITATIVE_VERSION "${GIT_VERSION_TAG}")
   message(STATUS "Using git tag version: ${AUTHORITATIVE_VERSION}")
 else()
@@ -46,7 +46,7 @@ if(GIT_VERSION_TAG AND GIT_VERSION_TAG MATCHES "^v?([0-9]+\\.[0-9]+\\.[0-9]+)")
     WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
     RESULT_VARIABLE sed_result
   )
-  
+
   if(sed_result EQUAL 0)
     message(STATUS "Updated buildspec.json version to: ${AUTHORITATIVE_VERSION}")
   else()
