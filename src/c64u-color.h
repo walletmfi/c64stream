@@ -39,7 +39,7 @@ void init_color_conversion_lut(void);
  * @param dst Destination RGBA buffer (32-bit per pixel)
  * @param pixel_pairs Number of pixel pairs to convert (bytes to process)
  *
- * Performance: Processes ~8 pixels per loop iteration using 64-bit packed writes
+ * Performance: Processes 8 pixels per loop iteration using 64-bit packed writes
  * for optimal cache efficiency in high-frequency video processing (3400+ packets/sec).
  */
 void convert_pixels_optimized(const uint8_t *src, uint32_t *dst, int pixel_pairs);

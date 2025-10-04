@@ -84,11 +84,3 @@ void send_control_command(struct c64u_source *context, bool enable, uint8_t stre
 
     close(sock);
 }
-
-// Simplified async function - just calls the synchronous version directly
-// since we eliminated the retry thread system
-void send_control_command_async(struct c64u_source *context, bool enable, uint8_t stream_id)
-{
-    // With retry thread eliminated, just call synchronous version
-    send_control_command(context, enable, stream_id);
-}

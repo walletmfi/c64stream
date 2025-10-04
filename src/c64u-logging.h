@@ -5,15 +5,35 @@
 #include <time.h>
 #include <stdint.h>
 
+#ifdef _WIN32
+#include <windows.h>
+#else
+#include <sys/time.h>
+#endif
+
 // Logging control - using extern to avoid multiple definitions
 extern bool c64u_debug_logging;
 
 // Fast milliseconds since epoch for logging
 static inline uint64_t c64u_get_millis(void)
 {
+#ifdef _WIN32
+    // Windows: Use GetSystemTimeAsFileTime for millisecond precision
+    FILETIME ft;
+    GetSystemTimeAsFileTime(&ft);
+
+    // Convert Windows FILETIME to milliseconds since Unix epoch
+    uint64_t ticks = ((uint64_t)ft.dwHighDateTime << 32) | ft.dwLowDateTime;
+    // Windows epoch starts Jan 1, 1601. Unix epoch starts Jan 1, 1970.
+    // Difference is 11644473600 seconds = 116444736000000000 * 100ns ticks
+    uint64_t unix_ticks = ticks - 116444736000000000ULL;
+    return unix_ticks / 10000ULL; // Convert 100ns ticks to milliseconds
+#else
+    // POSIX: Use clock_gettime
     struct timespec ts;
     clock_gettime(CLOCK_REALTIME, &ts);
     return (uint64_t)ts.tv_sec * 1000 + (uint64_t)ts.tv_nsec / 1000000;
+#endif
 }
 
 #define C64U_LOG_INFO(format, ...)                                                                        \

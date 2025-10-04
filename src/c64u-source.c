@@ -19,7 +19,11 @@
 #include "c64u-properties.h"
 #include "plugin-support.h"
 
+// Forward declarations
+static void close_and_reset_sockets(struct c64u_source *context);
+
 // Async retry task - runs in OBS thread pool (NOT render thread)
+// Based on working 0.4.3 approach but simplified
 static void c64u_async_retry_task(void *data)
 {
     struct c64u_source *context = (struct c64u_source *)data;
@@ -29,20 +33,37 @@ static void c64u_async_retry_task(void *data)
         return;
     }
 
-    // Safe to make TCP calls here - we're in OBS thread pool, not render thread
-    C64U_LOG_DEBUG("Async retry task executing TCP commands (streaming=%d)", context->streaming);
+    C64U_LOG_INFO("Async retry attempt %u - %s", context->retry_count,
+                  context->streaming ? "sending start commands" : "starting streaming");
 
-    if (context->streaming) {
-        // Send start commands to restore connection
-        send_control_command(context, true, 0); // Video stream
-        send_control_command(context, true, 1); // Audio stream
-        C64U_LOG_DEBUG("Retry TCP commands sent, clearing retry state");
-    } else {
-        // Start streaming
+    bool tcp_success = false;
+
+    if (!context->streaming) {
+        // Not streaming - need to create UDP sockets and threads (like 0.4.3)
         c64u_start_streaming(context);
+        tcp_success = true; // c64u_start_streaming handles TCP commands internally
+    } else {
+        // Already streaming - test connectivity and send start commands (like 0.4.3)
+        socket_t test_sock = create_tcp_socket(context->ip_address, C64U_CONTROL_PORT);
+        if (test_sock != INVALID_SOCKET_VALUE) {
+            close(test_sock);                       // Just testing connectivity
+            send_control_command(context, true, 0); // Video
+            send_control_command(context, true, 1); // Audio
+            tcp_success = true;
+            context->consecutive_failures = 0; // Reset failure counter on success
+        } else {
+            tcp_success = false;
+            context->consecutive_failures++;
+        }
     }
 
-    // Clear retry state - allows future retries if needed
+    context->retry_count++;
+
+    if (!tcp_success) {
+        C64U_LOG_DEBUG("TCP connection failed (%u consecutive failures)", context->consecutive_failures);
+    }
+
+    // Clear retry state - allows future retries
     context->retry_in_progress = false;
 }
 
@@ -272,16 +293,21 @@ void *c64u_create(obs_data_t *settings, obs_source_t *source)
     uint64_t now = os_gettime_ns();
     context->last_udp_packet_time = now;
     context->retry_in_progress = false;
+    context->retry_count = 0;
+    context->consecutive_failures = 0;
 
     // Initialize logo display
     context->logo_texture = NULL;
     context->logo_load_attempted = false;
 
-    // Initialize recording module
+    // Initialize recording for this source
     c64u_record_init(context);
 
-    // Apply recording settings from OBS
-    c64u_record_update_settings(context, settings);
+    // Start initial connection attempt to restore automatic reconnect functionality
+    C64U_LOG_INFO("C64U source created successfully - starting initial connection");
+    c64u_start_streaming(context);
+
+    return context;
 
     C64U_LOG_INFO("C64U source created - C64U host: %s (IP: %s), OBS IP: %s, Video: %u, Audio: %u", context->hostname,
                   context->ip_address, context->obs_ip_address, context->video_port, context->audio_port);
@@ -472,17 +498,13 @@ void c64u_start_streaming(struct c64u_source *context)
         return;
     }
 
-    // If already streaming, trigger async retry (no TCP calls in OBS thread)
-    if (context->streaming) {
-        C64U_LOG_INFO("Already streaming - triggering async start commands with current config");
-        send_control_command_async(context, true, 0); // Start video async
-        return;
-    }
-
     C64U_LOG_INFO("Starting C64U streaming to C64 %s (OBS IP: %s, video:%u, audio:%u)...", context->ip_address,
                   context->obs_ip_address, context->video_port, context->audio_port);
 
-    // Create UDP sockets
+    // Always close existing sockets before creating new ones (handles reconnection case)
+    close_and_reset_sockets(context);
+
+    // Create fresh UDP sockets (critical for reconnection after C64U restart)
     context->video_socket = create_udp_socket(context->video_port);
     context->audio_socket = create_udp_socket(context->audio_port);
 
@@ -492,15 +514,29 @@ void c64u_start_streaming(struct c64u_source *context)
         return;
     }
 
-    // Send start commands to C64U asynchronously (async system already initialized in create)
-    send_control_command_async(context, true, 0); // Start video async
-    send_control_command_async(context, true, 1); // Start audio async
+    // Send start commands to C64U
+    send_control_command(context, true, 0); // Start video
+    send_control_command(context, true, 1); // Start audio
 
-    // Start worker threads
+    // Stop existing threads before creating new ones (handles reconnection case)
+    if (context->streaming) {
+        context->streaming = false;
+        context->thread_active = false;
+
+        // Wait for existing threads to finish
+        if (context->video_thread_active && pthread_join(context->video_thread, NULL) != 0) {
+            C64U_LOG_WARNING("Failed to join existing video thread during reconnection");
+        }
+        if (context->audio_thread_active && pthread_join(context->audio_thread, NULL) != 0) {
+            C64U_LOG_WARNING("Failed to join existing audio thread during reconnection");
+        }
+        context->video_thread_active = false;
+        context->audio_thread_active = false;
+    }
+
+    // Start fresh worker threads
     context->thread_active = true;
     context->streaming = true;
-    context->video_thread_active = false;
-    context->audio_thread_active = false;
 
     if (pthread_create(&context->video_thread, NULL, video_thread_func, context) != 0) {
         C64U_LOG_ERROR("Failed to create video receiver thread");
@@ -612,40 +648,66 @@ void c64u_render(void *data, gs_effect_t *effect)
     // 1. Not streaming, OR
     // 2. No frames ready, OR
     // 3. No frame buffer, OR
-    // 4. Frames have timed out (no new frames for 1 second)
+    // 4. Frames have timed out (no new frames for timeout period)
     uint64_t now = os_gettime_ns();
     bool frames_timed_out = false;
-    if (context->frame_ready && context->last_frame_time > 0) {
+    bool needs_initial_connection = false;
+
+    if (context->last_frame_time > 0) {
+        // We have received frames before - check for timeout regardless of frame_ready state
         uint64_t frame_age = now - context->last_frame_time;
         frames_timed_out = (frame_age > C64U_FRAME_TIMEOUT_NS);
+    } else {
+        // No frames received yet - need initial connection (regardless of streaming flag)
+        // This handles both: OBS started first, and failed connection attempts
+        needs_initial_connection = true;
+    }
 
-        // Trigger retry when frames timeout (render callback approach)
-        if (frames_timed_out) {
-            // Smart retry logic - avoid redundant attempts with state tracking
-            static uint64_t last_retry_time = 0;
-            uint64_t time_since_last_retry = now - last_retry_time;
+    // Retry logic based on working 0.4.3 approach with adaptive backoff
+    if (frames_timed_out || needs_initial_connection) {
+        // Calculate adaptive retry delay (like 0.4.3): 100ms base, exponential backoff on failures, capped at 3000ms
+        static uint64_t last_retry_time = 0;
+        uint64_t retry_delay_ms = 100; // Base 100ms delay
 
-            // Only retry if:
-            // 1. Enough time has passed (500ms rate limiting)
-            // 2. No retry is already in progress
-            // 3. Valid IP is configured
-            if (time_since_last_retry > 500000000ULL && // 500ms rate limit
-                !context->retry_in_progress &&          // No redundant retries
-                strcmp(context->ip_address, "0.0.0.0") != 0) {
-
-                last_retry_time = now;
-                context->retry_in_progress = true; // Mark retry in progress
-
-                C64U_LOG_INFO("Frame timeout detected (age: %llu ms) - queuing retry task", frame_age / 1000000ULL);
-
-                // Queue async retry task in OBS thread pool - NO BLOCKING in render thread
-                // This returns immediately, TCP calls happen in background thread
-                obs_queue_task(OBS_TASK_UI, c64u_async_retry_task, context, false);
+        if (context->consecutive_failures > 0) {
+            // Exponential backoff: 100ms * 1.3^failures, capped at 3000ms
+            for (uint32_t i = 0; i < context->consecutive_failures && retry_delay_ms < 3000; i++) {
+                retry_delay_ms = (uint64_t)(retry_delay_ms * 1.3); // Multiply by 1.3
             }
-        } else {
-            // Frames are arriving normally - clear retry state
-            context->retry_in_progress = false;
+            if (retry_delay_ms > 3000)
+                retry_delay_ms = 3000; // Cap at 3 seconds
         }
+
+        uint64_t retry_delay_ns = retry_delay_ms * 1000000ULL; // Convert to nanoseconds
+        uint64_t time_since_last_retry = now - last_retry_time;
+
+        // Only retry/connect if:
+        // 1. Enough time has passed (adaptive backoff)
+        // 2. No retry is already in progress
+        // 3. Valid IP is configured
+        if ((needs_initial_connection || time_since_last_retry >= retry_delay_ns) && !context->retry_in_progress &&
+            strcmp(context->ip_address, "0.0.0.0") != 0) {
+
+            last_retry_time = now;
+            context->retry_in_progress = true;
+
+            if (needs_initial_connection) {
+                C64U_LOG_INFO("🔌 Initial connection attempt to C64U %s", context->ip_address);
+            } else if (frames_timed_out) {
+                uint64_t frame_age = now - context->last_frame_time;
+                C64U_LOG_INFO("🔄 Frame timeout (age: %llu ms) - retry %u with %llums delay to C64U %s",
+                              (unsigned long long)(frame_age / 1000000ULL), context->retry_count + 1,
+                              (unsigned long long)retry_delay_ms, context->ip_address);
+            }
+
+            // Queue async retry task
+            obs_queue_task(OBS_TASK_UI, c64u_async_retry_task, context, false);
+        }
+    } else if (context->frame_ready && context->last_frame_time > 0) {
+        // Frames are arriving normally - reset retry counters
+        context->retry_in_progress = false;
+        context->retry_count = 0;
+        context->consecutive_failures = 0;
     }
 
     bool should_show_logo = !context->streaming || !context->frame_ready || !context->frame_buffer_front ||
