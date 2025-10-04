@@ -4,17 +4,19 @@ include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/common/bootstrap.cmake" NO_POLICY_SCO
 
 # Determine authoritative version from git tag first (skip for PR builds)
 if(DEFINED ENV{GITHUB_EVENT_NAME} AND "$ENV{GITHUB_EVENT_NAME}" STREQUAL "pull_request")
-  # For PR builds, use development pre-release version
-  # Extract current version and increment minor for next development version
+  # For PR builds, use development version with high patch numbers
+  # Use format MAJOR.MINOR.999X where X is build number (CMake VERSION compliant)
   string(REPLACE "." ";" version_parts "${_version}")
   list(GET version_parts 0 major)
   list(GET version_parts 1 minor)
-  math(EXPR next_minor "${minor} + 1")
   
   if(DEFINED ENV{GITHUB_RUN_NUMBER})
-    set(AUTHORITATIVE_VERSION "${major}.${next_minor}.0-dev.$ENV{GITHUB_RUN_NUMBER}")
+    # Use 9990 + run_number to clearly indicate development builds
+    math(EXPR dev_patch "9990 + $ENV{GITHUB_RUN_NUMBER}")
+    set(AUTHORITATIVE_VERSION "${major}.${minor}.${dev_patch}")
   else()
-    set(AUTHORITATIVE_VERSION "${major}.${next_minor}.0-dev.local")
+    # Local development builds use 9999
+    set(AUTHORITATIVE_VERSION "${major}.${minor}.9999")
   endif()
   message(STATUS "PR build detected, using development version: ${AUTHORITATIVE_VERSION}")
 else()
