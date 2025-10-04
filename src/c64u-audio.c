@@ -42,7 +42,7 @@ void *audio_thread_func(void *data)
 
         // Update timestamp for timeout detection - UDP packet received successfully
         // Use atomic store to avoid mutex contention in the hot packet path
-        atomic_store_explicit(&context->last_udp_packet_time, os_gettime_ns(), memory_order_relaxed);
+        atomic_store_explicit_u64(&context->last_udp_packet_time, os_gettime_ns(), memory_order_relaxed);
 
         // Signal the retry thread that a packet arrived to reset its wait deadline
         pthread_cond_signal(&context->retry_cond);

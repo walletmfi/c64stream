@@ -321,7 +321,7 @@ void init_frame_assembly_lockfree(struct frame_assembly *frame, uint16_t frame_n
     frame->start_time = os_gettime_ns();
     atomic_store_explicit_u16(&frame->received_packets, 0, memory_order_relaxed);
     atomic_store_explicit_bool(&frame->complete, false, memory_order_relaxed);
-    atomic_store_explicit(&frame->packets_received_mask, 0, memory_order_relaxed);
+    atomic_store_explicit_u64(&frame->packets_received_mask, 0, memory_order_relaxed);
 }
 
 bool try_add_packet_lockfree(struct frame_assembly *frame, uint16_t packet_index)
@@ -333,7 +333,7 @@ bool try_add_packet_lockfree(struct frame_assembly *frame, uint16_t packet_index
 
     // Use atomic operations to set the packet bit and increment counter
     uint64_t packet_mask = 1ULL << packet_index;
-    uint64_t old_mask = atomic_fetch_or_explicit(&frame->packets_received_mask, packet_mask, memory_order_acq_rel);
+    uint64_t old_mask = atomic_fetch_or_explicit_u64(&frame->packets_received_mask, packet_mask, memory_order_acq_rel);
 
     // If this bit was already set, this is a duplicate packet
     if (old_mask & packet_mask) {
@@ -425,14 +425,14 @@ void *video_thread_func(void *data)
 
         // Update timestamp for timeout detection - UDP packet received successfully
         // Use atomic store to avoid mutex contention in the hot packet path
-        atomic_store_explicit(&context->last_udp_packet_time, os_gettime_ns(), memory_order_relaxed);
+        atomic_store_explicit_u64(&context->last_udp_packet_time, os_gettime_ns(), memory_order_relaxed);
 
         // Signal the retry thread that a packet arrived to reset its wait deadline
         pthread_cond_signal(&context->retry_cond);
 
         // Performance optimization: Use atomic counters for statistics (minimal hot path overhead)
-        atomic_fetch_add_explicit(&context->video_packets_received, 1, memory_order_relaxed);
-        atomic_fetch_add_explicit(&context->video_bytes_received, received, memory_order_relaxed);
+        atomic_fetch_add_explicit_u64(&context->video_packets_received, 1, memory_order_relaxed);
+        atomic_fetch_add_explicit_u64(&context->video_bytes_received, received, memory_order_relaxed);
 
         // Parse packet header (streamlined - only what we need for processing)
         uint16_t seq_num = *(uint16_t *)(packet + 0);
@@ -508,16 +508,17 @@ void *video_thread_func(void *data)
                 context->frames_captured++;
                 context->last_capture_time = capture_time;
                 // Complete previous frame if it exists and is reasonably complete
-                if (context->current_frame.received_packets > 0) {
+                if (atomic_load_u16(&context->current_frame.received_packets) > 0) {
                     if (is_frame_complete(&context->current_frame) || is_frame_timeout(&context->current_frame)) {
                         if (is_frame_complete(&context->current_frame)) {
                             // Handle frame completion with delay queue for timeout case
                             if (context->last_completed_frame != context->current_frame.frame_num) {
                                 C64U_LOG_DEBUG(
                                     "✅ FRAME COMPLETE: Frame %u assembled with %u/%u packets (%.1f%% complete)",
-                                    context->current_frame.frame_num, context->current_frame.received_packets,
+                                    context->current_frame.frame_num,
+                                    atomic_load_u16(&context->current_frame.received_packets),
                                     context->current_frame.expected_packets,
-                                    (context->current_frame.received_packets * 100.0f) /
+                                    (atomic_load_u16(&context->current_frame.received_packets) * 100.0f) /
                                         context->current_frame.expected_packets);
 
                                 // If no delay configured, process frame immediately
@@ -574,10 +575,11 @@ void *video_thread_func(void *data)
                             // Frame timeout - log drop and continue
                             C64U_LOG_WARNING(
                                 "⏰ FRAME TIMEOUT: Frame %u dropped with %u/%u packets (%.1f%% complete, age: %llu ms)",
-                                context->current_frame.frame_num, context->current_frame.received_packets,
+                                context->current_frame.frame_num,
+                                atomic_load_u16(&context->current_frame.received_packets),
                                 context->current_frame.expected_packets,
                                 context->current_frame.expected_packets > 0
-                                    ? (context->current_frame.received_packets * 100.0f) /
+                                    ? (atomic_load_u16(&context->current_frame.received_packets) * 100.0f) /
                                           context->current_frame.expected_packets
                                     : 0.0f,
                                 (unsigned long long)((os_gettime_ns() - context->current_frame.start_time) / 1000000));
@@ -600,7 +602,7 @@ void *video_thread_func(void *data)
                     fp->received = true;
                     memcpy(fp->packet_data, packet + C64U_VIDEO_HEADER_SIZE,
                            C64U_VIDEO_PACKET_SIZE - C64U_VIDEO_HEADER_SIZE);
-                    context->current_frame.received_packets++;
+                    atomic_fetch_add_u16(&context->current_frame.received_packets, 1);
                 } else {
                     // Duplicate packet within same frame - indicates severe packet reordering or duplication
                     C64U_LOG_WARNING("📦 DUPLICATE PACKET: Frame %u, Line %u (packet_index %u) - seq %u", frame_num,

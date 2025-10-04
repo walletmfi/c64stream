@@ -14,6 +14,37 @@ include(helpers)
 
 add_library(${CMAKE_PROJECT_NAME} MODULE)
 
+# Generate version information
+execute_process(
+  COMMAND git describe --tags --always --dirty
+  WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+  OUTPUT_VARIABLE GIT_VERSION_TAG
+  OUTPUT_STRIP_TRAILING_WHITESPACE
+  ERROR_QUIET
+)
+if(NOT GIT_VERSION_TAG)
+  set(GIT_VERSION_TAG "dev")
+endif()
+
+execute_process(
+  COMMAND git rev-parse --short HEAD
+  WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+  OUTPUT_VARIABLE GIT_HASH
+  OUTPUT_STRIP_TRAILING_WHITESPACE
+  ERROR_QUIET
+)
+if(NOT GIT_HASH)
+  set(GIT_HASH "unknown")
+endif()
+
+string(TIMESTAMP BUILD_TIME "%Y-%m-%d %H:%M:%S" UTC)
+
+target_compile_definitions(${CMAKE_PROJECT_NAME} PRIVATE
+  C64U_VERSION_TAG="${GIT_VERSION_TAG}"
+  C64U_GIT_HASH="${GIT_HASH}"
+  C64U_BUILD_TIME="${BUILD_TIME}"
+)
+
 find_package(libobs REQUIRED)
 target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE OBS::libobs)
 
@@ -46,6 +77,8 @@ target_sources(
     src/c64u-audio.c
     src/c64u-source.c
     src/c64u-record.c
+    src/c64u-version.c
+    src/c64u-properties.c
 )
 
 # Link resolver library for DNS functionality on Unix platforms

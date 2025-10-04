@@ -104,7 +104,7 @@ void init_async_retry_system(struct c64u_source *context)
     context->needs_retry = false;
     context->retry_count = 0;
     context->retry_shutdown = false;
-    atomic_store_explicit(&context->last_udp_packet_time, os_gettime_ns(), memory_order_relaxed);
+    atomic_store_explicit_u64(&context->last_udp_packet_time, os_gettime_ns(), memory_order_relaxed);
 
     if (pthread_create(&context->retry_thread, NULL, async_retry_thread, context) == 0) {
         context->retry_thread_active = true;
@@ -148,7 +148,7 @@ void *async_retry_thread(void *data)
 
         // Check if we need to retry based on timeout or explicit request
         uint64_t now = os_gettime_ns();
-        uint64_t last_packet_time = atomic_load_explicit(&context->last_udp_packet_time, memory_order_relaxed);
+        uint64_t last_packet_time = atomic_load_explicit_u64(&context->last_udp_packet_time, memory_order_relaxed);
         uint64_t time_since_udp = now - last_packet_time;
         bool should_retry = context->needs_retry || (time_since_udp > C64U_FRAME_TIMEOUT_NS);
 
@@ -203,9 +203,9 @@ void *async_retry_thread(void *data)
                 os_sleep_ms(retry_delay);
             }
         } else {
-            // Calculate deadline based on when the next timeout would occur
-            // deadline = last_packet_time + C64U_FRAME_TIMEOUT_NS
-            uint64_t deadline_ns = last_packet_time + C64U_FRAME_TIMEOUT_NS;
+            // Calculate deadline from current time, not last packet time
+            // This ensures we wait at least the timeout interval from now
+            uint64_t deadline_ns = now + C64U_FRAME_TIMEOUT_NS;
             struct timespec timeout_spec;
             timeout_spec.tv_sec = deadline_ns / 1000000000ULL;  // Convert to seconds
             timeout_spec.tv_nsec = deadline_ns % 1000000000ULL; // Remaining nanoseconds
