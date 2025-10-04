@@ -6,11 +6,14 @@
  * @brief Cross-platform atomic operations compatibility layer
  *
  * This header provides a unified interface for atomic operations across different platforms:
- * - Modern MSVC 19.35+ (VS2022 17.5+): Uses native C11 atomics with /experimental:c11atomics
- * - Older Windows: Uses Windows Interlocked functions for backward compatibility
+ * - Windows: Uses Windows Interlocked functions for reliable cross-version compatibility
  * - POSIX: Uses standard C11 atomics (stdatomic.h)
  *
  * All atomic operations use relaxed memory ordering for maximum performance.
+ *
+ * IMPORTANT: On Windows, this header uses minimal Windows headers to avoid conflicts.
+ * If your .c file includes both this header and c64u-network.h, include c64u-network.h
+ * FIRST to prevent winsock.h vs winsock2.h conflicts.
  */
 
 #ifdef _WIN32
@@ -18,7 +21,10 @@
 // Windows: Use Interlocked functions for reliable cross-version compatibility
 // This provides consistent atomic operations across all MSVC versions without
 // depending on experimental C11 atomics support which varies by compiler version
-#include <windows.h>
+#define WIN32_LEAN   // Exclude rarely-used stuff from Windows headers
+#define NOMINMAX     // Prevent Windows.h from defining min and max as macros
+#include <windef.h>  // Basic Windows types
+#include <winbase.h> // For Interlocked functions
 #include <intrin.h>
 #include <stdint.h>
 #include <stdbool.h>

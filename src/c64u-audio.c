@@ -1,11 +1,11 @@
 #include <obs-module.h>
 #include <util/platform.h>
+#include "c64u-network.h" // Include network header first to avoid Windows header conflicts
 #include "c64u-atomic.h"
 #include "c64u-logging.h"
 #include "c64u-audio.h"
 #include "c64u-types.h"
 #include "c64u-protocol.h"
-#include "c64u-network.h"
 #include "c64u-video.h"  // For batch statistics processing
 #include "c64u-record.h" // For recording functions
 

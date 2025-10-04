@@ -2,11 +2,11 @@
 #include <string.h>
 #include <time.h>
 #include <errno.h>
+#include "c64u-network.h" // Include network header first to avoid Windows header conflicts
 #include "c64u-atomic.h"
 #include <util/platform.h>
 #include "c64u-logging.h"
 #include "c64u-protocol.h"
-#include "c64u-network.h"
 #include "c64u-source.h"
 #include "c64u-types.h"
 #include "c64u-video.h"

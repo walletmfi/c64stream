@@ -30,7 +30,7 @@ typedef struct {
 ### 2. Why This Approach Works
 
 **Problem with C11 atomics detection:**
-- MSVC 19.44+ does support `/experimental:c11atomics` 
+- MSVC 19.44+ does support `/experimental:c11atomics`
 - However, `__STDC_NO_ATOMICS__` macro is **still defined** (per Microsoft documentation)
 - Version detection logic became unreliable across different CI environments
 
