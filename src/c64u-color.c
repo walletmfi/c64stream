@@ -6,7 +6,7 @@
 /**
  * @file c64u-color.c
  * @brief VIC-II color conversion and palette management implementation
- * 
+ *
  * Provides optimized color conversion for C64 Ultimate video streams with
  * pre-computed lookup tables for maximum performance in hot path operations.
  */

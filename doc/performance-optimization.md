@@ -152,7 +152,7 @@ for (int x = 0; x < C64U_BYTES_PER_LINE; x++) {
 ```c
 // Add to c64u_source structure
 _Atomic uint64_t video_packets_received;
-_Atomic uint64_t video_bytes_received; 
+_Atomic uint64_t video_bytes_received;
 _Atomic uint32_t video_sequence_errors;
 _Atomic uint32_t video_frames_processed;
 
@@ -221,8 +221,8 @@ static inline void convert_pixels_fast(uint8_t *src, uint32_t *dst, int pixel_pa
 **Combined Validation:**
 ```c
 // Single validation function with branch hints
-static inline bool __attribute__((always_inline)) 
-validate_packet_fast(ssize_t received, uint8_t lines_per_packet, 
+static inline bool __attribute__((always_inline))
+validate_packet_fast(ssize_t received, uint8_t lines_per_packet,
                      uint16_t pixels_per_line, uint8_t bits_per_pixel) {
     // Use __builtin_expect for branch prediction
     return __builtin_expect(
@@ -250,7 +250,7 @@ validate_packet_fast(ssize_t received, uint8_t lines_per_packet,
 #ifdef C64U_PERFORMANCE_MONITORING
 struct performance_metrics {
     _Atomic uint64_t packet_processing_time_ns;
-    _Atomic uint64_t frame_assembly_time_ns; 
+    _Atomic uint64_t frame_assembly_time_ns;
     _Atomic uint32_t mutex_contention_count;
     _Atomic uint32_t cache_miss_estimate;
 };
@@ -279,7 +279,7 @@ struct performance_metrics {
 - Color conversion optimization (Phase 3B)
 - Validation streamlining (Phase 3C)
 
-### Medium Risk Optimizations  
+### Medium Risk Optimizations
 - Lock-free frame assembly (Phase 2)
 - Requires extensive testing for race conditions
 - Complex atomic operations need validation
