@@ -75,10 +75,11 @@ jobs:
             base_version="$(jq -r '.version' buildspec.json)"
             IFS='.' read -r major minor patch <<< "${base_version}"
             if [[ -n "${GITHUB_RUN_NUMBER}" ]]; then
-              dev_patch=$((9000 + GITHUB_RUN_NUMBER))
+              run_mod=$((GITHUB_RUN_NUMBER % 1000))  # Limit to 0-999 range
+              dev_patch=$((900 + run_mod))  # Results in 900-1899 range  
               plugin_version="${major}.${minor}.${dev_patch}"
             else
-              plugin_version="${major}.${minor}.9999"
+              plugin_version="${major}.${minor}.999"
             fi
           else
             plugin_version="$(jq -r '.version' buildspec.json)"

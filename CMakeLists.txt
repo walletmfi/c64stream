@@ -11,12 +11,13 @@ if(DEFINED ENV{GITHUB_EVENT_NAME} AND "$ENV{GITHUB_EVENT_NAME}" STREQUAL "pull_r
   list(GET version_parts 1 minor)
   
   if(DEFINED ENV{GITHUB_RUN_NUMBER})
-    # Use 9000 + run_number to clearly indicate development builds
-    math(EXPR dev_patch "9000 + $ENV{GITHUB_RUN_NUMBER}")
+    # Use development patch number with limited range to avoid potential issues
+    math(EXPR run_mod "$ENV{GITHUB_RUN_NUMBER} % 1000")  # Limit to 0-999 range
+    math(EXPR dev_patch "900 + ${run_mod}")  # Results in 900-1899 range
     set(AUTHORITATIVE_VERSION "${major}.${minor}.${dev_patch}")
   else()
-    # Local development builds use 9999
-    set(AUTHORITATIVE_VERSION "${major}.${minor}.9999")
+    # Local development builds use 999
+    set(AUTHORITATIVE_VERSION "${major}.${minor}.999")
   endif()
   message(STATUS "PR build detected, using development version: ${AUTHORITATIVE_VERSION}")
 else()
