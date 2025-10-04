@@ -69,10 +69,17 @@ jobs:
           plugin_name="$(jq -r '.name' buildspec.json)"
           plugin_display_name="$(jq -r '.displayName // empty' buildspec.json)"
           
-          # For PR builds, use development version to match CMake behavior
+          # For PR builds, calculate the same development version that CMake uses
           if [[ "${GITHUB_EVENT_NAME}" == "pull_request" ]]; then
-            # Use simplified "dev" for artifact naming (CMake will use full semantic version)
-            plugin_version="dev"
+            # Match CMake logic: MAJOR.MINOR.(9000 + GITHUB_RUN_NUMBER)
+            base_version="$(jq -r '.version' buildspec.json)"
+            IFS='.' read -r major minor patch <<< "${base_version}"
+            if [[ -n "${GITHUB_RUN_NUMBER}" ]]; then
+              dev_patch=$((9000 + GITHUB_RUN_NUMBER))
+              plugin_version="${major}.${minor}.${dev_patch}"
+            else
+              plugin_version="${major}.${minor}.9999"
+            fi
           else
             plugin_version="$(jq -r '.version' buildspec.json)"
           fi
