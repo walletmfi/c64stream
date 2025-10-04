@@ -2,7 +2,7 @@
 #include <util/platform.h>
 #include <string.h>
 #include <pthread.h>
-#include <stdatomic.h>
+#include "c64u-atomic.h"
 #include "c64u-logging.h"
 #include "c64u-video.h"
 #include "c64u-color.h"
@@ -240,8 +240,8 @@ void process_video_statistics_batch(struct c64u_source *context, uint64_t curren
     // Atomically read and reset counters
     uint64_t packets_received = atomic_exchange_explicit(&context->video_packets_received, 0, memory_order_relaxed);
     uint64_t bytes_received = atomic_exchange_explicit(&context->video_bytes_received, 0, memory_order_relaxed);
-    uint32_t sequence_errors = atomic_exchange_explicit(&context->video_sequence_errors, 0, memory_order_relaxed);
-    uint32_t frames_processed = atomic_exchange_explicit(&context->video_frames_processed, 0, memory_order_relaxed);
+    uint32_t sequence_errors = atomic_exchange_explicit_u32(&context->video_sequence_errors, 0, memory_order_relaxed);
+    uint32_t frames_processed = atomic_exchange_explicit_u32(&context->video_frames_processed, 0, memory_order_relaxed);
 
     // Calculate rates and statistics
     double duration_seconds = time_since_last_log / 1000000000.0;
@@ -319,8 +319,8 @@ void init_frame_assembly_lockfree(struct frame_assembly *frame, uint16_t frame_n
     memset(frame, 0, sizeof(struct frame_assembly));
     frame->frame_num = frame_num;
     frame->start_time = os_gettime_ns();
-    atomic_store_explicit(&frame->received_packets, 0, memory_order_relaxed);
-    atomic_store_explicit(&frame->complete, false, memory_order_relaxed);
+    atomic_store_explicit_u16(&frame->received_packets, 0, memory_order_relaxed);
+    atomic_store_explicit_bool(&frame->complete, false, memory_order_relaxed);
     atomic_store_explicit(&frame->packets_received_mask, 0, memory_order_relaxed);
 }
 
@@ -341,7 +341,7 @@ bool try_add_packet_lockfree(struct frame_assembly *frame, uint16_t packet_index
     }
 
     // Increment packet counter atomically
-    atomic_fetch_add_explicit(&frame->received_packets, 1, memory_order_acq_rel);
+    atomic_fetch_add_explicit_u16(&frame->received_packets, 1, memory_order_acq_rel);
 
     return true; // Successfully added new packet
 }
@@ -349,7 +349,7 @@ bool try_add_packet_lockfree(struct frame_assembly *frame, uint16_t packet_index
 bool is_frame_complete_lockfree(struct frame_assembly *frame)
 {
     // Load current packet count atomically
-    uint16_t received = atomic_load_explicit(&frame->received_packets, memory_order_acquire);
+    uint16_t received = atomic_load_explicit_u16(&frame->received_packets, memory_order_acquire);
 
     // Frame is complete when we have all expected packets
     // For PAL: 68 packets (272 lines / 4 lines per packet)
@@ -364,7 +364,7 @@ bool is_frame_complete_lockfree(struct frame_assembly *frame)
 
     // Update completion flag if frame is complete
     if (complete) {
-        atomic_store_explicit(&frame->complete, true, memory_order_release);
+        atomic_store_explicit_bool(&frame->complete, true, memory_order_release);
     }
 
     return complete;
@@ -451,7 +451,7 @@ void *video_thread_func(void *data)
 
         if (!first_video && seq_num != (uint16_t)(last_video_seq + 1)) {
             // Increment sequence error counter atomically
-            atomic_fetch_add_explicit(&context->video_sequence_errors, 1, memory_order_relaxed);
+            atomic_fetch_add_explicit_u32(&context->video_sequence_errors, 1, memory_order_relaxed);
 
             // Log sequence errors (keep for debugging, but move details out of hot path)
             uint16_t expected_seq = (uint16_t)(last_video_seq + 1);
@@ -662,7 +662,7 @@ void *video_thread_func(void *data)
                             context->buffer_swaps++;
                             context->frames_delivered_to_obs++;
                             context->total_pipeline_latency += (os_gettime_ns() - capture_time);
-                            atomic_fetch_add_explicit(&context->video_frames_processed, 1, memory_order_relaxed);
+                            atomic_fetch_add_explicit_u32(&context->video_frames_processed, 1, memory_order_relaxed);
                             pthread_mutex_unlock(&context->frame_mutex);
                         }
                     } else {
@@ -670,7 +670,7 @@ void *video_thread_func(void *data)
                         if (enqueue_delayed_frame(context, &context->current_frame, seq_num)) {
                             context->last_completed_frame = context->current_frame.frame_num;
                             context->frames_completed++;
-                            atomic_fetch_add_explicit(&context->video_frames_processed, 1, memory_order_relaxed);
+                            atomic_fetch_add_explicit_u32(&context->video_frames_processed, 1, memory_order_relaxed);
 
                             // Try to dequeue a delayed frame if queue has enough frames
                             if (dequeue_delayed_frame(context)) {

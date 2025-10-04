@@ -2,7 +2,7 @@
 #include <string.h>
 #include <time.h>
 #include <errno.h>
-#include <stdatomic.h>
+#include "c64u-atomic.h"
 #include <util/platform.h>
 #include "c64u-logging.h"
 #include "c64u-protocol.h"

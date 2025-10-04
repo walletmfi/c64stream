@@ -1,6 +1,6 @@
 #include <obs-module.h>
 #include <util/platform.h>
-#include <stdatomic.h>
+#include "c64u-atomic.h"
 #include "c64u-logging.h"
 #include "c64u-audio.h"
 #include "c64u-types.h"

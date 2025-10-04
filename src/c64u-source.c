@@ -5,7 +5,7 @@
 #include <string.h>
 #include <inttypes.h>
 #include <pthread.h>
-#include <stdatomic.h>
+#include "c64u-atomic.h"
 #include "c64u-logging.h"
 #include "c64u-source.h"
 #include "c64u-types.h"
@@ -233,8 +233,8 @@ void *c64u_create(obs_data_t *settings, obs_source_t *source)
     // Initialize performance optimization atomic counters
     atomic_store_explicit(&context->video_packets_received, 0, memory_order_relaxed);
     atomic_store_explicit(&context->video_bytes_received, 0, memory_order_relaxed);
-    atomic_store_explicit(&context->video_sequence_errors, 0, memory_order_relaxed);
-    atomic_store_explicit(&context->video_frames_processed, 0, memory_order_relaxed);
+    atomic_store_explicit_u32(&context->video_sequence_errors, 0, memory_order_relaxed);
+    atomic_store_explicit_u32(&context->video_frames_processed, 0, memory_order_relaxed);
     atomic_store_explicit(&context->audio_packets_received, 0, memory_order_relaxed);
     atomic_store_explicit(&context->audio_bytes_received, 0, memory_order_relaxed);
     context->last_stats_log_time = os_gettime_ns();

@@ -7,7 +7,7 @@
 #include <pthread.h>
 #include <stdint.h>
 #include <stdbool.h>
-#include <stdatomic.h>
+#include "c64u-atomic.h"
 #include "c64u-network.h"
 
 // Frame packet structure for reordering
