@@ -539,14 +539,15 @@ bool c64u_test_connectivity_quick(const char *ip, uint32_t port)
         return false;
     }
 
-    // Only use fast timeout (50ms) for quick connectivity tests
+    // Universal moderate timeout for quick connectivity tests
+    // 250ms: Fast enough to prevent UI blocking, long enough for most real connections
     fd_set write_fds;
     FD_ZERO(&write_fds);
     FD_SET(sock, &write_fds);
 
     struct timeval timeout_quick;
     timeout_quick.tv_sec = 0;
-    timeout_quick.tv_usec = 50000; // 50 milliseconds - very fast
+    timeout_quick.tv_usec = 250000; // 250ms - balanced for all network types
 
 #ifdef _WIN32
     int select_result = select(0, NULL, &write_fds, NULL, &timeout_quick);
