@@ -2,6 +2,7 @@
 #define C64U_LOGGING_H
 
 #include <obs-module.h>
+#include <stdio.h> // Ensure snprintf is available on all platforms
 #include <time.h>
 #include <stdint.h>
 
@@ -19,8 +20,16 @@
 #include <windows.h>
 
 // Windows compatibility shims
+#if defined(_WIN32) && !defined(__MINGW32__)
+// Check if we need snprintf compatibility for older MSVC
+#if defined(_MSC_VER) && (_MSC_VER < 1900)
+// Visual Studio 2013 and older need snprintf compatibility
 #ifndef snprintf
 #define snprintf _snprintf
+#endif
+#endif
+// For Visual Studio 2015+ (MSVC 1900+), snprintf is natively available via stdio.h
+// which is already included above, so no macro needed
 #endif
 
 // Windows compatibility for clock_gettime (if needed elsewhere)
