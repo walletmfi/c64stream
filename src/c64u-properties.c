@@ -13,13 +13,18 @@ obs_properties_t *c64u_create_properties(void *data)
 
     obs_properties_t *props = obs_properties_create();
 
-    // Version information (read-only)
-    obs_property_t *version_prop = obs_properties_add_text(props, "version_info", "Plugin Version", OBS_TEXT_INFO);
+    // Plugin Information Group (at the top)
+    obs_property_t *info_group =
+        obs_properties_add_group(props, "info_group", "Plugin Information", OBS_GROUP_NORMAL, obs_properties_create());
+    obs_properties_t *info_props = obs_property_group_content(info_group);
+
+    // Version information (read-only) - remove redundant "Plugin Version" text
+    obs_property_t *version_prop = obs_properties_add_text(info_props, "version_info", "Version", OBS_TEXT_INFO);
     obs_property_set_long_description(version_prop, c64u_get_build_info());
     obs_property_text_set_info_type(version_prop, OBS_TEXT_INFO_NORMAL);
 
     // Debug logging toggle
-    obs_property_t *debug_prop = obs_properties_add_bool(props, "debug_logging", "Debug Logging");
+    obs_property_t *debug_prop = obs_properties_add_bool(info_props, "debug_logging", "Debug Logging");
     obs_property_set_long_description(debug_prop, "Enable detailed logging for debugging connection issues");
 
     // Network Configuration Group
@@ -54,9 +59,9 @@ obs_properties_t *c64u_create_properties(void *data)
     obs_property_t *audio_port_prop = obs_properties_add_int(network_props, "audio_port", "Audio Port", 1024, 65535, 1);
     obs_property_set_long_description(audio_port_prop, "UDP port for audio stream from C64 Ultimate");
 
-    // Rendering Delay
-    obs_property_t *delay_prop = obs_properties_add_int_slider(props, "render_delay_frames", "Render Delay (frames)", 0,
-                                                               C64U_MAX_RENDER_DELAY_FRAMES, 1);
+    // Rendering Delay (moved to Plugin Information group)
+    obs_property_t *delay_prop = obs_properties_add_int_slider(
+        info_props, "render_delay_frames", "Render Delay (frames)", 0, C64U_MAX_RENDER_DELAY_FRAMES, 1);
     obs_property_set_long_description(
         delay_prop, "Delay frames before rendering to smooth UDP packet loss/reordering (default: 3)");
 

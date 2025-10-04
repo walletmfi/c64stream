@@ -7,8 +7,8 @@
 #include <pthread.h>
 #include <stdint.h>
 #include <stdbool.h>
-#include "c64u-atomic.h"
 #include "c64u-network.h"
+#include "c64u-protocol.h"
 
 // Frame packet structure for reordering
 struct frame_packet {
@@ -21,12 +21,12 @@ struct frame_packet {
 // Frame assembly structure (optimized for lock-free operations)
 struct frame_assembly {
     uint16_t frame_num;
+    struct frame_packet packets[C64U_MAX_PACKETS_PER_FRAME];
+    uint16_t received_packets; // Number of packets received
     uint16_t expected_packets;
-    atomic_uint16_t received_packets; // Atomic counter for lock-free access
-    struct frame_packet packets[68];  // C64U_MAX_PACKETS_PER_FRAME
-    atomic_bool_t complete;           // Atomic completion flag
-    uint64_t start_time;
-    atomic_uint64_t packets_received_mask; // Bitmask of received packets (for 64 packets max)
+    bool complete;                  // Frame completion flag
+    uint64_t start_time;            // When frame assembly started
+    uint64_t packets_received_mask; // Bitmask of received packets (for 64 packets max)
 };
 
 struct c64u_source {
@@ -95,16 +95,9 @@ struct c64u_source {
     uint64_t last_frame_time;
     uint64_t frame_interval_ns; // Target frame interval (20ms for 50Hz PAL)
 
-    // Async retry mechanism for network recovery
-    pthread_t retry_thread;               // Background thread for async retries
-    bool retry_thread_active;             // Is retry thread running?
-    pthread_mutex_t retry_mutex;          // Mutex for retry state
-    pthread_cond_t retry_cond;            // Condition variable for retry signaling
-    atomic_uint64_t last_udp_packet_time; // Timestamp of last UDP packet (atomic for lock-free access)
-    bool needs_retry;                     // Flag indicating retry is needed
-    uint32_t retry_count;                 // Number of retry attempts
-    uint32_t consecutive_failures;        // Number of consecutive TCP failures
-    bool retry_shutdown;                  // Signal to shutdown retry thread
+    // Render callback based timeout detection
+    uint64_t last_udp_packet_time; // Timestamp of last UDP packet
+    bool retry_in_progress;        // Flag to prevent redundant retry attempts
 
     // Rendering delay
     uint32_t render_delay_frames;   // Delay in frames before making buffer available to OBS
@@ -118,14 +111,14 @@ struct c64u_source {
     // Auto-start control
     bool auto_start_attempted;
 
-    // Performance optimization: Atomic counters for hot path statistics
-    atomic_uint64_t video_packets_received; // Total video packets received
-    atomic_uint64_t video_bytes_received;   // Total video bytes received
-    atomic_uint32_t video_sequence_errors;  // Sequence number errors (out-of-order, drops)
-    atomic_uint32_t video_frames_processed; // Total video frames processed
-    atomic_uint64_t audio_packets_received; // Total audio packets received
-    atomic_uint64_t audio_bytes_received;   // Total audio bytes received
-    uint64_t last_stats_log_time;           // Last time statistics were logged (non-atomic)
+    // Statistics counters (accessed from single threads, no atomics needed)
+    uint64_t video_packets_received; // Total video packets received
+    uint64_t video_bytes_received;   // Total video bytes received
+    uint32_t video_sequence_errors;  // Sequence number errors (out-of-order, drops)
+    uint32_t video_frames_processed; // Total video frames processed
+    uint64_t audio_packets_received; // Total audio packets received
+    uint64_t audio_bytes_received;   // Total audio bytes received
+    uint64_t last_stats_log_time;    // Last time statistics were logged (non-atomic)
 
     // Logo display for network issues
     gs_texture_t *logo_texture; // Loaded logo texture

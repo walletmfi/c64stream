@@ -11,7 +11,7 @@
 #define C64U_RENDER_BUFFER_SAFETY_MARGIN 10 // Extra buffer frames for queue safety
 
 // Timing constants (nanoseconds)
-#define C64U_FRAME_TIMEOUT_NS 1000000000ULL      // 1000ms - timeout for frame freshness detection
+#define C64U_FRAME_TIMEOUT_NS 100000000ULL       // 100ms - timeout for frame freshness (5 frames @ 50Hz)
 #define C64U_DEBUG_LOG_INTERVAL_NS 2000000000ULL // 2 seconds - interval for debug logging
 
 // Forward declarations

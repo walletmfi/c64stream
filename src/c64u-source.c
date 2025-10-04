@@ -6,7 +6,7 @@
 #include <inttypes.h>
 #include <pthread.h>
 #include "c64u-network.h" // Include network header first to avoid Windows header conflicts
-#include "c64u-atomic.h"
+
 #include "c64u-logging.h"
 #include "c64u-source.h"
 #include "c64u-types.h"
@@ -18,6 +18,33 @@
 #include "c64u-version.h"
 #include "c64u-properties.h"
 #include "plugin-support.h"
+
+// Async retry task - runs in OBS thread pool (NOT render thread)
+static void c64u_async_retry_task(void *data)
+{
+    struct c64u_source *context = (struct c64u_source *)data;
+
+    if (!context) {
+        C64U_LOG_WARNING("Async retry task called with NULL context");
+        return;
+    }
+
+    // Safe to make TCP calls here - we're in OBS thread pool, not render thread
+    C64U_LOG_DEBUG("Async retry task executing TCP commands (streaming=%d)", context->streaming);
+
+    if (context->streaming) {
+        // Send start commands to restore connection
+        send_control_command(context, true, 0); // Video stream
+        send_control_command(context, true, 1); // Audio stream
+        C64U_LOG_DEBUG("Retry TCP commands sent, clearing retry state");
+    } else {
+        // Start streaming
+        c64u_start_streaming(context);
+    }
+
+    // Clear retry state - allows future retries if needed
+    context->retry_in_progress = false;
+}
 
 // Helper function to safely close and reset sockets
 static void close_and_reset_sockets(struct c64u_source *context)
@@ -232,22 +259,19 @@ void *c64u_create(obs_data_t *settings, obs_source_t *source)
     context->audio_thread_active = false;
     context->auto_start_attempted = false;
 
-    // Initialize performance optimization atomic counters
-    atomic_store_explicit_u64(&context->video_packets_received, 0, memory_order_relaxed);
-    atomic_store_explicit_u64(&context->video_bytes_received, 0, memory_order_relaxed);
-    atomic_store_explicit_u32(&context->video_sequence_errors, 0, memory_order_relaxed);
-    atomic_store_explicit_u32(&context->video_frames_processed, 0, memory_order_relaxed);
-    atomic_store_explicit_u64(&context->audio_packets_received, 0, memory_order_relaxed);
-    atomic_store_explicit_u64(&context->audio_bytes_received, 0, memory_order_relaxed);
+    // Initialize statistics counters
+    context->video_packets_received = 0;
+    context->video_bytes_received = 0;
+    context->video_sequence_errors = 0;
+    context->video_frames_processed = 0;
+    context->audio_packets_received = 0;
+    context->audio_bytes_received = 0;
     context->last_stats_log_time = os_gettime_ns();
 
-    // Initialize async retry system fields
-    context->retry_thread_active = false;
-    context->needs_retry = false;
-    context->retry_count = 0;
-    context->consecutive_failures = 0;
-    context->retry_shutdown = false;
-    atomic_store_explicit_u64(&context->last_udp_packet_time, os_gettime_ns(), memory_order_relaxed);
+    // Initialize render callback timeout system
+    uint64_t now = os_gettime_ns();
+    context->last_udp_packet_time = now;
+    context->retry_in_progress = false;
 
     // Initialize logo display
     context->logo_texture = NULL;
@@ -262,12 +286,7 @@ void *c64u_create(obs_data_t *settings, obs_source_t *source)
     C64U_LOG_INFO("C64U source created - C64U host: %s (IP: %s), OBS IP: %s, Video: %u, Audio: %u", context->hostname,
                   context->ip_address, context->obs_ip_address, context->video_port, context->audio_port);
 
-    // Initialize async retry system immediately to start continuous retry attempts
-    init_async_retry_system(context);
-
-    // Mark that we want to start streaming, but don't block OBS startup
-    // The async retry system will continuously attempt connection
-    C64U_LOG_INFO("🚀 C64U source created - async retry system will continuously attempt connection");
+    // Timeout detection now handled in render callback - no separate thread needed\n    \n    // Mark that we want to start streaming, but don't block OBS startup\n    // The render callback will handle timeout detection and retry logic\n    C64U_LOG_INFO("🚀 C64U source created - render callback will handle connection management");
     context->auto_start_attempted = false; // Will be handled by async mechanism
 
     return context;
@@ -281,8 +300,7 @@ void c64u_destroy(void *data)
 
     C64U_LOG_INFO("Destroying C64U source");
 
-    // Shutdown async retry system first
-    shutdown_async_retry_system(context);
+    // No retry thread to shutdown - using render callback approach
 
     // Stop streaming if active
     if (context->streaming) {
@@ -601,14 +619,32 @@ void c64u_render(void *data, gs_effect_t *effect)
         uint64_t frame_age = now - context->last_frame_time;
         frames_timed_out = (frame_age > C64U_FRAME_TIMEOUT_NS);
 
-        // Trigger async retry when frames timeout
+        // Trigger retry when frames timeout (render callback approach)
         if (frames_timed_out) {
-            // Update last UDP packet time atomically and signal retry
-            atomic_store_explicit_u64(&context->last_udp_packet_time, now, memory_order_relaxed);
-            pthread_mutex_lock(&context->retry_mutex);
-            context->needs_retry = true;
-            pthread_mutex_unlock(&context->retry_mutex);
-            pthread_cond_signal(&context->retry_cond);
+            // Smart retry logic - avoid redundant attempts with state tracking
+            static uint64_t last_retry_time = 0;
+            uint64_t time_since_last_retry = now - last_retry_time;
+
+            // Only retry if:
+            // 1. Enough time has passed (500ms rate limiting)
+            // 2. No retry is already in progress
+            // 3. Valid IP is configured
+            if (time_since_last_retry > 500000000ULL && // 500ms rate limit
+                !context->retry_in_progress &&          // No redundant retries
+                strcmp(context->ip_address, "0.0.0.0") != 0) {
+
+                last_retry_time = now;
+                context->retry_in_progress = true; // Mark retry in progress
+
+                C64U_LOG_INFO("Frame timeout detected (age: %llu ms) - queuing retry task", frame_age / 1000000ULL);
+
+                // Queue async retry task in OBS thread pool - NO BLOCKING in render thread
+                // This returns immediately, TCP calls happen in background thread
+                obs_queue_task(OBS_TASK_UI, c64u_async_retry_task, context, false);
+            }
+        } else {
+            // Frames are arriving normally - clear retry state
+            context->retry_in_progress = false;
         }
     }
 

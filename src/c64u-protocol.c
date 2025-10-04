@@ -3,7 +3,7 @@
 #include <time.h>
 #include <errno.h>
 #include "c64u-network.h" // Include network header first to avoid Windows header conflicts
-#include "c64u-atomic.h"
+
 #include <util/platform.h>
 #include "c64u-logging.h"
 #include "c64u-protocol.h"
@@ -85,144 +85,10 @@ void send_control_command(struct c64u_source *context, bool enable, uint8_t stre
     close(sock);
 }
 
+// Simplified async function - just calls the synchronous version directly
+// since we eliminated the retry thread system
 void send_control_command_async(struct c64u_source *context, bool enable, uint8_t stream_id)
 {
-    (void)enable;    // Mark as used - async retry always sends start commands
-    (void)stream_id; // Mark as used - async retry sends both video and audio
-
-    pthread_mutex_lock(&context->retry_mutex);
-    context->needs_retry = true;
-    pthread_cond_signal(&context->retry_cond);
-    pthread_mutex_unlock(&context->retry_mutex);
-}
-
-void init_async_retry_system(struct c64u_source *context)
-{
-    pthread_mutex_init(&context->retry_mutex, NULL);
-    pthread_cond_init(&context->retry_cond, NULL);
-    context->retry_thread_active = false;
-    context->needs_retry = false;
-    context->retry_count = 0;
-    context->retry_shutdown = false;
-    atomic_store_explicit_u64(&context->last_udp_packet_time, os_gettime_ns(), memory_order_relaxed);
-
-    if (pthread_create(&context->retry_thread, NULL, async_retry_thread, context) == 0) {
-        context->retry_thread_active = true;
-        C64U_LOG_INFO("Async retry system initialized");
-    } else {
-        C64U_LOG_ERROR("Failed to create async retry thread");
-    }
-}
-
-void shutdown_async_retry_system(struct c64u_source *context)
-{
-    if (context->retry_thread_active) {
-        pthread_mutex_lock(&context->retry_mutex);
-        context->retry_shutdown = true;
-        pthread_cond_signal(&context->retry_cond);
-        pthread_mutex_unlock(&context->retry_mutex);
-
-        pthread_join(context->retry_thread, NULL);
-        context->retry_thread_active = false;
-        C64U_LOG_INFO("Async retry system shutdown");
-    }
-
-    pthread_mutex_destroy(&context->retry_mutex);
-    pthread_cond_destroy(&context->retry_cond);
-}
-
-void *async_retry_thread(void *data)
-{
-    struct c64u_source *context = (struct c64u_source *)data;
-
-    C64U_LOG_DEBUG("Async retry thread started - using event-driven deadline-based waiting");
-
-    while (true) {
-        pthread_mutex_lock(&context->retry_mutex);
-
-        // Check for shutdown first
-        if (context->retry_shutdown) {
-            pthread_mutex_unlock(&context->retry_mutex);
-            break;
-        }
-
-        // Check if we need to retry based on timeout or explicit request
-        uint64_t now = os_gettime_ns();
-        uint64_t last_packet_time = atomic_load_explicit_u64(&context->last_udp_packet_time, memory_order_relaxed);
-        uint64_t time_since_udp = now - last_packet_time;
-        bool should_retry = context->needs_retry || (time_since_udp > C64U_FRAME_TIMEOUT_NS);
-
-        if (should_retry) {
-            context->needs_retry = false;
-            pthread_mutex_unlock(&context->retry_mutex);
-
-            // Skip if no IP configured
-            if (strcmp(context->ip_address, "0.0.0.0") == 0) {
-                C64U_LOG_DEBUG("Async retry skipped - no C64U IP configured");
-                os_sleep_ms(1000); // Wait longer when no IP configured
-                continue;
-            }
-
-            // Perform async retry - start streaming if not active, otherwise send commands
-            C64U_LOG_INFO("Async retry attempt %u - %s", context->retry_count,
-                          context->streaming ? "sending start commands" : "starting streaming");
-
-            bool tcp_success = false;
-            if (!context->streaming) {
-                // Not streaming - need to create UDP sockets and threads
-                c64u_start_streaming(context);
-                tcp_success = true; // c64u_start_streaming handles TCP commands internally
-            } else {
-                // Already streaming - send start commands and check for success
-                socket_t test_sock = create_tcp_socket(context->ip_address, C64U_CONTROL_PORT);
-                if (test_sock != INVALID_SOCKET_VALUE) {
-                    close(test_sock);                       // Just testing connectivity
-                    send_control_command(context, true, 0); // Video
-                    send_control_command(context, true, 1); // Audio
-                    tcp_success = true;
-                    context->consecutive_failures = 0; // Reset failure counter on success
-                } else {
-                    tcp_success = false;
-                    context->consecutive_failures++;
-                }
-            }
-
-            context->retry_count++;
-
-            // Adaptive retry delay based on consecutive failures
-            if (context->consecutive_failures > 0 && !tcp_success) {
-                // Exponential backoff: 100ms * 1.3^failures, capped at 3000ms
-                uint32_t retry_delay = 100;
-                for (uint32_t i = 0; i < context->consecutive_failures && retry_delay < 3000; i++) {
-                    retry_delay = (uint32_t)(retry_delay * 1.3); // Multiply by 1.3
-                }
-                if (retry_delay > 3000)
-                    retry_delay = 3000; // Cap at 3 seconds
-                C64U_LOG_DEBUG("TCP connection failed (%u consecutive), using %ums retry delay",
-                               context->consecutive_failures, retry_delay);
-                os_sleep_ms(retry_delay);
-            }
-        } else {
-            // Calculate deadline from current time, not last packet time
-            // This ensures we wait at least the timeout interval from now
-            uint64_t deadline_ns = now + C64U_FRAME_TIMEOUT_NS;
-            struct timespec timeout_spec;
-            timeout_spec.tv_sec = deadline_ns / 1000000000ULL;  // Convert to seconds
-            timeout_spec.tv_nsec = deadline_ns % 1000000000ULL; // Remaining nanoseconds
-
-            // Wait until the deadline or until signaled by packet arrival
-            int wait_result = pthread_cond_timedwait(&context->retry_cond, &context->retry_mutex, &timeout_spec);
-            pthread_mutex_unlock(&context->retry_mutex);
-
-            // Log when we wake up naturally due to timeout vs signal
-            if (wait_result == ETIMEDOUT) {
-                C64U_LOG_DEBUG("Retry thread woke up due to timeout deadline");
-            } else if (wait_result == 0) {
-                C64U_LOG_DEBUG("Retry thread woke up due to packet arrival signal");
-            }
-        }
-    }
-
-    C64U_LOG_DEBUG("Async retry thread ended");
-    return NULL;
+    // With retry thread eliminated, just call synchronous version
+    send_control_command(context, enable, stream_id);
 }

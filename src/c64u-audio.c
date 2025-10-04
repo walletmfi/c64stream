@@ -1,7 +1,7 @@
 #include <obs-module.h>
 #include <util/platform.h>
 #include "c64u-network.h" // Include network header first to avoid Windows header conflicts
-#include "c64u-atomic.h"
+
 #include "c64u-logging.h"
 #include "c64u-audio.h"
 #include "c64u-types.h"
@@ -41,19 +41,15 @@ void *audio_thread_func(void *data)
         }
 
         // Update timestamp for timeout detection - UDP packet received successfully
-        // Use atomic store to avoid mutex contention in the hot packet path
-        atomic_store_explicit_u64(&context->last_udp_packet_time, os_gettime_ns(), memory_order_relaxed);
-
-        // Signal the retry thread that a packet arrived to reset its wait deadline
-        pthread_cond_signal(&context->retry_cond);
+        context->last_udp_packet_time = os_gettime_ns();
 
         // Parse audio packet
         uint16_t seq_num = *(uint16_t *)(packet);
         int16_t *audio_data = (int16_t *)(packet + C64U_AUDIO_HEADER_SIZE);
 
-        // Performance optimization: Use atomic counters for audio statistics
-        atomic_fetch_add_explicit(&context->audio_packets_received, 1, memory_order_relaxed);
-        atomic_fetch_add_explicit(&context->audio_bytes_received, received, memory_order_relaxed);
+        // Update audio statistics
+        context->audio_packets_received++;
+        context->audio_bytes_received += received;
 
         // Streamlined audio sequence tracking (keep for important audio sync issues)
         static uint16_t last_audio_seq = 0;
