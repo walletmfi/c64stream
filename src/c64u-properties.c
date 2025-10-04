@@ -4,14 +4,8 @@
 #include "c64u-network.h"
 #include "c64u-protocol.h"
 #include "c64u-video.h"
+#include "c64u-logging.h" // For Windows snprintf compatibility
 #include <obs-module.h>
-
-// Windows compatibility for snprintf
-#ifdef _WIN32
-#if defined(_MSC_VER) && _MSC_VER < 1900
-#define snprintf _snprintf
-#endif
-#endif
 
 obs_properties_t *c64u_create_properties(void *data)
 {

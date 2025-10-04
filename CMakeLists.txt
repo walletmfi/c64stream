@@ -4,6 +4,9 @@ include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/common/bootstrap.cmake" NO_POLICY_SCO
 
 project(${_name} VERSION ${_version})
 
+# Set dummy VirtualCam GUID to prevent Windows build warning
+set(VIRTUALCAM_GUID "{00000000-0000-0000-0000-000000000000}")
+
 option(ENABLE_FRONTEND_API "Use obs-frontend-api for UI functionality" OFF)
 option(ENABLE_QT "Use Qt functionality" OFF)
 option(ENABLE_TESTS "Build tests" ON)

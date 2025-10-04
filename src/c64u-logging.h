@@ -7,6 +7,29 @@
 
 #ifdef _WIN32
 #include <windows.h>
+
+// Windows compatibility shims
+#ifndef snprintf
+#define snprintf _snprintf
+#endif
+
+// Windows compatibility for clock_gettime (if needed elsewhere)
+#ifndef CLOCK_REALTIME
+#define CLOCK_REALTIME 0
+static inline int clock_gettime(int clk_id, struct timespec *ts)
+{
+    (void)clk_id; // Unused parameter
+    FILETIME ft;
+    GetSystemTimeAsFileTime(&ft);
+    unsigned long long t = ((unsigned long long)ft.dwHighDateTime << 32) | ft.dwLowDateTime;
+    // Convert from 100-ns intervals since 1601 to seconds/nanoseconds since 1970
+    t -= 116444736000000000ULL;
+    ts->tv_sec = t / 10000000ULL;
+    ts->tv_nsec = (t % 10000000ULL) * 100;
+    return 0;
+}
+#endif
+
 #else
 #include <sys/time.h>
 #endif

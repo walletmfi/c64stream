@@ -1,4 +1,5 @@
 #include "c64u-version.h"
+#include "c64u-logging.h" // For Windows snprintf compatibility
 #include <stdio.h>
 #include <time.h>
 
