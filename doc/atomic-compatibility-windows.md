@@ -22,7 +22,7 @@ set(_obs_msvc_c_options /MP /Zc:__cplusplus /Zc:preprocessor /std:c17 /experimen
 
 Key features:
 - **Native stdatomic.h support** - Same API as POSIX systems
-- **ABI compatibility** - Same binary interface as C++ atomics  
+- **ABI compatibility** - Same binary interface as C++ atomics
 - **Lock-free operations** - For objects ≤8 bytes and power-of-two sizes
 - **Requires `/std:c11` or `/std:c17`** - Modern C standard mode
 

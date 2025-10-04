@@ -15,40 +15,9 @@
 
 #ifdef _WIN32
 
-// Check for modern MSVC with experimental C11 atomics support
-// Visual Studio 2022 17.5+ (MSVC 19.35+) supports /experimental:c11atomics
-// We also check for the absence of __STDC_NO_ATOMICS__ macro which indicates atomics are available
-#if defined(_MSC_VER) && (_MSC_VER >= 1935) && !defined(__STDC_NO_ATOMICS__)
-
-// Modern MSVC: Use native C11 atomics with experimental support
-#include <stdatomic.h>
-
-// Define convenience types using native C11 atomics
-typedef _Atomic uint64_t atomic_uint64_t;
-typedef _Atomic uint32_t atomic_uint32_t;
-typedef _Atomic uint16_t atomic_uint16_t;
-typedef _Atomic bool atomic_bool_t;
-
-// Use native C11 atomic functions directly
-#define atomic_load_explicit_u64(obj, order) atomic_load_explicit(obj, order)
-#define atomic_store_explicit_u64(obj, val, order) atomic_store_explicit(obj, val, order)
-#define atomic_fetch_add_explicit_u64(obj, val, order) atomic_fetch_add_explicit(obj, val, order)
-
-#define atomic_load_explicit_u32(obj, order) atomic_load_explicit(obj, order)
-#define atomic_store_explicit_u32(obj, val, order) atomic_store_explicit(obj, val, order)
-#define atomic_fetch_add_explicit_u32(obj, val, order) atomic_fetch_add_explicit(obj, val, order)
-#define atomic_exchange_explicit_u32(obj, val, order) atomic_exchange_explicit(obj, val, order)
-
-#define atomic_load_explicit_u16(obj, order) atomic_load_explicit(obj, order)
-#define atomic_store_explicit_u16(obj, val, order) atomic_store_explicit(obj, val, order)
-#define atomic_fetch_add_explicit_u16(obj, val, order) atomic_fetch_add_explicit(obj, val, order)
-
-#define atomic_load_explicit_bool(obj, order) atomic_load_explicit(obj, order)
-#define atomic_store_explicit_bool(obj, val, order) atomic_store_explicit(obj, val, order)
-
-#else
-
-// Fallback for older Windows: Use Interlocked functions
+// Windows: Use Interlocked functions for reliable cross-version compatibility
+// This provides consistent atomic operations across all MSVC versions without
+// depending on experimental C11 atomics support which varies by compiler version
 #include <windows.h>
 #include <intrin.h>
 #include <stdint.h>
@@ -94,11 +63,11 @@ typedef enum { memory_order_relaxed = 0 } memory_order;
 // Initialize atomic variables
 #define ATOMIC_VAR_INIT(val) { (val) }
 
-#endif
-
 #else
 // POSIX: Use standard C11 atomics
 #include <stdatomic.h>
+#include <stdint.h>
+#include <stdbool.h>
 
 // Define convenience types
 typedef _Atomic uint64_t atomic_uint64_t;
