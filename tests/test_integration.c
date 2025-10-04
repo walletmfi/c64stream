@@ -1,5 +1,5 @@
 /*
-C64U Plugin Integration Tests
+C64 Stream Plugin Integration Tests
 Copyright (C) 2025 Chris Gleissner
 
 Integration tests that verify the plugin works end-to-end with the mock server.
@@ -45,7 +45,7 @@ static pid_t start_mock_server(void)
     pid_t pid = fork();
     if (pid == 0) {
         // Child process - run mock server
-        execl("./tests/c64u_mock_server", "c64u_mock_server", NULL);
+        execl("./tests/c64_mock_server", "c64_mock_server", NULL);
         perror("Failed to start mock server");
         exit(1);
     }
@@ -167,7 +167,7 @@ static bool load_plugin(void)
     printf("📦 Loading plugin library...\n");
 
     // Load the plugin shared library
-    g_plugin_handle = dlopen("./c64u-plugin-for-obs.so", RTLD_LAZY);
+    g_plugin_handle = dlopen("./c64stream.so", RTLD_LAZY);
     if (!g_plugin_handle) {
         printf("  ❌ Failed to load plugin: %s\n", dlerror());
         return false;
@@ -211,7 +211,7 @@ static bool test_source_creation(void)
     obs_data_set_int(settings, "audio_port", 11002);
 
     // Create the C64U source
-    g_test_source = obs_source_create("c64u_source", "Test C64U Source", settings, NULL);
+    g_test_source = obs_source_create("c64_source", "Test C64U Source", settings, NULL);
 
     if (!g_test_source) {
         printf("  ❌ Failed to create C64U source\n");
@@ -314,7 +314,7 @@ static void cleanup_plugin(void)
 // Main test runner
 int main(void)
 {
-    printf("=== C64U Plugin Integration Tests ===\n\n");
+    printf("=== C64 Stream Plugin Integration Tests ===\n\n");
 
     bool success = true;
 

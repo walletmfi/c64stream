@@ -1,4 +1,4 @@
-# Copilot Instructions for c64u-obs
+# Copilot Instructions for c64stream
 
 ## Project Overview
 
@@ -355,7 +355,7 @@ The C64 Ultimate device streams video and audio data over network connections. K
 2. **Test on target platform** - Use appropriate preset
 3. **Update buildspec.json** if adding dependencies
 4. **Plugin logic goes in modular source files** - Use focused modules in src/
-5. **Use C64U_LOG_*() macros** for logging (defined in c64u-logging.h)
+5. **Use C64_LOG_*() macros** for logging (defined in c64u-logging.h)
 6. **Verify all files end with newline** - Critical for macOS builds
 7. **DO NOT create markdown documentation files during development** - Keep workspace clean, document in existing files only
 
@@ -379,7 +379,7 @@ The plugin uses conditional compilation extensively for cross-platform compatibi
 - **Windows**: Uses WinSock2 (`winsock2.h`, `ws2tcpip.h`) with `WSAStartup()`/`WSACleanup()`
 - **POSIX**: Uses standard BSD sockets (`sys/socket.h`, `netinet/in.h`)
 - **Socket types**: `SOCKET` (Windows) vs `int` (POSIX) - use `socket_t` typedef
-- **Error handling**: `WSAGetLastError()` vs `errno` - use `c64u_get_socket_error()`
+- **Error handling**: `WSAGetLastError()` vs `errno` - use `c64_get_socket_error()`
 - **Non-blocking**: `WSAEWOULDBLOCK` vs `EAGAIN`/`EWOULDBLOCK`
 
 #### File System Operations:
@@ -394,8 +394,8 @@ The plugin uses conditional compilation extensively for cross-platform compatibi
 ### Platform Default Directories
 When setting default user directories, use platform conventions:
 - **Windows**: `%USERPROFILE%\Documents\obs-studio\c64u\recordings` or `%APPDATA%\obs-studio\c64u\recordings`
-- **macOS**: `~/Documents/obs-studio/c64u/recordings` or `~/Movies/obs-studio/c64u/recordings`
-- **Linux**: `~/Documents/obs-studio/c64u/recordings` or `~/.local/share/obs-studio/c64u/recordings`
+- **macOS**: `~/Documents/obs-studio/c64stream/recordings` or `~/Movies/obs-studio/c64stream/recordings`
+- **Linux**: `~/Documents/obs-studio/c64stream/recordings` or `~/.local/share/obs-studio/c64stream/recordings`
 
 ### Common Cross-Platform Pitfalls
 1. **Never use `system()` calls with Unix commands** - they fail silently on Windows
@@ -423,7 +423,7 @@ cmake --preset ubuntu-x86_64
 cmake --build build_x86_64
 
 # Verify success
-if [ -f "build_x86_64/c64u-plugin-for-obs.so" ]; then
+if [ -f "build_x86_64/c64stream.so" ]; then
     echo "✅ Linux build successful"
 else
     echo "❌ Linux build failed - DO NOT proceed"
@@ -447,7 +447,7 @@ cmake --preset windows-x64
 cmake --build build_x64 --config RelWithDebInfo
 
 # Verify success
-if (Test-Path "build_x64\RelWithDebInfo\c64u-plugin-for-obs.dll") {
+if (Test-Path "build_x64\RelWithDebInfo\c64stream.dll") {
     Write-Host "✅ Windows build successful" -ForegroundColor Green
 } else {
     Write-Host "❌ Windows build failed - DO NOT proceed" -ForegroundColor Red

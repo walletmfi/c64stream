@@ -2,7 +2,7 @@
 
 ## Overview
 
-This guide provides comprehensive instructions for building the C64U OBS Plugin locally on Windows. It covers all build scenarios from quick development builds to full CI-compatible builds that match the GitHub Actions environment.
+This guide provides comprehensive instructions for building the C64 Stream locally on Windows. It covers all build scenarios from quick development builds to full CI-compatible builds that match the GitHub Actions environment.
 
 ## Prerequisites
 
@@ -67,7 +67,7 @@ cmake --preset windows-x64
 cmake --build build_x64 --config RelWithDebInfo
 
 # Verify build succeeded
-if (Test-Path "build_x64\RelWithDebInfo\c64u-plugin-for-obs.dll") {
+if (Test-Path "build_x64\RelWithDebInfo\c64stream.dll") {
     Write-Host "✅ Build successful!" -ForegroundColor Green
 } else {
     Write-Host "❌ Build failed!" -ForegroundColor Red
@@ -92,7 +92,7 @@ cmake --build build_x64 --config RelWithDebInfo --parallel -- /consoleLoggerPara
 cmake --install build_x64 --prefix release/RelWithDebInfo --config RelWithDebInfo
 
 # Verify plugin exists
-if (Test-Path "release\RelWithDebInfo\obs-plugins\64bit\c64u-plugin-for-obs.dll") {
+if (Test-Path "release\RelWithDebInfo\obs-plugins\64bit\c64stream.dll") {
     Write-Host "✅ CI-compatible build successful!" -ForegroundColor Green
 } else {
     Write-Host "❌ CI-compatible build failed!" -ForegroundColor Red
@@ -138,12 +138,12 @@ cmake --build build_x64 --config RelWithDebInfo
 
 ```powershell
 # Create OBS plugin directory (adjust path to your OBS installation)
-$ObsPluginDir = "$env:APPDATA\obs-studio\plugins\c64u-plugin-for-obs"
+$ObsPluginDir = "$env:APPDATA\obs-studio\plugins\c64stream"
 New-Item -ItemType Directory -Path "$ObsPluginDir\bin\64bit" -Force
 New-Item -ItemType Directory -Path "$ObsPluginDir\data" -Force
 
 # Copy plugin binary
-Copy-Item "build_x64\RelWithDebInfo\c64u-plugin-for-obs.dll" "$ObsPluginDir\bin\64bit\"
+Copy-Item "build_x64\RelWithDebInfo\c64stream.dll" "$ObsPluginDir\bin\64bit\"
 
 # Copy plugin data
 Copy-Item "data\*" "$ObsPluginDir\data\" -Recurse -Force
@@ -188,7 +188,7 @@ if (Get-ChildItem "build_x64" -Filter "*.pdb" -Recurse) {
 }
 
 # Verify plugin dependencies
-dumpbin /dependents "build_x64\RelWithDebInfo\c64u-plugin-for-obs.dll"
+dumpbin /dependents "build_x64\RelWithDebInfo\c64stream.dll"
 ```
 
 ## Troubleshooting

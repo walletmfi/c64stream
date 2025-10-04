@@ -100,9 +100,9 @@ endif()
 string(TIMESTAMP BUILD_TIME "%Y-%m-%d %H:%M:%S" UTC)
 
 target_compile_definitions(${CMAKE_PROJECT_NAME} PRIVATE
-  C64U_VERSION_TAG="${DISPLAY_VERSION}"
-  C64U_GIT_HASH="${GIT_HASH}"
-  C64U_BUILD_TIME="${BUILD_TIME}"
+  C64_VERSION_TAG="${DISPLAY_VERSION}"
+  C64_GIT_HASH="${GIT_HASH}"
+  C64_BUILD_TIME="${BUILD_TIME}"
 )
 
 find_package(libobs REQUIRED)
@@ -130,15 +130,15 @@ target_sources(
   ${CMAKE_PROJECT_NAME}
   PRIVATE
     src/plugin-main.c
-    src/c64u-network.c
-    src/c64u-protocol.c
-    src/c64u-video.c
-    src/c64u-color.c
-    src/c64u-audio.c
-    src/c64u-source.c
-    src/c64u-record.c
-    src/c64u-version.c
-    src/c64u-properties.c
+    src/c64-network.c
+    src/c64-protocol.c
+    src/c64-video.c
+    src/c64-color.c
+    src/c64-audio.c
+    src/c64-source.c
+    src/c64-record.c
+    src/c64-version.c
+    src/c64-properties.c
 )
 
 # Link resolver library for DNS functionality on Unix platforms

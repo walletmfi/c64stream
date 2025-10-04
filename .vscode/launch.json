@@ -16,7 +16,7 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "🐧 Debug OBS with C64U Plugin (Linux)",
+            "name": "🐧 Debug OBS with C64 Stream Plugin (Linux)",
             "type": "cppdbg",
             "request": "launch",
             "program": "/usr/bin/obs",
@@ -44,7 +44,7 @@
             }
         },
         {
-            "name": "🪟 Debug OBS with C64U Plugin (Windows)",
+            "name": "🪟 Debug OBS with C64 Stream Plugin (Windows)",
             "type": "cppvsdbg",
             "request": "launch",
             "program": "C:/Program Files/obs-studio/bin/64bit/obs64.exe",

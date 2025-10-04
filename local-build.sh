@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# C64U OBS Plugin - Local Multi-Platform Build Script
+# C64 Stream - Local Multi-Platform Build Script
 # This script provides local builds for all three platforms without GitHub Actions
 
 set -euo pipefail
@@ -41,7 +41,7 @@ log_error() {
 
 usage() {
     cat << EOF
-C64U OBS Plugin - Local Multi-Platform Build Script
+C64 Stream - Local Multi-Platform Build Script
 
 Usage: $0 <platform> [options]
 
@@ -186,7 +186,7 @@ build_platform() {
     local platform=$1
     local config=$2
     
-    log_info "Building C64U OBS Plugin for $platform ($config)..."
+    log_info "Building C64 Stream for $platform ($config)..."
     
     # Determine build directory and preset
     local build_dir preset_name
@@ -347,7 +347,7 @@ main() {
             ;;
     esac
     
-    log_info "C64U OBS Plugin - Local Build"
+    log_info "C64 Stream - Local Build"
     log_info "Platform: $PLATFORM"
     log_info "Config: $BUILD_CONFIG"
     

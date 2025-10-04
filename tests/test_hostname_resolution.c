@@ -324,7 +324,7 @@ int resolve_hostname_comprehensive(const char *hostname, char *ip_buffer, size_t
 
 int main(int argc, char **argv)
 {
-    printf("Hostname Resolution Test for OBS C64U Plugin\n");
+    printf("Hostname Resolution Test for OBS C64 Stream Plugin\n");
     printf("============================================\n");
 
     if (argc < 2) {

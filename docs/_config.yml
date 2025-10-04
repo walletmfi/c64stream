@@ -1,11 +1,11 @@
-# GitHub Pages configuration for c64u-obs
-title: "C64 Ultimate OBS Plugin"
+# GitHub Pages configuration for c64stream
+title: "C64 Stream"
 description: "Stream your Commodore 64 Ultimate directly to OBS Studio over network connection"
 url: "https://chrisgleissner.github.io"
-baseurl: "/c64u-obs"
+baseurl: "/c64stream"
 
 # Repository information
-repository: "chrisgleissner/c64u-obs"
+repository: "chrisgleissner/c64stream"
 github_username: "chrisgleissner"
 
 # Build settings

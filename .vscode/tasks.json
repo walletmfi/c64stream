@@ -129,7 +129,7 @@
             "command": "bash",
             "args": [
                 "-c",
-                "mkdir -p \"$HOME/.config/obs-studio/plugins/c64u-plugin-for-obs/bin/64bit\" && mkdir -p \"$HOME/.config/obs-studio/plugins/c64u-plugin-for-obs/data\" && cp \"build_x86_64/c64u-plugin-for-obs.so\" \"$HOME/.config/obs-studio/plugins/c64u-plugin-for-obs/bin/64bit/\" && cp -r \"data\"/* \"$HOME/.config/obs-studio/plugins/c64u-plugin-for-obs/data/\" && echo 'Plugin installed successfully'"
+                "mkdir -p \"$HOME/.config/obs-studio/plugins/c64stream/bin/64bit\" && mkdir -p \"$HOME/.config/obs-studio/plugins/c64stream/data\" && cp \"build_x86_64/c64stream.so\" \"$HOME/.config/obs-studio/plugins/c64stream/bin/64bit/\" && cp -r \"data\"/* \"$HOME/.config/obs-studio/plugins/c64stream/data/\" && echo 'Plugin installed successfully'"
             ],
             "group": "build",
             "presentation": {
@@ -210,7 +210,7 @@
             "command": "bash",
             "args": [
                 "-c",
-                "echo 'Building plugin...' && cmake --build build_x86_64 && echo 'Installing plugin...' && mkdir -p \"$HOME/.config/obs-studio/plugins/c64u-plugin-for-obs/bin/64bit\" && mkdir -p \"$HOME/.config/obs-studio/plugins/c64u-plugin-for-obs/data\" && cp \"build_x86_64/c64u-plugin-for-obs.so\" \"$HOME/.config/obs-studio/plugins/c64u-plugin-for-obs/bin/64bit/\" && cp -r \"data\"/* \"$HOME/.config/obs-studio/plugins/c64u-plugin-for-obs/data/\" && echo 'Plugin build and install completed successfully!'"
+                "echo 'Building plugin...' && cmake --build build_x86_64 && echo 'Installing plugin...' && mkdir -p \"$HOME/.config/obs-studio/plugins/c64stream/bin/64bit\" && mkdir -p \"$HOME/.config/obs-studio/plugins/c64stream/data\" && cp \"build_x86_64/c64stream.so\" \"$HOME/.config/obs-studio/plugins/c64stream/bin/64bit/\" && cp -r \"data\"/* \"$HOME/.config/obs-studio/plugins/c64stream/data/\" && echo 'Plugin build and install completed successfully!'"
             ],
             "group": {
                 "kind": "build"

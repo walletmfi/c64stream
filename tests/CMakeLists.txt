@@ -1,8 +1,8 @@
-# C64U Plugin Tests
+# C64 Stream Plugin Tests
 # 
 # This directory contains the following test components:
 # - test_vic_colors.c: Unit tests for VIC-II color conversion (local builds only)
-# - c64u_mock_server.c: Mock C64U device for testing plugin connectivity (local builds only) 
+# - c64_mock_server.c: Mock C64U device for testing plugin connectivity (local builds only) 
 # - test_integration.c: Full integration tests with real OBS (disabled by default)
 # - CMakeLists.txt: This build configuration with automatic CI detection
 #
@@ -58,14 +58,14 @@ if(NOT IS_CI_BUILD)
   add_test(NAME VICColors COMMAND test_vic_colors)
 endif()
 
-# C64U mock server (for manual testing) - only build when explicitly enabled
+# C64 mock server (for manual testing) - only build when explicitly enabled
 if(ENABLE_MOCK_SERVER)
-  add_executable(c64u_mock_server c64u_mock_server.c)
-  target_link_libraries(c64u_mock_server Threads::Threads)
+  add_executable(c64_mock_server c64_mock_server.c)
+  target_link_libraries(c64_mock_server Threads::Threads)
   
   # Link math library on non-Windows platforms
   if(NOT WIN32)
-    target_link_libraries(c64u_mock_server m)
+    target_link_libraries(c64_mock_server m)
   endif()
 endif()
 
@@ -85,7 +85,7 @@ if(ENABLE_INTEGRATION_TESTS)
   target_include_directories(test_integration PRIVATE /usr/include/obs)
   
   # Integration test loads the plugin as a shared library
-  add_dependencies(test_integration c64u-plugin-for-obs)
+  add_dependencies(test_integration c64stream)
   
   add_test(NAME Integration COMMAND test_integration WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}")
 endif()
@@ -101,9 +101,9 @@ endif()
 
 if(ENABLE_MOCK_SERVER)
   if(MSVC)
-    target_compile_options(c64u_mock_server PRIVATE /W4 /std:c17)
+    target_compile_options(c64_mock_server PRIVATE /W4 /std:c17)
   else()
-    target_compile_options(c64u_mock_server PRIVATE -Wall -Wextra -std=c17)
+    target_compile_options(c64_mock_server PRIVATE -Wall -Wextra -std=c17)
   endif()
 endif()
 
@@ -121,7 +121,7 @@ if(NOT IS_CI_BUILD)
   list(APPEND TEST_TARGETS test_vic_colors)
 endif()
 if(ENABLE_MOCK_SERVER)
-  list(APPEND TEST_TARGETS c64u_mock_server)
+  list(APPEND TEST_TARGETS c64_mock_server)
 endif()
 if(ENABLE_INTEGRATION_TESTS)
   list(APPEND TEST_TARGETS test_integration)

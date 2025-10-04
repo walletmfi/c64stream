@@ -1,5 +1,5 @@
 /*
-C64U Mock Server for Testing
+C64 Mock Server for Testing
 Copyright (C) 2025 Chris Gleissner
 
 This program is free software; you can redistribute it and/or modify
@@ -39,19 +39,19 @@ typedef int socklen_t;
 #endif
 
 // C64U constants matching the plugin
-#define C64U_VIDEO_PACKET_SIZE 780
-#define C64U_AUDIO_PACKET_SIZE 770
-#define C64U_VIDEO_HEADER_SIZE 12
-#define C64U_AUDIO_HEADER_SIZE 2
-#define C64U_CONTROL_PORT 64
-#define C64U_VIDEO_PORT 11000
-#define C64U_AUDIO_PORT 11001
+#define C64_VIDEO_PACKET_SIZE 780
+#define C64_AUDIO_PACKET_SIZE 770
+#define C64_VIDEO_HEADER_SIZE 12
+#define C64_AUDIO_HEADER_SIZE 2
+#define C64_CONTROL_PORT 64
+#define C64_VIDEO_PORT 11000
+#define C64_AUDIO_PORT 11001
 
 // Video format constants
-#define C64U_PAL_WIDTH 384
-#define C64U_PAL_HEIGHT 272
-#define C64U_PIXELS_PER_LINE 384
-#define C64U_LINES_PER_PACKET 4
+#define C64_PAL_WIDTH 384
+#define C64_PAL_HEIGHT 272
+#define C64_PIXELS_PER_LINE 384
+#define C64_LINES_PER_PACKET 4
 
 // Mock server state
 struct mock_server {
@@ -73,13 +73,13 @@ static struct mock_server server = {0};
 static void generate_test_pattern(uint8_t *pixel_data, int frame_num, int line_num)
 {
     // Simple test pattern: alternating colors based on position and frame
-    for (int line = 0; line < C64U_LINES_PER_PACKET; line++) {
-        for (int x = 0; x < C64U_PIXELS_PER_LINE / 2; x++) {
+    for (int line = 0; line < C64_LINES_PER_PACKET; line++) {
+        for (int x = 0; x < C64_PIXELS_PER_LINE / 2; x++) {
             int pixel_line = line_num + line;
             uint8_t color1 = ((x + pixel_line + frame_num) % 16);
             uint8_t color2 = ((x + pixel_line + frame_num + 1) % 16);
 
-            int offset = line * (C64U_PIXELS_PER_LINE / 2) + x;
+            int offset = line * (C64_PIXELS_PER_LINE / 2) + x;
             pixel_data[offset] = (color2 << 4) | color1;
         }
     }
@@ -92,15 +92,15 @@ static void *video_thread_func(void *data)
     {
         struct sockaddr_in client_addr;
         socklen_t client_len = sizeof(client_addr);
-        uint8_t packet[C64U_VIDEO_PACKET_SIZE];
+        uint8_t packet[C64_VIDEO_PACKET_SIZE];
         uint16_t frame_num = 0;
 
         memset(&client_addr, 0, sizeof(client_addr));
         client_addr.sin_family = AF_INET;
-        client_addr.sin_port = htons(C64U_VIDEO_PORT);
+        client_addr.sin_port = htons(C64_VIDEO_PORT);
         inet_pton(AF_INET, server.client_ip, &client_addr.sin_addr);
 
-        printf("Video thread started, sending to %s:%d\n", server.client_ip, C64U_VIDEO_PORT);
+        printf("Video thread started, sending to %s:%d\n", server.client_ip, C64_VIDEO_PORT);
 
         while (server.running) {
             if (!server.video_streaming) {
@@ -110,23 +110,23 @@ static void *video_thread_func(void *data)
 
             // Send one frame (PAL format: 68 packets of 4 lines each)
             for (int packet_num = 0; packet_num < 68; packet_num++) {
-                uint16_t line_num = packet_num * C64U_LINES_PER_PACKET;
+                uint16_t line_num = packet_num * C64_LINES_PER_PACKET;
                 bool last_packet = (packet_num == 67);
 
                 // Build packet header
                 *(uint16_t *)(packet + 0) = packet_num;                            // sequence number
                 *(uint16_t *)(packet + 2) = frame_num;                             // frame number
                 *(uint16_t *)(packet + 4) = line_num | (last_packet ? 0x8000 : 0); // line number + flag
-                *(uint16_t *)(packet + 6) = C64U_PIXELS_PER_LINE;                  // pixels per line
-                packet[8] = C64U_LINES_PER_PACKET;                                 // lines per packet
+                *(uint16_t *)(packet + 6) = C64_PIXELS_PER_LINE;                   // pixels per line
+                packet[8] = C64_LINES_PER_PACKET;                                  // lines per packet
                 packet[9] = 4;                                                     // bits per pixel
                 *(uint16_t *)(packet + 10) = 0;                                    // encoding type
 
                 // Generate test pattern
-                generate_test_pattern(packet + C64U_VIDEO_HEADER_SIZE, frame_num, line_num);
+                generate_test_pattern(packet + C64_VIDEO_HEADER_SIZE, frame_num, line_num);
 
                 // Send packet
-                ssize_t sent = sendto(server.video_socket, packet, C64U_VIDEO_PACKET_SIZE, 0,
+                ssize_t sent = sendto(server.video_socket, packet, C64_VIDEO_PACKET_SIZE, 0,
                                       (struct sockaddr *)&client_addr, client_len);
                 if (sent < 0) {
                     printf("Video send error: %s\n", strerror(errno));
@@ -150,15 +150,15 @@ static void *audio_thread_func(void *data)
     (void)data; // Suppress unused parameter warning
     struct sockaddr_in client_addr;
     socklen_t client_len = sizeof(client_addr);
-    uint8_t packet[C64U_AUDIO_PACKET_SIZE];
+    uint8_t packet[C64_AUDIO_PACKET_SIZE];
     uint16_t seq_num = 0;
 
     memset(&client_addr, 0, sizeof(client_addr));
     client_addr.sin_family = AF_INET;
-    client_addr.sin_port = htons(C64U_AUDIO_PORT);
+    client_addr.sin_port = htons(C64_AUDIO_PORT);
     inet_pton(AF_INET, server.client_ip, &client_addr.sin_addr);
 
-    printf("Audio thread started, sending to %s:%d\n", server.client_ip, C64U_AUDIO_PORT);
+    printf("Audio thread started, sending to %s:%d\n", server.client_ip, C64_AUDIO_PORT);
 
     while (server.running) {
         if (!server.audio_streaming) {
@@ -170,7 +170,7 @@ static void *audio_thread_func(void *data)
         *(uint16_t *)(packet) = seq_num++;
 
         // Generate test audio (simple sine wave)
-        int16_t *audio_data = (int16_t *)(packet + C64U_AUDIO_HEADER_SIZE);
+        int16_t *audio_data = (int16_t *)(packet + C64_AUDIO_HEADER_SIZE);
         for (int i = 0; i < 192; i++) { // 192 stereo samples
             float t = (seq_num * 192 + i) / 48000.0f;
             int16_t sample = (int16_t)(sin(t * 2 * 3.14159 * 440) * 8000); // 440Hz tone
@@ -180,7 +180,7 @@ static void *audio_thread_func(void *data)
 
         // Send packet
         ssize_t sent =
-            sendto(server.audio_socket, packet, C64U_AUDIO_PACKET_SIZE, 0, (struct sockaddr *)&client_addr, client_len);
+            sendto(server.audio_socket, packet, C64_AUDIO_PACKET_SIZE, 0, (struct sockaddr *)&client_addr, client_len);
         if (sent < 0) {
             printf("Audio send error: %s\n", strerror(errno));
         }
@@ -203,7 +203,7 @@ static void *control_thread_func(void *data)
     memset(&server_addr, 0, sizeof(server_addr));
     server_addr.sin_family = AF_INET;
     server_addr.sin_addr.s_addr = INADDR_ANY;
-    server_addr.sin_port = htons(C64U_CONTROL_PORT);
+    server_addr.sin_port = htons(C64_CONTROL_PORT);
 
     if (bind(server.control_socket, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0) {
         printf("Control bind failed: %s\n", strerror(errno));
@@ -215,7 +215,7 @@ static void *control_thread_func(void *data)
         return NULL;
     }
 
-    printf("Control server listening on port %d\n", C64U_CONTROL_PORT);
+    printf("Control server listening on port %d\n", C64_CONTROL_PORT);
 
     while (server.running) {
         int client_sock = accept(server.control_socket, (struct sockaddr *)&client_addr, &client_len);
@@ -283,7 +283,7 @@ int main(int argc, char *argv[])
     (void)argc;
     (void)argv; // Suppress unused parameter warnings
 
-    printf("C64U Mock Server v1.0\n");
+    printf("C64 Mock Server v1.0\n");
     printf("Simulating C64 Ultimate device for testing\n\n");
 
     // Setup signal handling

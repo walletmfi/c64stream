@@ -1,5 +1,5 @@
-#ifndef C64U_TYPES_H
-#define C64U_TYPES_H
+#ifndef C64_TYPES_H
+#define C64_TYPES_H
 
 #include <obs-module.h>
 #include <media-io/audio-io.h>
@@ -7,21 +7,21 @@
 #include <pthread.h>
 #include <stdint.h>
 #include <stdbool.h>
-#include "c64u-network.h"
-#include "c64u-protocol.h"
+#include "c64-network.h"
+#include "c64-protocol.h"
 
 // Frame packet structure for reordering
 struct frame_packet {
     uint16_t line_num;
     uint8_t lines_per_packet;
-    uint8_t packet_data[780 - 12]; // C64U_VIDEO_PACKET_SIZE - C64U_VIDEO_HEADER_SIZE
+    uint8_t packet_data[780 - 12]; // C64_VIDEO_PACKET_SIZE - C64_VIDEO_HEADER_SIZE
     bool received;
 };
 
 // Frame assembly structure (optimized for lock-free operations)
 struct frame_assembly {
     uint16_t frame_num;
-    struct frame_packet packets[C64U_MAX_PACKETS_PER_FRAME];
+    struct frame_packet packets[C64_MAX_PACKETS_PER_FRAME];
     uint16_t received_packets; // Number of packets received
     uint16_t expected_packets;
     bool complete;                  // Frame completion flag
@@ -29,12 +29,12 @@ struct frame_assembly {
     uint64_t packets_received_mask; // Bitmask of received packets (for 64 packets max)
 };
 
-struct c64u_source {
+struct c64_source {
     obs_source_t *source;
 
     // Configuration
-    char hostname[64];       // C64U hostname or IP as entered by user
-    char ip_address[64];     // C64U IP Address (resolved from hostname)
+    char hostname[64];       // C64 Ultimate hostname or IP as entered by user
+    char ip_address[64];     // C64 Ultimate IP Address (resolved from hostname)
     char obs_ip_address[64]; // OBS IP Address (this machine)
     bool auto_detect_ip;
     bool initial_ip_detected; // Flag to track if initial IP detection was done
@@ -143,4 +143,4 @@ struct c64u_source {
     pthread_mutex_t recording_mutex;
 };
 
-#endif // C64U_TYPES_H
+#endif // C64_TYPES_H

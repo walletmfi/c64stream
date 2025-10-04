@@ -1,10 +1,10 @@
-#include "c64u-color.h"
-#include "c64u-logging.h"
+#include "c64-color.h"
+#include "c64-logging.h"
 #include <stdint.h>
 #include <stdbool.h>
 
 /**
- * @file c64u-color.c
+ * @file c64-color.c
  * @brief VIC-II color conversion and palette management implementation
  *
  * Provides optimized color conversion for C64 Ultimate video streams with
@@ -36,7 +36,7 @@ const uint32_t vic_colors[16] = {
 static uint64_t color_pair_lut[256];
 static bool color_lut_initialized = false;
 
-void c64u_init_color_conversion_lut(void)
+void c64_init_color_conversion_lut(void)
 {
     if (color_lut_initialized) {
         return; // Already initialized
@@ -54,14 +54,14 @@ void c64u_init_color_conversion_lut(void)
     }
 
     color_lut_initialized = true;
-    C64U_LOG_INFO("🎨 Color conversion lookup table initialized (256 entries)");
+    C64_LOG_INFO("🎨 Color conversion lookup table initialized (256 entries)");
 }
 
-void c64u_convert_pixels_optimized(const uint8_t *src, uint32_t *dst, int pixel_pairs)
+void c64_convert_pixels_optimized(const uint8_t *src, uint32_t *dst, int pixel_pairs)
 {
     // Ensure LUT is initialized
     if (!color_lut_initialized) {
-        c64u_init_color_conversion_lut();
+        c64_init_color_conversion_lut();
     }
 
     // Process pixel pairs using optimized lookup table

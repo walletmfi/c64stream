@@ -57,14 +57,14 @@ bool resolve_hostname_direct_dns(const char *hostname, const char *dns_server_ip
         return false;
     }
 
-    obs_log(LOG_DEBUG, "[C64U] Trying direct DNS query: %s via %s", hostname, dns_server_ip);
+    obs_log(LOG_DEBUG, "[C64] Trying direct DNS query: %s via %s", hostname, dns_server_ip);
 
     // Initialize resolver
     struct __res_state res_state;
     memset(&res_state, 0, sizeof(res_state));
 
     if (res_ninit(&res_state) != 0) {
-        obs_log(LOG_WARNING, "[C64U] Failed to initialize resolver");
+        obs_log(LOG_WARNING, "[C64] Failed to initialize resolver");
         return false;
     }
 
@@ -75,7 +75,7 @@ bool resolve_hostname_direct_dns(const char *hostname, const char *dns_server_ip
     dns_addr.sin_port = htons(53);
 
     if (inet_pton(AF_INET, dns_server_ip, &dns_addr.sin_addr) != 1) {
-        obs_log(LOG_WARNING, "[C64U] Invalid DNS server IP: %s", dns_server_ip);
+        obs_log(LOG_WARNING, "[C64] Invalid DNS server IP: %s", dns_server_ip);
         res_nclose(&res_state);
         return false;
     }
@@ -90,7 +90,7 @@ bool resolve_hostname_direct_dns(const char *hostname, const char *dns_server_ip
     int answer_len = res_nquery(&res_state, hostname, ns_c_in, ns_t_a, answer, sizeof(answer));
 
     if (answer_len < 0) {
-        obs_log(LOG_DEBUG, "[C64U] DNS query failed for %s via %s", hostname, dns_server_ip);
+        obs_log(LOG_DEBUG, "[C64] DNS query failed for %s via %s", hostname, dns_server_ip);
         res_nclose(&res_state);
         return false;
     }
@@ -98,7 +98,7 @@ bool resolve_hostname_direct_dns(const char *hostname, const char *dns_server_ip
     // Parse the response
     ns_msg msg;
     if (ns_initparse(answer, answer_len, &msg) < 0) {
-        obs_log(LOG_WARNING, "[C64U] Failed to parse DNS response");
+        obs_log(LOG_WARNING, "[C64] Failed to parse DNS response");
         res_nclose(&res_state);
         return false;
     }
@@ -115,14 +115,14 @@ bool resolve_hostname_direct_dns(const char *hostname, const char *dns_server_ip
             // Found an A record - extract the IP address
             const unsigned char *rdata = ns_rr_rdata(rr);
             if (inet_ntop(AF_INET, rdata, ip_buffer, buffer_size) != NULL) {
-                obs_log(LOG_INFO, "[C64U] Direct DNS resolved '%s' to %s via %s", hostname, ip_buffer, dns_server_ip);
+                obs_log(LOG_INFO, "[C64] Direct DNS resolved '%s' to %s via %s", hostname, ip_buffer, dns_server_ip);
                 res_nclose(&res_state);
                 return true;
             }
         }
     }
 
-    obs_log(LOG_DEBUG, "[C64U] No A record found in DNS response from %s", dns_server_ip);
+    obs_log(LOG_DEBUG, "[C64] No A record found in DNS response from %s", dns_server_ip);
     res_nclose(&res_state);
     return false;
 }
@@ -136,7 +136,7 @@ bool resolve_hostname_with_fallback_dns(const char *hostname, const char *custom
 
     // Try custom DNS server first if provided
     if (custom_dns_server) {
-        obs_log(LOG_DEBUG, "[C64U] Trying custom DNS server: %s", custom_dns_server);
+        obs_log(LOG_DEBUG, "[C64] Trying custom DNS server: %s", custom_dns_server);
         if (resolve_hostname_direct_dns(hostname, custom_dns_server, ip_buffer, buffer_size)) {
             return true;
         }
@@ -151,7 +151,7 @@ bool resolve_hostname_with_fallback_dns(const char *hostname, const char *custom
                                         "10.1.1.1",    // Alternative corporate
                                         NULL};
 
-    obs_log(LOG_DEBUG, "[C64U] Trying common router DNS servers for fallback");
+    obs_log(LOG_DEBUG, "[C64] Trying common router DNS servers for fallback");
 
     for (int i = 0; common_dns_servers[i] != NULL; i++) {
         if (resolve_hostname_direct_dns(hostname, common_dns_servers[i], ip_buffer, buffer_size)) {
@@ -159,7 +159,7 @@ bool resolve_hostname_with_fallback_dns(const char *hostname, const char *custom
         }
     }
 
-    obs_log(LOG_DEBUG, "[C64U] All direct DNS attempts failed for: %s", hostname);
+    obs_log(LOG_DEBUG, "[C64] All direct DNS attempts failed for: %s", hostname);
     return false;
 }
 

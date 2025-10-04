@@ -5,49 +5,49 @@
 #include <string.h>
 #include <inttypes.h>
 #include <pthread.h>
-#include "c64u-network.h" // Include network header first to avoid Windows header conflicts
+#include "c64-network.h" // Include network header first to avoid Windows header conflicts
 
-#include "c64u-logging.h"
-#include "c64u-source.h"
-#include "c64u-types.h"
-#include "c64u-protocol.h"
-#include "c64u-video.h"
-#include "c64u-color.h"
-#include "c64u-audio.h"
-#include "c64u-record.h"
-#include "c64u-version.h"
-#include "c64u-properties.h"
+#include "c64-logging.h"
+#include "c64-source.h"
+#include "c64-types.h"
+#include "c64-protocol.h"
+#include "c64-video.h"
+#include "c64-color.h"
+#include "c64-audio.h"
+#include "c64-record.h"
+#include "c64-version.h"
+#include "c64-properties.h"
 #include "plugin-support.h"
 
 // Forward declarations
-static void close_and_reset_sockets(struct c64u_source *context);
+static void close_and_reset_sockets(struct c64_source *context);
 
 // Async retry task - runs in OBS thread pool (NOT render thread)
 // Based on working 0.4.3 approach but simplified
-static void c64u_async_retry_task(void *data)
+static void c64_async_retry_task(void *data)
 {
-    struct c64u_source *context = (struct c64u_source *)data;
+    struct c64_source *context = (struct c64_source *)data;
 
     if (!context) {
-        C64U_LOG_WARNING("Async retry task called with NULL context");
+        C64_LOG_WARNING("Async retry task called with NULL context");
         return;
     }
 
-    C64U_LOG_INFO("Async retry attempt %u - %s", context->retry_count,
-                  context->streaming ? "sending start commands" : "starting streaming");
+    C64_LOG_INFO("Async retry attempt %u - %s", context->retry_count,
+                 context->streaming ? "sending start commands" : "starting streaming");
 
     bool tcp_success = false;
 
     if (!context->streaming) {
         // Not streaming - need to create UDP sockets and threads (like 0.4.3)
-        c64u_start_streaming(context);
-        tcp_success = true; // c64u_start_streaming handles TCP commands internally
+        c64_start_streaming(context);
+        tcp_success = true; // c64_start_streaming handles TCP commands internally
     } else {
         // Already streaming - test connectivity and send start commands (like 0.4.3)
         // Use quick connectivity test (250ms timeout) instead of blocking TCP socket creation
-        if (c64u_test_connectivity(context->ip_address, C64U_CONTROL_PORT)) {
-            c64u_send_control_command(context, true, 0); // Video
-            c64u_send_control_command(context, true, 1); // Audio
+        if (c64_test_connectivity(context->ip_address, C64_CONTROL_PORT)) {
+            c64_send_control_command(context, true, 0); // Video
+            c64_send_control_command(context, true, 1); // Audio
             tcp_success = true;
             context->consecutive_failures = 0; // Reset failure counter on success
         } else {
@@ -59,7 +59,7 @@ static void c64u_async_retry_task(void *data)
     context->retry_count++;
 
     if (!tcp_success) {
-        C64U_LOG_DEBUG("TCP connection failed (%u consecutive failures)", context->consecutive_failures);
+        C64_LOG_DEBUG("TCP connection failed (%u consecutive failures)", context->consecutive_failures);
     }
 
     // Clear retry state - allows future retries
@@ -67,7 +67,7 @@ static void c64u_async_retry_task(void *data)
 }
 
 // Helper function to safely close and reset sockets
-static void close_and_reset_sockets(struct c64u_source *context)
+static void close_and_reset_sockets(struct c64_source *context)
 {
     if (context->video_socket != INVALID_SOCKET_VALUE) {
         close(context->video_socket);
@@ -79,46 +79,46 @@ static void close_and_reset_sockets(struct c64u_source *context)
     }
 }
 
-// Load the C64U logo texture from module data directory
+// Load the C64S logo texture from module data directory
 static gs_texture_t *load_logo_texture(void)
 {
-    C64U_LOG_DEBUG("Attempting to load logo texture...");
+    C64_LOG_DEBUG("Attempting to load logo texture...");
 
     // Use obs_module_file() to get the path to the logo in the data directory
-    char *logo_path = obs_module_file("images/c64u-logo.png");
+    char *logo_path = obs_module_file("images/c64s-logo.png");
     if (!logo_path) {
-        C64U_LOG_WARNING("Failed to locate logo file in module data directory");
+        C64_LOG_WARNING("Failed to locate logo file in module data directory");
         return NULL;
     }
 
-    C64U_LOG_DEBUG("Logo path resolved to: %s", logo_path);
+    C64_LOG_DEBUG("Logo path resolved to: %s", logo_path);
 
     // Load texture directly from the data directory
     gs_texture_t *logo_texture = gs_texture_create_from_file(logo_path);
 
     if (!logo_texture) {
-        C64U_LOG_WARNING("Failed to load logo texture from: %s", logo_path);
+        C64_LOG_WARNING("Failed to load logo texture from: %s", logo_path);
     } else {
         uint32_t width = gs_texture_get_width(logo_texture);
         uint32_t height = gs_texture_get_height(logo_texture);
-        C64U_LOG_DEBUG("Loaded logo texture from: %s (size: %ux%u)", logo_path, width, height);
+        C64_LOG_DEBUG("Loaded logo texture from: %s (size: %ux%u)", logo_path, width, height);
     }
 
     bfree(logo_path);
     return logo_texture;
 }
 
-void *c64u_create(obs_data_t *settings, obs_source_t *source)
+void *c64_create(obs_data_t *settings, obs_source_t *source)
 {
-    C64U_LOG_INFO("Creating C64U source");
+    C64_LOG_INFO("Creating C64S source");
 
-    // C64U source creation
+    // C64S source creation
 
     // Initialize networking on first use
     static bool networking_initialized = false;
     if (!networking_initialized) {
-        if (!c64u_init_networking()) {
-            C64U_LOG_ERROR("Failed to initialize networking");
+        if (!c64_init_networking()) {
+            C64_LOG_ERROR("Failed to initialize networking");
             return NULL;
         }
         networking_initialized = true;
@@ -127,21 +127,21 @@ void *c64u_create(obs_data_t *settings, obs_source_t *source)
     // Initialize color conversion optimization on first use
     static bool color_lut_initialized = false;
     if (!color_lut_initialized) {
-        c64u_init_color_conversion_lut();
+        c64_init_color_conversion_lut();
         color_lut_initialized = true;
     }
 
-    struct c64u_source *context = bzalloc(sizeof(struct c64u_source));
+    struct c64_source *context = bzalloc(sizeof(struct c64_source));
     if (!context) {
-        C64U_LOG_ERROR("Failed to allocate memory for source context");
+        C64_LOG_ERROR("Failed to allocate memory for source context");
         return NULL;
     }
 
     context->source = source;
 
     // Initialize configuration from settings
-    const char *host = obs_data_get_string(settings, "c64u_host");
-    const char *hostname = host ? host : C64U_DEFAULT_HOST;
+    const char *host = obs_data_get_string(settings, "c64_host");
+    const char *hostname = host ? host : C64_DEFAULT_HOST;
 
     // Store the original hostname/IP as entered by user
     strncpy(context->hostname, hostname, sizeof(context->hostname) - 1);
@@ -151,13 +151,13 @@ void *c64u_create(obs_data_t *settings, obs_source_t *source)
     const char *dns_server_ip = obs_data_get_string(settings, "dns_server_ip");
 
     // Resolve hostname to IP address for actual connections
-    if (!c64u_resolve_hostname_with_dns(hostname, dns_server_ip, context->ip_address, sizeof(context->ip_address))) {
+    if (!c64_resolve_hostname_with_dns(hostname, dns_server_ip, context->ip_address, sizeof(context->ip_address))) {
         // If hostname resolution fails, store the hostname as-is (might be invalid IP like 0.0.0.0)
         strncpy(context->ip_address, hostname, sizeof(context->ip_address) - 1);
         context->ip_address[sizeof(context->ip_address) - 1] = '\0';
-        C64U_LOG_WARNING("Could not resolve hostname '%s', using as-is: %s", hostname, context->ip_address);
+        C64_LOG_WARNING("Could not resolve hostname '%s', using as-is: %s", hostname, context->ip_address);
     } else {
-        C64U_LOG_INFO("Resolved C64U host '%s' to IP: %s", hostname, context->ip_address);
+        C64_LOG_INFO("Resolved C64 Ultimate host '%s' to IP: %s", hostname, context->ip_address);
     }
 
     context->auto_detect_ip = obs_data_get_bool(settings, "auto_detect_ip");
@@ -173,43 +173,43 @@ void *c64u_create(obs_data_t *settings, obs_source_t *source)
         // Use previously saved/configured OBS IP address
         strncpy(context->obs_ip_address, saved_obs_ip, sizeof(context->obs_ip_address) - 1);
         context->initial_ip_detected = true;
-        C64U_LOG_INFO("Using saved OBS IP address: %s", context->obs_ip_address);
+        C64_LOG_INFO("Using saved OBS IP address: %s", context->obs_ip_address);
     } else {
         // First time - detect local IP address
-        if (c64u_detect_local_ip(context->obs_ip_address, sizeof(context->obs_ip_address))) {
-            C64U_LOG_INFO("Successfully detected OBS IP address: %s", context->obs_ip_address);
+        if (c64_detect_local_ip(context->obs_ip_address, sizeof(context->obs_ip_address))) {
+            C64_LOG_INFO("Successfully detected OBS IP address: %s", context->obs_ip_address);
             context->initial_ip_detected = true;
             // Save the detected IP to settings for future use
             obs_data_set_string(settings, "obs_ip_address", context->obs_ip_address);
         } else {
-            C64U_LOG_WARNING("Failed to detect OBS IP address, will use configured value");
+            C64_LOG_WARNING("Failed to detect OBS IP address, will use configured value");
             context->initial_ip_detected = false;
         }
     }
 
     // Ensure we have a valid OBS IP address - use localhost as last resort
     if (strlen(context->obs_ip_address) == 0) {
-        C64U_LOG_INFO("No OBS IP configured, using localhost as fallback");
+        C64_LOG_INFO("No OBS IP configured, using localhost as fallback");
         strncpy(context->obs_ip_address, "127.0.0.1", sizeof(context->obs_ip_address) - 1);
         obs_data_set_string(settings, "obs_ip_address", context->obs_ip_address);
     }
 
     // Set default ports if not configured
     if (context->video_port == 0)
-        context->video_port = C64U_DEFAULT_VIDEO_PORT;
+        context->video_port = C64_DEFAULT_VIDEO_PORT;
     if (context->audio_port == 0)
-        context->audio_port = C64U_DEFAULT_AUDIO_PORT;
+        context->audio_port = C64_DEFAULT_AUDIO_PORT;
 
     // Initialize video format (start with PAL, will be detected from stream)
-    context->width = C64U_PAL_WIDTH;
-    context->height = C64U_PAL_HEIGHT;
+    context->width = C64_PAL_WIDTH;
+    context->height = C64_PAL_HEIGHT;
 
     // Allocate video buffers (double buffering)
     size_t frame_size = context->width * context->height * 4; // RGBA
     context->frame_buffer_front = bmalloc(frame_size);
     context->frame_buffer_back = bmalloc(frame_size);
     if (!context->frame_buffer_front || !context->frame_buffer_back) {
-        C64U_LOG_ERROR("Failed to allocate video frame buffers");
+        C64_LOG_ERROR("Failed to allocate video frame buffers");
         if (context->frame_buffer_front)
             bfree(context->frame_buffer_front);
         if (context->frame_buffer_back)
@@ -229,14 +229,14 @@ void *c64u_create(obs_data_t *settings, obs_source_t *source)
 
     // Initialize mutexes
     if (pthread_mutex_init(&context->frame_mutex, NULL) != 0) {
-        C64U_LOG_ERROR("Failed to initialize frame mutex");
+        C64_LOG_ERROR("Failed to initialize frame mutex");
         bfree(context->frame_buffer_front);
         bfree(context->frame_buffer_back);
         bfree(context);
         return NULL;
     }
     if (pthread_mutex_init(&context->assembly_mutex, NULL) != 0) {
-        C64U_LOG_ERROR("Failed to initialize assembly mutex");
+        C64_LOG_ERROR("Failed to initialize assembly mutex");
         pthread_mutex_destroy(&context->frame_mutex);
         bfree(context->frame_buffer_front);
         bfree(context->frame_buffer_back);
@@ -246,7 +246,7 @@ void *c64u_create(obs_data_t *settings, obs_source_t *source)
 
     // Initialize delay queue mutex
     if (pthread_mutex_init(&context->delay_mutex, NULL) != 0) {
-        C64U_LOG_ERROR("Failed to initialize delay mutex");
+        C64_LOG_ERROR("Failed to initialize delay mutex");
         pthread_mutex_destroy(&context->frame_mutex);
         pthread_mutex_destroy(&context->assembly_mutex);
         bfree(context->frame_buffer_front);
@@ -258,7 +258,7 @@ void *c64u_create(obs_data_t *settings, obs_source_t *source)
     // Initialize rendering delay from settings
     context->render_delay_frames = (uint32_t)obs_data_get_int(settings, "render_delay_frames");
     if (context->render_delay_frames == 0) {
-        context->render_delay_frames = C64U_DEFAULT_RENDER_DELAY_FRAMES;
+        context->render_delay_frames = C64_DEFAULT_RENDER_DELAY_FRAMES;
     }
 
     // Initialize delay queue - allocate for maximum delay + some extra buffer
@@ -268,7 +268,7 @@ void *c64u_create(obs_data_t *settings, obs_source_t *source)
     context->delayed_frame_queue = NULL;
     context->delay_sequence_queue = NULL;
 
-    C64U_LOG_INFO("Rendering delay initialized: %u frames", context->render_delay_frames);
+    C64_LOG_INFO("Rendering delay initialized: %u frames", context->render_delay_frames);
 
     // Initialize sockets to invalid
     context->video_socket = INVALID_SOCKET_VALUE;
@@ -300,29 +300,29 @@ void *c64u_create(obs_data_t *settings, obs_source_t *source)
     context->logo_load_attempted = false;
 
     // Initialize recording for this source
-    c64u_record_init(context);
+    c64_record_init(context);
 
     // Start initial connection asynchronously to avoid blocking OBS startup
-    C64U_LOG_INFO("C64U source created successfully - queuing async initial connection");
+    C64_LOG_INFO("C64S source created successfully - queuing async initial connection");
     context->retry_in_progress = true; // Prevent render thread from also starting retry
-    obs_queue_task(OBS_TASK_UI, c64u_async_retry_task, context, false);
+    obs_queue_task(OBS_TASK_UI, c64_async_retry_task, context, false);
 
     return context;
 }
 
-void c64u_destroy(void *data)
+void c64_destroy(void *data)
 {
-    struct c64u_source *context = data;
+    struct c64_source *context = data;
     if (!context)
         return;
 
-    C64U_LOG_INFO("Destroying C64U source");
+    C64_LOG_INFO("Destroying C64S source");
 
     // No retry thread to shutdown - using async delegation approach
 
     // Stop streaming if active
     if (context->streaming) {
-        C64U_LOG_DEBUG("Stopping active streaming during destruction");
+        C64_LOG_DEBUG("Stopping active streaming during destruction");
         context->streaming = false;
         context->thread_active = false;
 
@@ -342,7 +342,7 @@ void c64u_destroy(void *data)
         }
     }
 
-    c64u_record_cleanup(context);
+    c64_record_cleanup(context);
 
     if (context->logo_texture) {
         gs_texture_destroy(context->logo_texture);
@@ -367,58 +367,58 @@ void c64u_destroy(void *data)
     }
 
     bfree(context);
-    C64U_LOG_INFO("C64U source destroyed");
+    C64_LOG_INFO("C64S source destroyed");
 }
 
-void c64u_update(void *data, obs_data_t *settings)
+void c64_update(void *data, obs_data_t *settings)
 {
-    struct c64u_source *context = data;
+    struct c64_source *context = data;
     if (!context)
         return;
 
     // Update debug logging setting
-    c64u_debug_logging = obs_data_get_bool(settings, "debug_logging");
-    C64U_LOG_DEBUG("Debug logging %s", c64u_debug_logging ? "enabled" : "disabled"); // Update IP detection setting
+    c64_debug_logging = obs_data_get_bool(settings, "debug_logging");
+    C64_LOG_DEBUG("Debug logging %s", c64_debug_logging ? "enabled" : "disabled"); // Update IP detection setting
     bool new_auto_detect = obs_data_get_bool(settings, "auto_detect_ip");
     if (new_auto_detect != context->auto_detect_ip || new_auto_detect) {
         context->auto_detect_ip = new_auto_detect;
         if (new_auto_detect) {
             // Re-detect IP address
-            if (c64u_detect_local_ip(context->obs_ip_address, sizeof(context->obs_ip_address))) {
-                C64U_LOG_INFO("Updated OBS IP address: %s", context->obs_ip_address);
+            if (c64_detect_local_ip(context->obs_ip_address, sizeof(context->obs_ip_address))) {
+                C64_LOG_INFO("Updated OBS IP address: %s", context->obs_ip_address);
                 // Save the updated IP to settings
                 obs_data_set_string(settings, "obs_ip_address", context->obs_ip_address);
             } else {
-                C64U_LOG_WARNING("Failed to update OBS IP address");
+                C64_LOG_WARNING("Failed to update OBS IP address");
             }
         }
     }
 
     // Update configuration
-    const char *new_host = obs_data_get_string(settings, "c64u_host");
+    const char *new_host = obs_data_get_string(settings, "c64_host");
     const char *new_obs_ip = obs_data_get_string(settings, "obs_ip_address");
     uint32_t new_video_port = (uint32_t)obs_data_get_int(settings, "video_port");
     uint32_t new_audio_port = (uint32_t)obs_data_get_int(settings, "audio_port");
 
     // Set defaults
     if (!new_host)
-        new_host = C64U_DEFAULT_HOST;
+        new_host = C64_DEFAULT_HOST;
     if (new_video_port == 0)
-        new_video_port = C64U_DEFAULT_VIDEO_PORT;
+        new_video_port = C64_DEFAULT_VIDEO_PORT;
     if (new_audio_port == 0)
-        new_audio_port = C64U_DEFAULT_AUDIO_PORT;
+        new_audio_port = C64_DEFAULT_AUDIO_PORT;
 
     // Check if ports have changed (requires socket recreation)
     bool ports_changed = (new_video_port != context->video_port) || (new_audio_port != context->audio_port);
 
     if (ports_changed && context->streaming) {
-        C64U_LOG_INFO("Port configuration changed (video: %u->%u, audio: %u->%u), recreating sockets",
-                      context->video_port, new_video_port, context->audio_port, new_audio_port);
+        C64_LOG_INFO("Port configuration changed (video: %u->%u, audio: %u->%u), recreating sockets",
+                     context->video_port, new_video_port, context->audio_port, new_audio_port);
 
         // Stop streaming and close existing sockets
-        c64u_stop_streaming(context);
+        c64_stop_streaming(context);
 
-        // Give the C64U device time to process stop commands
+        // Give the C64 Ultimate device time to process stop commands
         os_sleep_ms(100);
     }
 
@@ -430,14 +430,14 @@ void c64u_update(void *data, obs_data_t *settings)
     const char *dns_server_ip = obs_data_get_string(settings, "dns_server_ip");
 
     // Resolve hostname to IP address for connections
-    if (!c64u_resolve_hostname_with_dns(new_host, dns_server_ip, context->ip_address, sizeof(context->ip_address))) {
+    if (!c64_resolve_hostname_with_dns(new_host, dns_server_ip, context->ip_address, sizeof(context->ip_address))) {
         // If hostname resolution fails, store the hostname as-is (might be invalid IP like 0.0.0.0)
         strncpy(context->ip_address, new_host, sizeof(context->ip_address) - 1);
         context->ip_address[sizeof(context->ip_address) - 1] = '\0';
-        C64U_LOG_WARNING("Could not resolve hostname '%s' during update, using as-is: %s", new_host,
-                         context->ip_address);
+        C64_LOG_WARNING("Could not resolve hostname '%s' during update, using as-is: %s", new_host,
+                        context->ip_address);
     } else {
-        C64U_LOG_DEBUG("Resolved C64U host '%s' to IP: %s", new_host, context->ip_address);
+        C64_LOG_DEBUG("Resolved C64 Ultimate host '%s' to IP: %s", new_host, context->ip_address);
     }
     if (new_obs_ip) {
         strncpy(context->obs_ip_address, new_obs_ip, sizeof(context->obs_ip_address) - 1);
@@ -449,7 +449,7 @@ void c64u_update(void *data, obs_data_t *settings)
     // Update rendering delay setting
     uint32_t new_delay_frames = (uint32_t)obs_data_get_int(settings, "render_delay_frames");
     if (new_delay_frames != context->render_delay_frames) {
-        C64U_LOG_INFO("Rendering delay changed from %u to %u frames", context->render_delay_frames, new_delay_frames);
+        C64_LOG_INFO("Rendering delay changed from %u to %u frames", context->render_delay_frames, new_delay_frames);
 
         if (pthread_mutex_lock(&context->delay_mutex) == 0) {
             context->render_delay_frames = new_delay_frames;
@@ -474,39 +474,39 @@ void c64u_update(void *data, obs_data_t *settings)
     }
 
     // Update recording settings
-    c64u_record_update_settings(context, settings);
+    c64_record_update_settings(context, settings);
 
     // Start streaming with current configuration (will create new sockets if needed)
-    C64U_LOG_INFO("Applying configuration and starting streaming");
-    c64u_start_streaming(context);
+    C64_LOG_INFO("Applying configuration and starting streaming");
+    c64_start_streaming(context);
 }
 
-void c64u_start_streaming(struct c64u_source *context)
+void c64_start_streaming(struct c64_source *context)
 {
     if (!context) {
-        C64U_LOG_WARNING("Cannot start streaming - invalid context");
+        C64_LOG_WARNING("Cannot start streaming - invalid context");
         return;
     }
 
-    C64U_LOG_INFO("Starting C64U streaming to C64 %s (OBS IP: %s, video:%u, audio:%u)...", context->ip_address,
-                  context->obs_ip_address, context->video_port, context->audio_port);
+    C64_LOG_INFO("Starting C64S streaming to C64 %s (OBS IP: %s, video:%u, audio:%u)...", context->ip_address,
+                 context->obs_ip_address, context->video_port, context->audio_port);
 
     // Always close existing sockets before creating new ones (handles reconnection case)
     close_and_reset_sockets(context);
 
-    // Create fresh UDP sockets (critical for reconnection after C64U restart)
-    context->video_socket = c64u_create_udp_socket(context->video_port);
-    context->audio_socket = c64u_create_udp_socket(context->audio_port);
+    // Create fresh UDP sockets (critical for reconnection after C64S restart)
+    context->video_socket = c64_create_udp_socket(context->video_port);
+    context->audio_socket = c64_create_udp_socket(context->audio_port);
 
     if (context->video_socket == INVALID_SOCKET_VALUE || context->audio_socket == INVALID_SOCKET_VALUE) {
-        C64U_LOG_ERROR("Failed to create UDP sockets for streaming");
+        C64_LOG_ERROR("Failed to create UDP sockets for streaming");
         close_and_reset_sockets(context);
         return;
     }
 
     // Send start commands to C64U
-    c64u_send_control_command(context, true, 0); // Start video
-    c64u_send_control_command(context, true, 1); // Start audio
+    c64_send_control_command(context, true, 0); // Start video
+    c64_send_control_command(context, true, 1); // Start audio
 
     // Stop existing threads before creating new ones (handles reconnection case)
     if (context->streaming) {
@@ -515,10 +515,10 @@ void c64u_start_streaming(struct c64u_source *context)
 
         // Wait for existing threads to finish
         if (context->video_thread_active && pthread_join(context->video_thread, NULL) != 0) {
-            C64U_LOG_WARNING("Failed to join existing video thread during reconnection");
+            C64_LOG_WARNING("Failed to join existing video thread during reconnection");
         }
         if (context->audio_thread_active && pthread_join(context->audio_thread, NULL) != 0) {
-            C64U_LOG_WARNING("Failed to join existing audio thread during reconnection");
+            C64_LOG_WARNING("Failed to join existing audio thread during reconnection");
         }
         context->video_thread_active = false;
         context->audio_thread_active = false;
@@ -528,8 +528,8 @@ void c64u_start_streaming(struct c64u_source *context)
     context->thread_active = true;
     context->streaming = true;
 
-    if (pthread_create(&context->video_thread, NULL, c64u_video_thread_func, context) != 0) {
-        C64U_LOG_ERROR("Failed to create video receiver thread");
+    if (pthread_create(&context->video_thread, NULL, c64_video_thread_func, context) != 0) {
+        C64_LOG_ERROR("Failed to create video receiver thread");
         context->streaming = false;
         context->thread_active = false;
         close_and_reset_sockets(context);
@@ -538,7 +538,7 @@ void c64u_start_streaming(struct c64u_source *context)
     context->video_thread_active = true;
 
     if (pthread_create(&context->audio_thread, NULL, audio_thread_func, context) != 0) {
-        C64U_LOG_ERROR("Failed to create audio receiver thread");
+        C64_LOG_ERROR("Failed to create audio receiver thread");
         context->streaming = false;
         context->thread_active = false;
         if (context->video_thread_active) {
@@ -551,19 +551,19 @@ void c64u_start_streaming(struct c64u_source *context)
     context->audio_thread_active = true;
 
     // Initialize delay queue for rendering delay
-    c64u_init_delay_queue(context);
+    c64_init_delay_queue(context);
 
-    C64U_LOG_INFO("C64U streaming started successfully");
+    C64_LOG_INFO("C64S streaming started successfully");
 }
 
-void c64u_stop_streaming(struct c64u_source *context)
+void c64_stop_streaming(struct c64_source *context)
 {
     if (!context || !context->streaming) {
-        C64U_LOG_WARNING("Cannot stop streaming - invalid context or not streaming");
+        C64_LOG_WARNING("Cannot stop streaming - invalid context or not streaming");
         return;
     }
 
-    C64U_LOG_INFO("Stopping C64U streaming...");
+    C64_LOG_INFO("Stopping C64S streaming...");
 
     context->streaming = false;
     context->thread_active = false;
@@ -575,12 +575,12 @@ void c64u_stop_streaming(struct c64u_source *context)
 
     // Wait for threads to finish
     if (context->video_thread_active && pthread_join(context->video_thread, NULL) != 0) {
-        C64U_LOG_WARNING("Failed to join video thread");
+        C64_LOG_WARNING("Failed to join video thread");
     }
     context->video_thread_active = false;
 
     if (context->audio_thread_active && pthread_join(context->audio_thread, NULL) != 0) {
-        C64U_LOG_WARNING("Failed to join audio thread");
+        C64_LOG_WARNING("Failed to join audio thread");
     }
     context->audio_thread_active = false;
 
@@ -613,18 +613,18 @@ void c64u_stop_streaming(struct c64u_source *context)
     }
 
     // Clear delay queue
-    c64u_clear_delay_queue(context);
+    c64_clear_delay_queue(context);
 
-    C64U_LOG_INFO("C64U streaming stopped");
+    C64_LOG_INFO("C64S streaming stopped");
 }
 
-void c64u_render(void *data, gs_effect_t *effect)
+void c64_render(void *data, gs_effect_t *effect)
 {
-    struct c64u_source *context = data;
+    struct c64_source *context = data;
     UNUSED_PARAMETER(effect);
 
     if (!context) {
-        C64U_LOG_ERROR("Render called with NULL context!");
+        C64_LOG_ERROR("Render called with NULL context!");
         return;
     }
 
@@ -646,7 +646,7 @@ void c64u_render(void *data, gs_effect_t *effect)
     if (context->last_frame_time > 0) {
         // We have received frames before - check for timeout regardless of frame_ready state
         uint64_t frame_age = now - context->last_frame_time;
-        frames_timed_out = (frame_age > C64U_FRAME_TIMEOUT_NS);
+        frames_timed_out = (frame_age > C64_FRAME_TIMEOUT_NS);
     } else {
         // No frames received yet - need initial connection (regardless of streaming flag)
         // This handles both: OBS started first, and failed connection attempts
@@ -669,8 +669,8 @@ void c64u_render(void *data, gs_effect_t *effect)
             context->retry_in_progress = true;
 
             // Just delegate to async task - keep render thread fast
-            C64U_LOG_INFO("� Connection needed - delegating to async task");
-            obs_queue_task(OBS_TASK_UI, c64u_async_retry_task, context, false);
+            C64_LOG_INFO("� Connection needed - delegating to async task");
+            obs_queue_task(OBS_TASK_UI, c64_async_retry_task, context, false);
         }
     } else if (context->frame_ready && context->last_frame_time > 0) {
         // Frames are arriving normally - reset retry counters
@@ -683,12 +683,12 @@ void c64u_render(void *data, gs_effect_t *effect)
                             frames_timed_out;
 
     // Debug logging (only when debug logging is enabled)
-    if (c64u_debug_logging) {
+    if (c64_debug_logging) {
         static uint64_t last_frame_debug_log = 0;
-        if (last_frame_debug_log == 0 || (now - last_frame_debug_log) >= C64U_DEBUG_LOG_INTERVAL_NS) {
+        if (last_frame_debug_log == 0 || (now - last_frame_debug_log) >= C64_DEBUG_LOG_INTERVAL_NS) {
             uint64_t frame_age = (context->last_frame_time > 0) ? (now - context->last_frame_time) / 1000000000ULL
                                                                 : 999;
-            C64U_LOG_DEBUG(
+            C64_LOG_DEBUG(
                 "🎬 Frame state: should_show_logo=%d, streaming=%d, frame_ready=%d, frames_timed_out=%d, frame_age=%" PRIu64
                 "s",
                 should_show_logo, context->streaming, context->frame_ready, frames_timed_out, frame_age);
@@ -698,14 +698,14 @@ void c64u_render(void *data, gs_effect_t *effect)
 
     // Additional debug when logo should be showing
     static uint64_t last_debug_log = 0;
-    if (should_show_logo && (last_debug_log == 0 || (now - last_debug_log) >= C64U_DEBUG_LOG_INTERVAL_NS)) {
+    if (should_show_logo && (last_debug_log == 0 || (now - last_debug_log) >= C64_DEBUG_LOG_INTERVAL_NS)) {
         const char *reason = !context->streaming            ? "not_streaming"
                              : !context->frame_ready        ? "no_frames"
                              : !context->frame_buffer_front ? "no_buffer"
                              : frames_timed_out             ? "frame_timeout"
                                                             : "unknown";
-        C64U_LOG_DEBUG("🖼️ Showing logo (%s): streaming=%d, frame_ready=%d, frames_timed_out=%d, C64_IP='%s'", reason,
-                       context->streaming, context->frame_ready, frames_timed_out, context->ip_address);
+        C64_LOG_DEBUG("🖼️ Showing logo (%s): streaming=%d, frame_ready=%d, frames_timed_out=%d, C64_IP='%s'", reason,
+                      context->streaming, context->frame_ready, frames_timed_out, context->ip_address);
         last_debug_log = now;
     }
 
@@ -719,7 +719,7 @@ void c64u_render(void *data, gs_effect_t *effect)
     // For now, just detect timeout conditions without making network calls
 
     if (should_show_logo) {
-        // Show C64U logo centered on black background
+        // Show C64S logo centered on black background
         if (context->logo_texture) {
             // First draw black background
             gs_effect_t *solid = obs_get_base_effect(OBS_EFFECT_SOLID);
@@ -814,7 +814,7 @@ void c64u_render(void *data, gs_effect_t *effect)
             }
         }
     } else {
-        // Render actual C64U video frame from front buffer
+        // Render actual C64S video frame from front buffer
         if (pthread_mutex_lock(&context->frame_mutex) == 0) {
             // Create texture from front buffer data
             gs_texture_t *texture = gs_texture_create(context->width, context->height, GS_RGBA, 1,
@@ -847,30 +847,30 @@ void c64u_render(void *data, gs_effect_t *effect)
     }
 }
 
-uint32_t c64u_get_width(void *data)
+uint32_t c64_get_width(void *data)
 {
-    struct c64u_source *context = data;
+    struct c64_source *context = data;
     return context->width;
 }
 
-uint32_t c64u_get_height(void *data)
+uint32_t c64_get_height(void *data)
 {
-    struct c64u_source *context = data;
+    struct c64_source *context = data;
     return context->height;
 }
 
-const char *c64u_get_name(void *unused)
+const char *c64_get_name(void *unused)
 {
     UNUSED_PARAMETER(unused);
-    return obs_module_text("C64UDisplay");
+    return obs_module_text("C64SDisplay");
 }
 
-obs_properties_t *c64u_properties(void *data)
+obs_properties_t *c64_properties(void *data)
 {
-    return c64u_create_properties(data);
+    return c64_create_properties(data);
 }
 
-void c64u_defaults(obs_data_t *settings)
+void c64_defaults(obs_data_t *settings)
 {
-    c64u_set_property_defaults(settings);
+    c64_set_property_defaults(settings);
 }

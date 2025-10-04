@@ -1,9 +1,9 @@
 
-# C64 Ultimate OBS Plugin
+# C64 Stream
 
 Bridge your Commodore 64 Ultimate directly to [OBS Studio](https://obsproject.com/) for seamless streaming and recording over your network connection.
 
-<img src="./doc/img/c64u-obs.png" alt="C64U Logo" width="200"/>
+<img src="./doc/img/c64stream.png" alt="C64U Logo" width="200"/>
 
 This plugin implements a native OBS source that receives video and audio streams from C64 Ultimate devices (Commodore 64 Ultimate or Ultimate 64) via the Ultimate's built-in data streaming capability.
 
@@ -34,7 +34,7 @@ Grab the right package for your system from the [Releases page](../../releases):
 
 **Windows:**
 1. Close OBS Studio
-2. Extract `c64u-plugin-for-obs-*-windows-x64.zip` to `C:\ProgramData\obs-studio\plugins`
+2. Extract `c64stream-*-windows-x64.zip` to `C:\ProgramData\obs-studio\plugins`
 3. Restart OBS Studio
 
 If you are using Windows Firewall and block all incoming connections, you may have to setup an exclusion to allow for incoming UDP connections
@@ -43,12 +43,12 @@ to port 11000 (Video) and 11001 (Audio) from the C64 Ultimate.
 You can do this with the following Powershell script. Be sure to adjust the `RemoteAddress` to the IP of your C64 Ultimate:
 
 ```powershell
-New-NetFirewallRule -DisplayName "C64U" -Direction Inbound -Protocol UDP -LocalPort 11000,11001 -RemoteAddress 192.168.1.64 -Action Allow
+New-NetFirewallRule -DisplayName "C64 Stream" -Direction Inbound -Protocol UDP -LocalPort 11000,11001 -RemoteAddress 192.168.1.64 -Action Allow
 ```
 
 **macOS:**
 1. Close OBS Studio
-2. Install `c64u-plugin-for-obs-*-macos-universal.pkg` to `~/Library/Application Support/obs-studio/plugins`
+2. Install `c64stream-*-macos-universal.pkg` to `~/Library/Application Support/obs-studio/plugins`
 3. Restart OBS Studio
 
 > [!NOTE]
@@ -56,9 +56,9 @@ New-NetFirewallRule -DisplayName "C64U" -Direction Inbound -Protocol UDP -LocalP
 
 **Linux (Ubuntu/Debian):**
 1. Close OBS Studio
-2. Install `c64u-plugin-for-obs-*-x86_64-linux-gnu.deb` to `~/.config/obs-studio/plugins` by running:
+2. Install `c64stream-*-x86_64-linux-gnu.deb` to `~/.config/obs-studio/plugins` by running:
 ```bash
-sudo dpkg -i c64u-obs-plugin-linux.deb
+sudo dpkg -i c64stream-plugin-linux.deb
 ```
 
 **Further Details:**
@@ -71,8 +71,8 @@ See the [OBS Plugins Guide](https://obsproject.com/kb/plugins-guide).
 
 **Getting Your C64 on Stream:**
 
-1. **Add Source:** In OBS, create a new source and select "C64U" from the available types
-2. **Open Properties:** Select the "C64U" source in your sources list, then click the "Properties" button to open the configuration dialog
+1. **Add Source:** In OBS, create a new source and select "C64 Stream" from the available types
+2. **Open Properties:** Select the "C64 Stream" source in your sources list, then click the "Properties" button to open the configuration dialog
 3. **Debug Logging:** Enable detailed logging for debugging connection issues (optional)
 4. **Configure Network Settings:**
    - **DNS Server IP:** IP address of DNS server for resolving device hostnames (default: `192.168.1.1` for most home routers). Used when the C64U Host is a hostname rather than an IP address. 
@@ -86,8 +86,8 @@ See the [OBS Plugins Guide](https://obsproject.com/kb/plugins-guide).
    - **Record AVI + WAV:** Enable to record uncompressed video and audio files (high disk usage)
    - **Output Folder:** Choose where recording files are saved. Default locations by OS:
      - **Windows:** `%USERPROFILE%\Documents\obs-studio\c64u\recordings`
-     - **macOS:** `~/Documents/obs-studio/c64u/recordings`
-     - **Linux:** `~/Documents/obs-studio/c64u/recordings`
+     - **macOS:** `~/Documents/obs-studio/c64stream/recordings`
+     - **Linux:** `~/Documents/obs-studio/c64stream/recordings`
 8. **Apply Settings:** Click "OK" to save your configuration
 
 Once configured, live video and audio streams from the C64 Ultimate will be available in OBS Studio.
@@ -170,7 +170,7 @@ The plugin includes built-in recording capabilities that work independently of O
 
 All recording files are organized into session folders with timestamps:
 ```
-~/Documents/obs-studio/c64u/recordings/
+~/Documents/obs-studio/c64stream/recordings/
 ├── session_20240929_143052/
 │   ├── frames/           # BMP frame files (if enabled)
 │   ├── video.avi         # Uncompressed video (if enabled)
@@ -183,8 +183,8 @@ All recording files are organized into session folders with timestamps:
 
 - **Output Folder Defaults:**
   - **Windows:** `%USERPROFILE%\Documents\obs-studio\c64u\recordings`
-  - **macOS:** `~/Documents/obs-studio/c64u/recordings`
-  - **Linux:** `~/Documents/obs-studio/c64u/recordings`
+  - **macOS:** `~/Documents/obs-studio/c64stream/recordings`
+  - **Linux:** `~/Documents/obs-studio/c64stream/recordings`
 - **Automatic Session Management:** New session folder created each time recording is enabled
 - **Cross-Platform Compatibility:** Works on Windows, macOS, and Linux
 
