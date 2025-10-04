@@ -38,7 +38,7 @@
     },
     "name": "c64u-plugin-for-obs",
     "displayName": "Commodore 64 Ultimate Source Plugin for OBS",
-    "version": "0.5.984",
+    "version": "0.5.985",
     "author": "Christian Gleissner",
     "website": "https://c64.gleissner.uk",
     "email": "c64@gleissner.com"

@@ -60,12 +60,21 @@ add_library(${CMAKE_PROJECT_NAME} MODULE)
 # Always update for PR builds (development versions) and tagged releases
 if(AUTHORITATIVE_VERSION)
   # Update buildspec.json with the calculated version to keep it in sync
-  # Use sed to update only line 41 (the main project version, not dependency versions)
+  # Use a cross-platform approach with temporary file to avoid sed -i incompatibilities
   execute_process(
-    COMMAND sed -i "41s/\"version\": \"[^\"]*\"/\"version\": \"${AUTHORITATIVE_VERSION}\"/" "${CMAKE_SOURCE_DIR}/buildspec.json"
+    COMMAND sed "41s/\"version\": \"[^\"]*\"/\"version\": \"${AUTHORITATIVE_VERSION}\"/" "${CMAKE_SOURCE_DIR}/buildspec.json"
+    OUTPUT_FILE "${CMAKE_SOURCE_DIR}/buildspec.json.tmp"
     WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
     RESULT_VARIABLE sed_result
   )
+  
+  if(sed_result EQUAL 0)
+    execute_process(
+      COMMAND ${CMAKE_COMMAND} -E rename "${CMAKE_SOURCE_DIR}/buildspec.json.tmp" "${CMAKE_SOURCE_DIR}/buildspec.json"
+      RESULT_VARIABLE mv_result
+    )
+    set(sed_result ${mv_result})
+  endif()
 
   if(sed_result EQUAL 0)
     message(STATUS "Updated buildspec.json version to: ${AUTHORITATIVE_VERSION}")
