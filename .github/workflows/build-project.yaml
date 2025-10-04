@@ -71,6 +71,7 @@ jobs:
           
           # For PR builds, use development version to match CMake behavior
           if [[ "${GITHUB_EVENT_NAME}" == "pull_request" ]]; then
+            # Use simplified "dev" for artifact naming (CMake will use full semantic version)
             plugin_version="dev"
           else
             plugin_version="$(jq -r '.version' buildspec.json)"
