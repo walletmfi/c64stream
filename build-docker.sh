@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# C64U OBS Plugin - Docker Build Script
+# C64 Stream Plugin - Docker Build Script
 # Replicates GitHub Actions workflow for local development
 
 set -euo pipefail
@@ -8,7 +8,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$SCRIPT_DIR"
 
-# Default values 
+# Default values
 PLATFORM="ubuntu"
 INSTALL_PLUGIN=false
 START_OBS=false
@@ -32,7 +32,7 @@ log_success() {
 }
 
 log_warning() {
-    echo -e "${YELLOW}[WARNING]${NC} $1" 
+    echo -e "${YELLOW}[WARNING]${NC} $1"
 }
 
 log_error() {
@@ -45,7 +45,7 @@ Usage: $0 [PLATFORM] [OPTIONS]
 
 PLATFORMS:
     ubuntu      Build for Ubuntu/Linux (default)
-    macos       Build for macOS  
+    macos       Build for macOS
     windows     Build for Windows
 
 OPTIONS:
@@ -97,9 +97,9 @@ detect_obs_plugin_dir() {
         windows)
             # Note: This would need to be handled differently in a real Windows environment
             log_warning "Windows installation not supported in this Linux/Docker environment"
-            log_info "Copy build_x64/RelWithDebInfo/c64u-plugin-for-obs.dll to:"
+            log_info "Copy build_x64/RelWithDebInfo/c64stream.dll to:"
             log_info "  %ProgramFiles%\\obs-studio\\obs-plugins\\64bit\\"
-            log_info "  or %APPDATA%\\obs-studio\\plugins\\c64u-plugin-for-obs\\bin\\64bit\\"
+            log_info "  or %APPDATA%\\obs-studio\\plugins\\c64stream\\bin\\64bit\\"
             return 1
             ;;
     esac
@@ -118,7 +118,7 @@ setup_docker_image() {
             exit 1
             ;;
         windows)
-            log_error "Windows builds require Windows host system - Docker cross-compilation not supported" 
+            log_error "Windows builds require Windows host system - Docker cross-compilation not supported"
             log_info "Use native Windows build instead:"
             log_info "  cmake --preset windows-x64 && cmake --build build_x64 --config $BUILD_CONFIG"
             exit 1
@@ -127,7 +127,7 @@ setup_docker_image() {
 }
 
 build_ubuntu_docker() {
-    log_info "Building C64U plugin for Ubuntu using Docker..."
+    log_info "Building C64 Stream plugin for Ubuntu using Docker..."
     log_info "Using image: $DOCKER_IMAGE"
     log_info "Build config: $BUILD_CONFIG"
 
@@ -189,7 +189,7 @@ EOF
     rm -f "$PROJECT_ROOT/docker-build.sh"
 
     log_success "Ubuntu build completed!"
-    log_info "Plugin built: build_x86_64/c64u-plugin-for-obs.so"
+    log_info "Plugin built: build_x86_64/c64stream.so"
 }
 
 install_plugin() {
@@ -207,16 +207,16 @@ install_plugin() {
     log_info "Installing plugin to: $OBS_PLUGIN_DIR"
 
     # Create plugin directory structure
-    PLUGIN_INSTALL_DIR="$OBS_PLUGIN_DIR/c64u-plugin-for-obs"
+    PLUGIN_INSTALL_DIR="$OBS_PLUGIN_DIR/c64stream"
     mkdir -p "$PLUGIN_INSTALL_DIR/bin/64bit"
 
     # Copy the built plugin
-    if [[ -f "$PROJECT_ROOT/build_x86_64/c64u-plugin-for-obs.so" ]]; then
-        cp "$PROJECT_ROOT/build_x86_64/c64u-plugin-for-obs.so" \
+    if [[ -f "$PROJECT_ROOT/build_x86_64/c64stream.so" ]]; then
+        cp "$PROJECT_ROOT/build_x86_64/c64stream.so" \
            "$PLUGIN_INSTALL_DIR/bin/64bit/"
         log_success "Plugin installed successfully!"
     else
-        log_error "Built plugin not found: build_x86_64/c64u-plugin-for-obs.so"
+        log_error "Built plugin not found: build_x86_64/c64stream.so"
         log_info "Run build first: $0 $PLATFORM"
         return 1
     fi
@@ -230,14 +230,14 @@ start_obs() {
     fi
 
     log_info "Starting OBS Studio..."
-    log_info "Look for 'C64U Display' in the source list"
-    
+    log_info "Look for 'C64 Stream' in the source list"
+
     # Start OBS in background and detach
     nohup obs > /dev/null 2>&1 &
     OBS_PID=$!
-    
+
     log_success "OBS Studio started (PID: $OBS_PID)"
-    log_info "Plugin should be available as 'C64U Display' source"
+    log_info "Plugin should be available as 'C64 Stream' source"
 }
 
 # Parse command line arguments
@@ -287,7 +287,7 @@ case "$BUILD_CONFIG" in
         ;;
 esac
 
-log_info "C64U OBS Plugin - Docker Build Script"
+log_info "C64 Stream Plugin - Docker Build Script"
 log_info "Platform: $PLATFORM"
 log_info "Build Config: $BUILD_CONFIG"
 log_info "Install Plugin: $INSTALL_PLUGIN"

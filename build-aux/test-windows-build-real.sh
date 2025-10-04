@@ -8,7 +8,7 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-echo "🪟 C64U OBS Plugin - Windows Build Verification"
+echo "🪟 C64 Stream Plugin - Windows Build Verification"
 echo "=============================================="
 echo "Testing Windows compilation with real OBS Studio headers"
 echo ""
@@ -104,7 +104,7 @@ for include_dir in "${OBS_INCLUDE_DIRS[@]}"; do
     WINDOWS_CFLAGS+=("-I$include_dir")
 done
 
-# Windows libraries (matching c64u-network.h pragmas)
+# Windows libraries (matching c64-network.h pragmas)
 WINDOWS_LIBS="-lws2_32 -lwinmm -lkernel32 -luser32"
 
 echo "  ✅ Configured Windows compilation flags"
@@ -120,8 +120,8 @@ cat > test_windows_core.c << 'EOF'
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
 
-#include "../src/c64u-network.h"  // Must come before atomic due to winsock
-#include "../src/c64u-atomic.h"
+#include "../src/c64-network.h"  // Must come before atomic due to winsock
+#include "../src/c64-atomic.h"
 #include <stdio.h>
 
 // Test compilation only - don't actually call socket functions
@@ -154,13 +154,13 @@ echo "  → Testing plugin source files with OBS headers..."
 
 # Test each source file individually
 SOURCE_FILES=(
-    "c64u-color.c"
-    "c64u-network.c"
-    "c64u-protocol.c"
-    "c64u-video.c"
-    "c64u-audio.c"
-    "c64u-record.c"
-    "c64u-source.c"
+    "c64-color.c"
+    "c64-network.c"
+    "c64-protocol.c"
+    "c64-video.c"
+    "c64-audio.c"
+    "c64-record.c"
+    "c64-source.c"
     "plugin-main.c"
 )
 
@@ -181,12 +181,12 @@ echo "  → Testing full plugin linking..."
 OBJECT_FILES=($(ls *.o 2>/dev/null || true))
 
 if [ ${#OBJECT_FILES[@]} -gt 0 ]; then
-    if x86_64-w64-mingw32-gcc "${WINDOWS_CFLAGS[@]}" $WINDOWS_LIBS -shared -o c64u-plugin-for-obs.dll "${OBJECT_FILES[@]}"; then
-        echo "    ✅ Plugin linking successful - generated c64u-plugin-for-obs.dll"
+    if x86_64-w64-mingw32-gcc "${WINDOWS_CFLAGS[@]}" $WINDOWS_LIBS -shared -o c64stream.dll "${OBJECT_FILES[@]}"; then
+        echo "    ✅ Plugin linking successful - generated c64stream.dll"
 
         # Verify the DLL
-        if [ -f "c64u-plugin-for-obs.dll" ]; then
-            dll_size=$(stat -c%s "c64u-plugin-for-obs.dll")
+        if [ -f "c64stream.dll" ]; then
+            dll_size=$(stat -c%s "c64stream.dll")
             echo "    ✅ Plugin DLL size: $dll_size bytes"
         fi
     else

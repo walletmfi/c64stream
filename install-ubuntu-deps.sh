@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Ubuntu Dependency Installation Script for C64U OBS Plugin
+# Ubuntu Dependency Installation Script for C64 Stream
 # This script handles the SIMDe dependency issue and installs required packages
 
 set -euo pipefail
@@ -166,7 +166,7 @@ verify_installation() {
 }
 
 main() {
-    log_info "C64U OBS Plugin - Ubuntu Dependencies Installation"
+    log_info "C64 Stream - Ubuntu Dependencies Installation"
     
     # Check if we're on Ubuntu/Debian
     if ! command -v apt-get >/dev/null 2>&1; then

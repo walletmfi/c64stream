@@ -5,9 +5,9 @@
 
 set -e
 
-PLUGIN_DIR="$HOME/.config/obs-studio/plugins/c64u-plugin-for-obs"
-PUBLISHED_DIR="$HOME/.config/obs-studio/plugins/c64u-plugin-for-obs-published"
-BACKUP_DIR="$HOME/.config/obs-studio/plugins/c64u-plugin-for-obs-backup"
+PLUGIN_DIR="$HOME/.config/obs-studio/plugins/c64stream"
+PUBLISHED_DIR="$HOME/.config/obs-studio/plugins/c64stream-published"
+BACKUP_DIR="$HOME/.config/obs-studio/plugins/c64stream-backup"
 
 # Colors for output
 RED='\033[0;31m'
@@ -30,9 +30,9 @@ usage() {
 }
 
 get_plugin_version() {
-    if [ -f "$PLUGIN_DIR/bin/64bit/c64u-plugin-for-obs.so" ]; then
+    if [ -f "$PLUGIN_DIR/bin/64bit/c64stream.so" ]; then
         # Try to extract version info from the binary (this is a simple approach)
-        local version_info=$(strings "$PLUGIN_DIR/bin/64bit/c64u-plugin-for-obs.so" | grep -E "version|Version" | head -1 || echo "unknown")
+        local version_info=$(strings "$PLUGIN_DIR/bin/64bit/c64stream.so" | grep -E "version|Version" | head -1 || echo "unknown")
         echo "$version_info"
     else
         echo "none"
@@ -43,19 +43,19 @@ show_status() {
     echo "🔍 ${BLUE}Plugin Status:${NC}"
     echo ""
     
-    if [ -f "$PLUGIN_DIR/bin/64bit/c64u-plugin-for-obs.so" ]; then
-        local build_time=$(stat -c %Y "$PLUGIN_DIR/bin/64bit/c64u-plugin-for-obs.so")
+    if [ -f "$PLUGIN_DIR/bin/64bit/c64stream.so" ]; then
+        local build_time=$(stat -c %Y "$PLUGIN_DIR/bin/64bit/c64stream.so")
         local formatted_time=$(date -d @$build_time '+%Y-%m-%d %H:%M:%S')
-        echo "  ${GREEN}✓${NC} Active plugin: $PLUGIN_DIR/bin/64bit/c64u-plugin-for-obs.so"
+        echo "  ${GREEN}✓${NC} Active plugin: $PLUGIN_DIR/bin/64bit/c64stream.so"
         echo "  📅 Last modified: $formatted_time"
         
         # Check if it matches development or published version
-        local dev_file="../c64u-obs-private/build_x86_64/c64u-plugin-for-obs.so"
-        local pub_file="$PUBLISHED_DIR/bin/64bit/c64u-plugin-for-obs.so"
+        local dev_file="../c64stream-private/build_x86_64/c64stream.so"
+        local pub_file="$PUBLISHED_DIR/bin/64bit/c64stream.so"
         
-        if [ -f "$dev_file" ] && cmp -s "$PLUGIN_DIR/bin/64bit/c64u-plugin-for-obs.so" "$dev_file"; then
+        if [ -f "$dev_file" ] && cmp -s "$PLUGIN_DIR/bin/64bit/c64stream.so" "$dev_file"; then
             echo "  🔧 ${YELLOW}Type: Development version${NC} (matches build_x86_64/)"
-        elif [ -f "$pub_file" ] && cmp -s "$PLUGIN_DIR/bin/64bit/c64u-plugin-for-obs.so" "$pub_file"; then
+        elif [ -f "$pub_file" ] && cmp -s "$PLUGIN_DIR/bin/64bit/c64stream.so" "$pub_file"; then
             echo "  📦 ${BLUE}Type: Published version${NC} (GitHub release)"
         else
             echo "  ❓ ${YELLOW}Type: Unknown version${NC}"
@@ -66,18 +66,18 @@ show_status() {
     
     echo ""
     echo "📂 Available versions:"
-    if [ -f "../c64u-obs-private/build_x86_64/c64u-plugin-for-obs.so" ]; then
-        local dev_time=$(stat -c %Y "../c64u-obs-private/build_x86_64/c64u-plugin-for-obs.so")
+    if [ -f "../c64stream-private/build_x86_64/c64stream.so" ]; then
+        local dev_time=$(stat -c %Y "../c64stream-private/build_x86_64/c64stream.so")
         local dev_formatted=$(date -d @$dev_time '+%Y-%m-%d %H:%M:%S')
-        echo "  🔧 Development: ../c64u-obs-private/build_x86_64/c64u-plugin-for-obs.so ($dev_formatted)"
+        echo "  🔧 Development: ../c64stream-private/build_x86_64/c64stream.so ($dev_formatted)"
     else
         echo "  🔧 Development: ${RED}Not built${NC} (run F5 or cmake --build build_x86_64)"
     fi
     
-    if [ -f "$PUBLISHED_DIR/bin/64bit/c64u-plugin-for-obs.so" ]; then
-        local pub_time=$(stat -c %Y "$PUBLISHED_DIR/bin/64bit/c64u-plugin-for-obs.so")
+    if [ -f "$PUBLISHED_DIR/bin/64bit/c64stream.so" ]; then
+        local pub_time=$(stat -c %Y "$PUBLISHED_DIR/bin/64bit/c64stream.so")
         local pub_formatted=$(date -d @$pub_time '+%Y-%m-%d %H:%M:%S')
-        echo "  📦 Published: $PUBLISHED_DIR/bin/64bit/c64u-plugin-for-obs.so ($pub_formatted)"
+        echo "  📦 Published: $PUBLISHED_DIR/bin/64bit/c64stream.so ($pub_formatted)"
     else
         echo "  📦 Published: ${RED}Not downloaded${NC}"
     fi
@@ -87,7 +87,7 @@ switch_to_dev() {
     echo "🔧 ${YELLOW}Switching to development version...${NC}"
     
     # Check if development version exists
-    if [ ! -f "../c64u-obs-private/build_x86_64/c64u-plugin-for-obs.so" ]; then
+    if [ ! -f "../c64stream-private/build_x86_64/c64stream.so" ]; then
         echo "  ${RED}❌ Development version not found!${NC}"
         echo "  Build it first with: cmake --build build_x86_64"
         echo "  Or press F5 in VS Code"
@@ -98,7 +98,7 @@ switch_to_dev() {
     mkdir -p "$PLUGIN_DIR/bin/64bit"
     
     # Copy development version
-    cp "../c64u-obs-private/build_x86_64/c64u-plugin-for-obs.so" "$PLUGIN_DIR/bin/64bit/"
+    cp "../c64stream-private/build_x86_64/c64stream.so" "$PLUGIN_DIR/bin/64bit/"
     
     echo "  ${GREEN}✓${NC} Switched to development version"
     echo "  ${BLUE}ℹ${NC}  Your F5 debug workflow will now update this version"
@@ -108,9 +108,9 @@ switch_to_published() {
     echo "📦 ${YELLOW}Switching to published version...${NC}"
     
     # Check if published version exists
-    if [ ! -f "$PUBLISHED_DIR/bin/64bit/c64u-plugin-for-obs.so" ]; then
+    if [ ! -f "$PUBLISHED_DIR/bin/64bit/c64stream.so" ]; then
         echo "  ${RED}❌ Published version not found!${NC}"
-        echo "  Download it first from: https://github.com/chrisgleissner/c64u-obs/releases"
+        echo "  Download it first from: https://github.com/chrisgleissner/c64stream/releases"
         exit 1
     fi
     
@@ -119,7 +119,7 @@ switch_to_published() {
     mkdir -p "$PLUGIN_DIR/data/locale"
     
     # Copy published version
-    cp "$PUBLISHED_DIR/bin/64bit/c64u-plugin-for-obs.so" "$PLUGIN_DIR/bin/64bit/"
+    cp "$PUBLISHED_DIR/bin/64bit/c64stream.so" "$PLUGIN_DIR/bin/64bit/"
     
     # Copy locale if it exists
     if [ -f "$PUBLISHED_DIR/data/locale/en-US.ini" ]; then

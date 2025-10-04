@@ -2,25 +2,25 @@
 #include <string.h>
 #include <time.h>
 #include <errno.h>
-#include "c64u-network.h" // Include network header first to avoid Windows header conflicts
+#include "c64-network.h" // Include network header first to avoid Windows header conflicts
 
 #include <util/platform.h>
-#include "c64u-logging.h"
-#include "c64u-protocol.h"
-#include "c64u-source.h"
-#include "c64u-types.h"
-#include "c64u-video.h"
+#include "c64-logging.h"
+#include "c64-protocol.h"
+#include "c64-source.h"
+#include "c64-types.h"
+#include "c64-video.h"
 
-void c64u_send_control_command(struct c64u_source *context, bool enable, uint8_t stream_id)
+void c64_send_control_command(struct c64_source *context, bool enable, uint8_t stream_id)
 {
     if (strcmp(context->ip_address, "0.0.0.0") == 0) {
-        C64U_LOG_DEBUG("Skipping control command - no IP configured (0.0.0.0)");
+        C64_LOG_DEBUG("Skipping control command - no IP configured (0.0.0.0)");
         return;
     }
 
-    socket_t sock = c64u_create_tcp_socket(context->ip_address, C64U_CONTROL_PORT);
+    socket_t sock = c64_create_tcp_socket(context->ip_address, C64_CONTROL_PORT);
     if (sock == INVALID_SOCKET_VALUE) {
-        return; // Error already logged in c64u_create_tcp_socket
+        return; // Error already logged in c64_create_tcp_socket
     }
 
     if (enable) {
@@ -29,7 +29,7 @@ void c64u_send_control_command(struct c64u_source *context, bool enable, uint8_t
 
         // Ensure we have a valid OBS IP address
         if (!client_ip || strlen(client_ip) == 0) {
-            C64U_LOG_WARNING("No OBS IP address configured, cannot send stream start command");
+            C64_LOG_WARNING("No OBS IP address configured, cannot send stream start command");
             close(sock);
             return;
         }
@@ -53,15 +53,15 @@ void c64u_send_control_command(struct c64u_source *context, bool enable, uint8_t
         memcpy(&cmd[6], ip_port_str, ip_port_len);
 
         int cmd_len = 6 + (int)ip_port_len;
-        C64U_LOG_INFO("Sending start command for stream %u to %s with client destination: %s", stream_id,
-                      context->ip_address, ip_port_str);
+        C64_LOG_INFO("Sending start command for stream %u to %s with client destination: %s", stream_id,
+                     context->ip_address, ip_port_str);
 
         ssize_t sent = send(sock, (const char *)cmd, cmd_len, 0);
         if (sent != (ssize_t)cmd_len) {
-            int error = c64u_get_socket_error();
-            C64U_LOG_ERROR("Failed to send start control command: %s", c64u_get_socket_error_string(error));
+            int error = c64_get_socket_error();
+            C64_LOG_ERROR("Failed to send start control command: %s", c64_get_socket_error_string(error));
         } else {
-            C64U_LOG_DEBUG("Start control command sent successfully");
+            C64_LOG_DEBUG("Start control command sent successfully");
         }
     } else {
         // Disable stream command: FF3n where n is stream ID
@@ -71,14 +71,14 @@ void c64u_send_control_command(struct c64u_source *context, bool enable, uint8_t
         cmd[2] = 0x00; // No parameters
         cmd[3] = 0x00;
         int cmd_len = 4;
-        C64U_LOG_INFO("Sending stop command for stream %u to C64 %s", stream_id, context->ip_address);
+        C64_LOG_INFO("Sending stop command for stream %u to C64 %s", stream_id, context->ip_address);
 
         ssize_t sent = send(sock, (const char *)cmd, cmd_len, 0);
         if (sent != (ssize_t)cmd_len) {
-            int error = c64u_get_socket_error();
-            C64U_LOG_ERROR("Failed to send stop control command: %s", c64u_get_socket_error_string(error));
+            int error = c64_get_socket_error();
+            C64_LOG_ERROR("Failed to send stop control command: %s", c64_get_socket_error_string(error));
         } else {
-            C64U_LOG_DEBUG("Stop control command sent successfully");
+            C64_LOG_DEBUG("Stop control command sent successfully");
         }
     }
 

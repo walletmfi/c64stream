@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# C64U OBS Plugin - Local GitHub Actions Runner using 'act'
+# C64 Stream - Local GitHub Actions Runner using 'act'
 # This script runs GitHub Actions workflows locally for testing
 
 set -euo pipefail
@@ -43,7 +43,7 @@ log_error() {
 
 usage() {
     cat << EOF
-C64U OBS Plugin - Local GitHub Actions Runner
+C64 Stream - Local GitHub Actions Runner
 
 Usage: $0 [options]
 
@@ -123,7 +123,7 @@ setup_act_configuration() {
     # Create .actrc if it doesn't exist
     if [[ ! -f .actrc ]]; then
         cat > .actrc << 'EOF'
-# Act configuration for C64U OBS Plugin
+# Act configuration for C64 Stream
 --container-architecture linux/amd64
 --artifact-server-path /tmp/act-artifacts
 --env CI=true
@@ -313,7 +313,7 @@ main() {
         fi
     fi
     
-    log_info "C64U OBS Plugin - Local GitHub Actions Runner"
+    log_info "C64 Stream - Local GitHub Actions Runner"
     log_info "Workflow: $WORKFLOW"
     log_info "Event: $EVENT_TYPE"
     [[ -n "$PLATFORM" ]] && log_info "Platform: $PLATFORM"

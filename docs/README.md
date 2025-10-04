@@ -1,10 +1,10 @@
-# C64 Ultimate OBS Plugin - GitHub Pages Site
+# C64 Stream - GitHub Pages Site
 
-This directory contains the GitHub Pages website for the C64 Ultimate OBS Plugin.
+This directory contains the GitHub Pages website for the C64 Stream.
 
 ## 🌐 Live Site
 
-Visit the live website at: [chrisgleissner.github.io/c64u-obs](https://chrisgleissner.github.io/c64u-obs)
+Visit the live website at: [chrisgleissner.github.io/c64stream](https://chrisgleissner.github.io/c64stream)
 
 ## 📁 Structure
 
@@ -36,7 +36,7 @@ jekyll serve
 bundle exec jekyll serve
 ```
 
-The site will be available at `http://localhost:4000/c64u-obs`
+The site will be available at `http://localhost:4000/c64stream`
 
 ## 📝 Content Updates
 

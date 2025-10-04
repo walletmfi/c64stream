@@ -8,7 +8,7 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-echo "🪟 C64U OBS Plugin - Final Windows Compatibility Test"
+echo "🪟 C64 Stream Plugin - Final Windows Compatibility Test"
 echo "===================================================="
 echo "Testing the specific Windows compatibility fixes we made"
 echo ""
@@ -39,7 +39,7 @@ WINDOWS_CFLAGS=(
     "-Wall"
     "-Wno-error"
     "-Wno-unknown-pragmas"  # MinGW doesn't support #pragma comment
-    "-D_WIN32" 
+    "-D_WIN32"
     "-DWIN32"
     "-D_WINDOWS"
     "-DUNICODE"
@@ -52,13 +52,13 @@ echo "✅ Windows compilation flags configured"
 
 # Test 1: Atomic compatibility layer
 echo ""
-echo "  → Test 1: c64u-atomic.h Windows compatibility..."
+echo "  → Test 1: c64-atomic.h Windows compatibility..."
 cat > test_atomic.c << 'EOF'
 // Test atomic compatibility on Windows
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
 
-#include "../src/c64u-atomic.h"
+#include "../src/c64-atomic.h"
 #include <stdio.h>
 
 int main() {
@@ -67,21 +67,21 @@ int main() {
     atomic_uint32_t counter32 = ATOMIC_VAR_INIT(0);
     atomic_uint16_t counter16 = ATOMIC_VAR_INIT(0);
     atomic_bool_t flag = ATOMIC_VAR_INIT(false);
-    
+
     // Test atomic operations
     atomic_store_u64(&counter64, 123456789ULL);
     atomic_store(&counter32, 12345);
     atomic_store_u16(&counter16, 123);
     atomic_store_bool(&flag, true);
-    
+
     uint64_t v64 = atomic_load_u64(&counter64);
     uint32_t v32 = atomic_load(&counter32);
     uint16_t v16 = atomic_load_u16(&counter16);
     bool vb = atomic_load_bool(&flag);
-    
+
     printf("Atomic test: u64=%llu, u32=%u, u16=%u, bool=%s\n",
            (unsigned long long)v64, v32, v16, vb ? "true" : "false");
-    
+
     return 0;
 }
 EOF
@@ -94,10 +94,10 @@ else
 fi
 
 # Test 2: Network header compatibility
-echo "  → Test 2: c64u-network.h Windows compatibility..."
+echo "  → Test 2: c64-network.h Windows compatibility..."
 cat > test_network.c << 'EOF'
 // Test network header compatibility on Windows
-#include "../src/c64u-network.h"
+#include "../src/c64-network.h"
 #include <stdio.h>
 
 int main() {
@@ -106,10 +106,10 @@ int main() {
     addr.sin_family = AF_INET;
     addr.sin_port = htons(1234);
     addr.sin_addr.s_addr = INADDR_ANY;
-    
-    printf("Network test: sockaddr_in size=%zu, AF_INET=%d\n", 
+
+    printf("Network test: sockaddr_in size=%zu, AF_INET=%d\n",
            sizeof(addr), AF_INET);
-    
+
     return 0;
 }
 EOF
@@ -129,8 +129,8 @@ cat > test_header_order.c << 'EOF'
 #define NOMINMAX
 
 // This order was causing sockaddr redefinition errors before our fix
-#include "../src/c64u-network.h"   // Includes winsock2.h
-#include "../src/c64u-atomic.h"    // Should not conflict now
+#include "../src/c64-network.h"   // Includes winsock2.h
+#include "../src/c64-atomic.h"    // Should not conflict now
 
 #include <stdio.h>
 
@@ -138,11 +138,11 @@ int main() {
     // Test that both headers work together
     struct sockaddr_in addr;
     addr.sin_family = AF_INET;
-    
+
     atomic_uint32_t counter = ATOMIC_VAR_INIT(0);
     atomic_store(&counter, 42);
     uint32_t value = atomic_load(&counter);
-    
+
     printf("Header order test: sockaddr works, atomic=%u\n", value);
     return 0;
 }
@@ -155,27 +155,27 @@ else
     exit 1
 fi
 
-# Test 4: c64u-types.h compatibility (with atomic types)
-echo "  → Test 4: c64u-types.h atomic type compatibility..."
+# Test 4: c64-types.h compatibility (with atomic types)
+echo "  → Test 4: c64-types.h atomic type compatibility..."
 cat > test_types.c << 'EOF'
 // Test our modified types without OBS dependency
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
 
 // Include headers in correct order
-#include "../src/c64u-network.h"
-#include "../src/c64u-atomic.h"
+#include "../src/c64-network.h"
+#include "../src/c64-atomic.h"
 #include <stdint.h>
 #include <stdbool.h>
 
-// Simulate the structures from c64u-types.h without OBS dependency
+// Simulate the structures from c64-types.h without OBS dependency
 struct test_frame_assembly {
     atomic_uint16_t fragments_received;
     atomic_uint32_t total_bytes;
     atomic_bool_t complete;
 };
 
-struct test_c64u_source {
+struct test_c64_source {
     atomic_uint64_t packets_received;
     atomic_uint32_t frames_assembled;
     atomic_uint16_t current_frame;
@@ -188,28 +188,28 @@ int main() {
         .total_bytes = ATOMIC_VAR_INIT(0),
         .complete = ATOMIC_VAR_INIT(false)
     };
-    
-    struct test_c64u_source source = {
+
+    struct test_c64_source source = {
         .packets_received = ATOMIC_VAR_INIT(0),
         .frames_assembled = ATOMIC_VAR_INIT(0),
         .current_frame = ATOMIC_VAR_INIT(0),
         .is_recording = ATOMIC_VAR_INIT(false)
     };
-    
+
     // Test atomic operations on structure members
     atomic_store_u16(&frame.fragments_received, 10);
     atomic_store(&frame.total_bytes, 1024);
     atomic_store_bool(&frame.complete, true);
-    
+
     atomic_store_u64(&source.packets_received, 12345ULL);
     atomic_store(&source.frames_assembled, 100);
     atomic_store_u16(&source.current_frame, 5);
     atomic_store_bool(&source.is_recording, true);
-    
+
     printf("Types test: frame fragments=%u, source packets=%llu\n",
            atomic_load_u16(&frame.fragments_received),
            (unsigned long long)atomic_load_u64(&source.packets_received));
-    
+
     return 0;
 }
 EOF
@@ -230,10 +230,10 @@ echo ""
 echo "🎉 SUCCESS: All Windows compatibility tests passed!"
 echo ""
 echo "📋 Critical Issues Fixed:"
-echo "  ✅ c64u-atomic.h: Windows Interlocked functions work correctly"
-echo "  ✅ c64u-network.h: No winsock2.h conflicts"
+echo "  ✅ c64-atomic.h: Windows Interlocked functions work correctly"
+echo "  ✅ c64-network.h: No winsock2.h conflicts"
 echo "  ✅ Header order: Network before atomic prevents redefinition errors"
-echo "  ✅ c64u-types.h: All _Atomic types replaced with compatibility types"
+echo "  ✅ c64-types.h: All _Atomic types replaced with compatibility types"
 echo "  ✅ Atomic operations: All atomic_* macros work on Windows"
 echo "  ✅ Compilation flags: C17 standard with Windows defines"
 echo ""

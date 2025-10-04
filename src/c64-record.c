@@ -7,9 +7,9 @@
 #include <stdlib.h>
 #include <time.h>
 #include <sys/stat.h>
-#include "c64u-logging.h"
-#include "c64u-record.h"
-#include "c64u-types.h"
+#include "c64-logging.h"
+#include "c64-record.h"
+#include "c64-types.h"
 
 #ifndef S_ISDIR
 #ifdef _WIN32
@@ -250,7 +250,7 @@ static void finalize_wav_header(FILE *file, uint32_t data_size)
 
 // Fast BMP file saving function (minimal CPU overhead)
 // Session management: Create session folder if none exists
-static void ensure_recording_session(struct c64u_source *context)
+static void ensure_recording_session(struct c64_source *context)
 {
     // If session already exists, do nothing
     if (context->session_folder[0] != '\0') {
@@ -267,31 +267,31 @@ static void ensure_recording_session(struct c64u_source *context)
              timeinfo->tm_min, timeinfo->tm_sec);
 
     // Create the session directory recursively (cross-platform)
-    C64U_LOG_INFO("Attempting to create session directory: %s", context->session_folder);
+    C64_LOG_INFO("Attempting to create session directory: %s", context->session_folder);
     if (!create_directory_recursive(context->session_folder)) {
-        C64U_LOG_WARNING("Failed to create session directory: %s", context->session_folder);
+        C64_LOG_WARNING("Failed to create session directory: %s", context->session_folder);
         context->session_folder[0] = '\0'; // Clear on failure
     } else {
-        C64U_LOG_INFO("Successfully created recording session: %s", context->session_folder);
+        C64_LOG_INFO("Successfully created recording session: %s", context->session_folder);
     }
 }
 
 // Check if any recording is active
-static bool any_recording_active(struct c64u_source *context)
+static bool any_recording_active(struct c64_source *context)
 {
     return context->save_frames || context->record_video;
 }
 
 // Clear session if no recording is active
-static void cleanup_session_if_needed(struct c64u_source *context)
+static void cleanup_session_if_needed(struct c64_source *context)
 {
     if (!any_recording_active(context)) {
         context->session_folder[0] = '\0';
-        C64U_LOG_INFO("Recording session ended");
+        C64_LOG_INFO("Recording session ended");
     }
 }
 
-void c64u_save_frame_as_bmp(struct c64u_source *context, uint32_t *frame_buffer)
+void c64_save_frame_as_bmp(struct c64_source *context, uint32_t *frame_buffer)
 {
     if (!context->save_frames || !frame_buffer) {
         return;
@@ -300,7 +300,7 @@ void c64u_save_frame_as_bmp(struct c64u_source *context, uint32_t *frame_buffer)
     // Ensure we have a recording session
     ensure_recording_session(context);
     if (context->session_folder[0] == '\0') {
-        C64U_LOG_WARNING("Failed to create recording session for frame saving");
+        C64_LOG_WARNING("Failed to create recording session for frame saving");
         return;
     }
 
@@ -309,7 +309,7 @@ void c64u_save_frame_as_bmp(struct c64u_source *context, uint32_t *frame_buffer)
     snprintf(frames_folder, sizeof(frames_folder), "%s/frames", context->session_folder);
 
     if (!create_directory_recursive(frames_folder)) {
-        C64U_LOG_WARNING("Failed to create frames subfolder: %s", frames_folder);
+        C64_LOG_WARNING("Failed to create frames subfolder: %s", frames_folder);
         return;
     }
 
@@ -321,7 +321,7 @@ void c64u_save_frame_as_bmp(struct c64u_source *context, uint32_t *frame_buffer)
 
     FILE *file = fopen(filename, "wb");
     if (!file) {
-        C64U_LOG_WARNING("Failed to create frame file: %s", filename);
+        C64_LOG_WARNING("Failed to create frame file: %s", filename);
         return;
     }
 
@@ -419,7 +419,7 @@ void c64u_save_frame_as_bmp(struct c64u_source *context, uint32_t *frame_buffer)
 }
 
 // Video recording functions (raw uncompressed format for minimal CPU overhead)
-void c64u_start_video_recording(struct c64u_source *context)
+void c64_start_video_recording(struct c64_source *context)
 {
     if (!context->record_video || context->video_file) {
         return; // Already recording or not enabled
@@ -432,7 +432,7 @@ void c64u_start_video_recording(struct c64u_source *context)
     // Ensure we have a recording session (creates if needed, joins if exists)
     ensure_recording_session(context);
     if (context->session_folder[0] == '\0') {
-        C64U_LOG_ERROR("Failed to create recording session for video recording");
+        C64_LOG_ERROR("Failed to create recording session for video recording");
         pthread_mutex_unlock(&context->recording_mutex);
         return;
     }
@@ -449,7 +449,7 @@ void c64u_start_video_recording(struct c64u_source *context)
     context->timing_file = fopen(timing_filename, "w");
 
     if (!context->video_file || !context->audio_file || !context->timing_file) {
-        C64U_LOG_ERROR("Failed to create recording files");
+        C64_LOG_ERROR("Failed to create recording files");
         if (context->video_file) {
             fclose(context->video_file);
             context->video_file = NULL;
@@ -475,7 +475,7 @@ void c64u_start_video_recording(struct c64u_source *context)
         write_wav_header(context->audio_file, 48000, 2, 16); // 48kHz stereo 16-bit
 
         // Write header info to timing file
-        fprintf(context->timing_file, "# C64U Video Recording Session\n");
+        fprintf(context->timing_file, "# C64S Video Recording Session\n");
         fprintf(context->timing_file, "# Session Folder: %s\n", context->session_folder);
         fprintf(context->timing_file, "# Start Time: %llu ms\n", (unsigned long long)timestamp_ms);
         fprintf(context->timing_file, "# Video Format: AVI (Uncompressed BGR24), %ux%u pixels @ 50fps\n",
@@ -484,13 +484,13 @@ void c64u_start_video_recording(struct c64u_source *context)
         fprintf(context->timing_file, "# Columns: frame_number, timestamp_ms, frame_size_bytes\n");
         fflush(context->timing_file);
 
-        C64U_LOG_INFO("Started video recording: %s", video_filename);
+        C64_LOG_INFO("Started video recording: %s", video_filename);
     }
 
     pthread_mutex_unlock(&context->recording_mutex);
 }
 
-void c64u_record_video_frame(struct c64u_source *context, uint32_t *frame_buffer)
+void c64_record_video_frame(struct c64_source *context, uint32_t *frame_buffer)
 {
     if (!context->record_video || !context->video_file || !frame_buffer) {
         return;
@@ -518,8 +518,8 @@ void c64u_record_video_frame(struct c64u_source *context, uint32_t *frame_buffer
         }
 
         // Log actual C64 video data stats (debug level)
-        C64U_LOG_DEBUG("Recording frame %u: %ux%u, non_zero=%u/100, fps=%.3f", context->recorded_frames, context->width,
-                       context->height, non_zero_pixels, context->expected_fps);
+        C64_LOG_DEBUG("Recording frame %u: %ux%u, non_zero=%u/100, fps=%.3f", context->recorded_frames, context->width,
+                      context->height, non_zero_pixels, context->expected_fps);
 
         convert_rgba_to_bgr24(frame_buffer, bgr_buffer, context->width, context->height);
 
@@ -530,7 +530,7 @@ void c64u_record_video_frame(struct c64u_source *context, uint32_t *frame_buffer
                 sprintf(hexbuf + i * 3, "%02X ", bgr_buffer[i]);
             }
             hexbuf[48] = '\0';
-            C64U_LOG_DEBUG("Frame %u BGR[0..15]: %s", context->recorded_frames, hexbuf);
+            C64_LOG_DEBUG("Frame %u BGR[0..15]: %s", context->recorded_frames, hexbuf);
         }
 
         // Write AVI frame chunk header ("00db" = stream 0, uncompressed DIB)
@@ -564,16 +564,16 @@ void c64u_record_video_frame(struct c64u_source *context, uint32_t *frame_buffer
                 fflush(context->timing_file);
             }
         } else {
-            C64U_LOG_WARNING("Failed to write video frame to recording");
+            C64_LOG_WARNING("Failed to write video frame to recording");
         }
     } else {
-        C64U_LOG_ERROR("Failed to allocate BGR conversion buffer");
+        C64_LOG_ERROR("Failed to allocate BGR conversion buffer");
     }
 
     pthread_mutex_unlock(&context->recording_mutex);
 }
 
-void c64u_record_audio_data(struct c64u_source *context, const uint8_t *audio_data, size_t data_size)
+void c64_record_audio_data(struct c64_source *context, const uint8_t *audio_data, size_t data_size)
 {
     if (!context->record_video || !context->audio_file || !audio_data) {
         return;
@@ -592,13 +592,13 @@ void c64u_record_audio_data(struct c64u_source *context, const uint8_t *audio_da
         context->recorded_audio_samples += (uint32_t)(data_size / 4); // 16-bit stereo = 4 bytes per sample
         // Note: No AVI header update needed since audio is not in AVI file
     } else {
-        C64U_LOG_WARNING("Failed to write audio data to WAV recording");
+        C64_LOG_WARNING("Failed to write audio data to WAV recording");
     }
 
     pthread_mutex_unlock(&context->recording_mutex);
 }
 
-void c64u_stop_video_recording(struct c64u_source *context)
+void c64_stop_video_recording(struct c64_source *context)
 {
     if (!context->video_file) {
         return; // Not recording
@@ -626,14 +626,14 @@ void c64u_stop_video_recording(struct c64u_source *context)
         context->timing_file = NULL;
     }
 
-    C64U_LOG_INFO("Recording stopped. Frames: %u, Audio samples: %llu", context->recorded_frames,
-                  (unsigned long long)context->recorded_audio_samples);
+    C64_LOG_INFO("Recording stopped. Frames: %u, Audio samples: %llu", context->recorded_frames,
+                 (unsigned long long)context->recorded_audio_samples);
 
     pthread_mutex_unlock(&context->recording_mutex);
 }
 
 // Recording initialization function
-void c64u_record_init(struct c64u_source *context)
+void c64_record_init(struct c64_source *context)
 {
     // Initialize recording fields
     context->save_frames = false;
@@ -652,12 +652,12 @@ void c64u_record_init(struct c64u_source *context)
 
     // Initialize recording mutex
     if (pthread_mutex_init(&context->recording_mutex, NULL) != 0) {
-        C64U_LOG_ERROR("Failed to initialize recording mutex");
+        C64_LOG_ERROR("Failed to initialize recording mutex");
     }
 }
 
 // Recording cleanup function
-void c64u_record_cleanup(struct c64u_source *context)
+void c64_record_cleanup(struct c64_source *context)
 {
     // Stop recording if active
     if (context->record_video) {
@@ -683,7 +683,7 @@ void c64u_record_cleanup(struct c64u_source *context)
 }
 
 // Recording settings update function
-void c64u_record_update_settings(struct c64u_source *context, void *settings_ptr)
+void c64_record_update_settings(struct c64_source *context, void *settings_ptr)
 {
     obs_data_t *settings = (obs_data_t *)settings_ptr;
 
@@ -695,7 +695,7 @@ void c64u_record_update_settings(struct c64u_source *context, void *settings_ptr
             strncpy(context->save_folder, new_save_folder, sizeof(context->save_folder) - 1);
             context->save_folder[sizeof(context->save_folder) - 1] = '\0';
             context->saved_frame_count = 0; // Reset counter for new folder
-            C64U_LOG_INFO("Frame save folder updated: %s", context->save_folder);
+            C64_LOG_INFO("Frame save folder updated: %s", context->save_folder);
         }
     }
 
@@ -714,11 +714,11 @@ void c64u_record_update_settings(struct c64u_source *context, void *settings_ptr
 
         if (new_record_video) {
             // Start recording (will join/create session)
-            c64u_start_video_recording(context);
-            C64U_LOG_INFO("Video recording started");
+            c64_start_video_recording(context);
+            C64_LOG_INFO("Video recording started");
         } else {
             // Stop recording
-            c64u_stop_video_recording(context);
+            c64_stop_video_recording(context);
             cleanup_session_if_needed(context);
         }
     }

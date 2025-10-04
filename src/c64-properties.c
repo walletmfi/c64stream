@@ -1,15 +1,15 @@
-#include "c64u-properties.h"
-#include "c64u-types.h"
-#include "c64u-version.h"
-#include "c64u-network.h"
-#include "c64u-protocol.h"
-#include "c64u-video.h"
-#include "c64u-logging.h" // For Windows snprintf compatibility
+#include "c64-properties.h"
+#include "c64-types.h"
+#include "c64-version.h"
+#include "c64-network.h"
+#include "c64-protocol.h"
+#include "c64-video.h"
+#include "c64-logging.h" // For Windows snprintf compatibility
 #include <obs-module.h>
 
-obs_properties_t *c64u_create_properties(void *data)
+obs_properties_t *c64_create_properties(void *data)
 {
-    // C64U properties setup
+    // C64S properties setup
     UNUSED_PARAMETER(data);
 
     obs_properties_t *props = obs_properties_create();
@@ -21,7 +21,7 @@ obs_properties_t *c64u_create_properties(void *data)
 
     // Version information (read-only) - remove redundant "Plugin Version" text
     obs_property_t *version_prop = obs_properties_add_text(info_props, "version_info", "Version", OBS_TEXT_INFO);
-    obs_property_set_long_description(version_prop, c64u_get_build_info());
+    obs_property_set_long_description(version_prop, c64_get_build_info());
     obs_property_text_set_info_type(version_prop, OBS_TEXT_INFO_NORMAL);
 
     // Debug logging toggle
@@ -38,8 +38,9 @@ obs_properties_t *c64u_create_properties(void *data)
         obs_properties_add_text(network_props, "dns_server_ip", obs_module_text("DNSServerIP"), OBS_TEXT_DEFAULT);
     obs_property_set_long_description(dns_prop, obs_module_text("DNSServerIP.Description"));
 
-    // C64U Host (IP Address or Hostname)
-    obs_property_t *host_prop = obs_properties_add_text(network_props, "c64u_host", "C64U Host", OBS_TEXT_DEFAULT);
+    // C64 Ultimate Host (IP Address or Hostname)
+    obs_property_t *host_prop =
+        obs_properties_add_text(network_props, "c64_host", "C64 Ultimate Host", OBS_TEXT_DEFAULT);
     obs_property_set_long_description(
         host_prop,
         "Hostname or IP address of C64 Ultimate device (default: c64u). Use 0.0.0.0 to skip control commands.");
@@ -62,7 +63,7 @@ obs_properties_t *c64u_create_properties(void *data)
 
     // Rendering Delay (moved to Plugin Information group)
     obs_property_t *delay_prop = obs_properties_add_int_slider(
-        info_props, "render_delay_frames", "Render Delay (frames)", 0, C64U_MAX_RENDER_DELAY_FRAMES, 1);
+        info_props, "render_delay_frames", "Render Delay (frames)", 0, C64_MAX_RENDER_DELAY_FRAMES, 1);
     obs_property_set_long_description(
         delay_prop, "Delay frames before rendering to smooth UDP packet loss/reordering (default: 3)");
 
@@ -89,18 +90,18 @@ obs_properties_t *c64u_create_properties(void *data)
     return props;
 }
 
-void c64u_set_property_defaults(obs_data_t *settings)
+void c64_set_property_defaults(obs_data_t *settings)
 {
-    // C64U defaults initialization
+    // C64S defaults initialization
 
     obs_data_set_default_bool(settings, "debug_logging", true);
     obs_data_set_default_bool(settings, "auto_detect_ip", true);
     obs_data_set_default_string(settings, "dns_server_ip", "192.168.1.1");
-    obs_data_set_default_string(settings, "c64u_host", C64U_DEFAULT_HOST);
+    obs_data_set_default_string(settings, "c64_host", C64_DEFAULT_HOST);
     obs_data_set_default_string(settings, "obs_ip_address", ""); // Empty by default, will be auto-detected
-    obs_data_set_default_int(settings, "video_port", C64U_DEFAULT_VIDEO_PORT);
-    obs_data_set_default_int(settings, "audio_port", C64U_DEFAULT_AUDIO_PORT);
-    obs_data_set_default_int(settings, "render_delay_frames", C64U_DEFAULT_RENDER_DELAY_FRAMES);
+    obs_data_set_default_int(settings, "video_port", C64_DEFAULT_VIDEO_PORT);
+    obs_data_set_default_int(settings, "audio_port", C64_DEFAULT_AUDIO_PORT);
+    obs_data_set_default_int(settings, "render_delay_frames", C64_DEFAULT_RENDER_DELAY_FRAMES);
 
     // Frame saving defaults
     obs_data_set_default_bool(settings, "save_frames", false); // Disabled by default
@@ -109,21 +110,21 @@ void c64u_set_property_defaults(obs_data_t *settings)
     char platform_path[512];
     char documents_path[256];
 
-    if (c64u_get_user_documents_path(documents_path, sizeof(documents_path))) {
+    if (c64_get_user_documents_path(documents_path, sizeof(documents_path))) {
         // Successfully got user's Documents folder
 #ifdef _WIN32
-        snprintf(platform_path, sizeof(platform_path), "%s\\obs-studio\\c64u\\recordings", documents_path);
+        snprintf(platform_path, sizeof(platform_path), "%s\\obs-studio\\c64stream\\recordings", documents_path);
 #else
-        snprintf(platform_path, sizeof(platform_path), "%s/obs-studio/c64u/recordings", documents_path);
+        snprintf(platform_path, sizeof(platform_path), "%s/obs-studio/c64stream/recordings", documents_path);
 #endif
     } else {
         // Fallback to platform-specific defaults
 #ifdef _WIN32
-        strcpy(platform_path, "C:\\Users\\Public\\Documents\\obs-studio\\c64u\\recordings");
+        strcpy(platform_path, "C:\\Users\\Public\\Documents\\obs-studio\\c64stream\\recordings");
 #elif defined(__APPLE__)
-        strcpy(platform_path, "/Users/user/Documents/obs-studio/c64u/recordings");
+        strcpy(platform_path, "/Users/user/Documents/obs-studio/c64stream/recordings");
 #else // Linux and other Unix-like systems
-        strcpy(platform_path, "/home/user/Documents/obs-studio/c64u/recordings");
+        strcpy(platform_path, "/home/user/Documents/obs-studio/c64stream/recordings");
 #endif
     }
 

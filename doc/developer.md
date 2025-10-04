@@ -51,9 +51,9 @@ This project supports three distinct build configurations optimized for differen
 **Purpose:** Complete development environment with testing and debugging tools.
 
 **Components built:**
-- Plugin binary (`c64u-plugin-for-obs.so/.dll/.dylib`)
+- Plugin binary (`c64stream.so/.dll/.dylib`)
 - Unit tests (`test_vic_colors`) for VIC-II color conversion
-- Mock C64U server (`c64u_mock_server`) for protocol testing
+- Mock C64 Ultimate server (`c64_mock_server`) for protocol testing
 - Integration tests (`test_integration`) using OBS libraries
 
 **Ubuntu/Linux:**
@@ -68,7 +68,7 @@ cmake --build build_x86_64
 cd build_x86_64 && ctest -V
 
 # Test with mock server
-./c64u_mock_server &
+./c64_mock_server &
 ./test_integration
 ```
 
@@ -121,7 +121,7 @@ find build_x86_64 -name "*test*" -executable -type f
 --   CI Build: ON
 --   Mock Server: OFF
 --   Integration Tests: OFF
-[4/4] Linking C shared module c64u-plugin-for-obs.so
+[4/4] Linking C shared module c64stream.so
 ```
 
 #### 3. **Production CI Build**
@@ -171,7 +171,7 @@ cmake --build build_x86_64
 cd build_x86_64 && ctest
 
 # 4. Install to local OBS (optional)
-cp c64u-plugin-for-obs.so ~/.config/obs-studio/plugins/c64u-plugin-for-obs/bin/64bit/
+cp c64stream.so ~/.config/obs-studio/plugins/c64stream/bin/64bit/
 ```
 
 #### Code Formatting (Required)
@@ -195,9 +195,9 @@ cd build_x86_64 && ./test_vic_colors
 
 **Integration Testing** (requires OBS):
 ```bash
-# Test with mock C64U server
+# Test with mock C64 Ultimate server
 cd build_x86_64
-./c64u_mock_server --port 1234 &
+./c64_mock_server --port 1234 &
 ./test_integration --server-port 1234
 ```
 
@@ -210,7 +210,7 @@ act -j ubuntu-build -P ubuntu-24.04=catthehacker/ubuntu:act-24.04 -s GITHUB_TOKE
 ### Project Structure
 
 ```
-c64u-obs/
+c64stream/
 ├── src/
 │   ├── plugin-main.c          # Main OBS plugin implementation
 │   ├── plugin-support.h       # Plugin utilities and logging
@@ -218,7 +218,7 @@ c64u-obs/
 ├── tests/
 │   ├── CMakeLists.txt          # Test build configuration with CI detection
 │   ├── test_vic_colors.c       # Unit tests for VIC color conversion
-│   ├── c64u_mock_server.c      # Mock C64U device for testing
+│   ├── c64_mock_server.c      # Mock C64 Ultimate device for testing
 │   └── test_integration.c      # Integration tests with real OBS
 ├── .github/
 │   ├── workflows/              # CI/CD automation
@@ -243,7 +243,7 @@ c64u-obs/
 
 **Development Issues:**
 - **Plugin not loading:** Check OBS logs, verify plugin path
-- **No C64U connection:** Verify network configuration; check IP address if using specific device, firewall settings
+- **No C64 Ultimate connection:** Verify network configuration; check IP address if using specific device, firewall settings
 - **Build performance:** Use `ccache` for faster rebuilds
 
 ### Contributing
@@ -323,7 +323,7 @@ The project generates `compile_commands.json` for IDE support:
 
 ### Platform-Specific Code Patterns
 
-#### Networking (from c64u-network.h)
+#### Networking (from c64-network.h)
 ```c
 #ifdef _WIN32
     #include <winsock2.h>
@@ -350,7 +350,7 @@ The project generates `compile_commands.json` for IDE support:
 #endif
 ```
 
-#### Data Types (from c64u-network.h)
+#### Data Types (from c64-network.h)
 ```c
 #ifdef _WIN32
     // Define ssize_t for MSVC (MinGW has it, but MSVC doesn't)
@@ -380,7 +380,7 @@ The project generates `compile_commands.json` for IDE support:
 ```cmake
 # Windows networking libraries (handled via pragma in headers)
 if(WIN32)
-    # Libraries linked via #pragma comment in c64u-network.h
+    # Libraries linked via #pragma comment in c64-network.h
     # ws2_32.lib and iphlpapi.lib
 elseif(UNIX)
     # POSIX libraries
@@ -409,7 +409,7 @@ cmake --preset ubuntu-x86_64
 cmake --build build_x86_64
 
 # Verify success
-ls build_x86_64/c64u-plugin-for-obs.so
+ls build_x86_64/c64stream.so
 ```
 
 #### Windows Verification
@@ -446,7 +446,7 @@ See [`windows-local-build.md`](windows-local-build.md) for comprehensive Windows
 
 ### Resources
 
-- **C64U Stream Spec:** [`doc/c64u-stream-spec.md`](c64u-stream-spec.md)
+- **C64 Stream Spec:** [`doc/c64-stream-spec.md`](c64-stream-spec.md)
 - **Official Documentation:** [C64 Ultimate Data Streams](https://1541u-documentation.readthedocs.io/en/latest/data_streams.html#data_streams)
 - **OBS Plugin Development:** [OBS Studio Plugin Guide](https://obsproject.com/wiki/Plugin-Development)
 - **Build System:** Based on [OBS Plugin Template](https://github.com/obsproject/obs-plugintemplate)

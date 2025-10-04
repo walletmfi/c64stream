@@ -8,7 +8,7 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-echo "🪟 C64U OBS Plugin - Precise Windows CI Simulation"
+echo "🪟 C64 Stream Plugin - Precise Windows CI Simulation"
 echo "=================================================="
 echo "Replicating GitHub Actions windows-2022 environment using Docker"
 echo ""
@@ -157,7 +157,7 @@ add_compile_options(
     -fms-extensions
 )
 
-# Windows libraries (matching c64u-network.h pragmas)
+# Windows libraries (matching c64-network.h pragmas)
 link_libraries(ws2_32 iphlpapi winmm)
 
 # Find root paths
@@ -189,7 +189,7 @@ echo ""
 echo "✅ Windows CI simulation completed!"
 
 # Verify output
-if [ -f "build_x64/c64u-plugin-for-obs.dll" ] || [ -f "build_x64/c64u-plugin-for-obs.exe" ] || [ -f "build_x64/libc64u-plugin-for-obs.a" ]; then
+if [ -f "build_x64/c64stream.dll" ] || [ -f "build_x64/c64stream.exe" ] || [ -f "build_x64/libc64stream.a" ]; then
     echo "✅ Build output generated successfully"
     ls -la build_x64/ | grep -E "\.(dll|exe|a)$" || echo "Build artifacts:"
     ls -la build_x64/
@@ -211,7 +211,7 @@ CMD ["windows-ci-build.sh"]
 EOF
 
 echo "🔨 Building Windows CI simulation Docker image..."
-docker build -f "$DOCKERFILE" -t c64u-windows-ci "$PROJECT_ROOT"
+docker build -f "$DOCKERFILE" -t c64stream-windows-ci "$PROJECT_ROOT"
 
 echo ""
 echo "🚀 Running Windows CI simulation..."
@@ -221,7 +221,7 @@ echo "  2. cmake --build --preset windows-x64 --config RelWithDebInfo --parallel
 echo ""
 
 # Run the simulation
-if docker run --rm -v "$PROJECT_ROOT:/workspace" c64u-windows-ci; then
+if docker run --rm -v "$PROJECT_ROOT:/workspace" c64stream-windows-ci; then
     echo ""
     echo "🎉 SUCCESS: Windows CI simulation passed!"
     echo ""
@@ -247,7 +247,7 @@ fi
 
 # Clean up
 echo "🧹 Cleaning up Docker image..."
-docker rmi c64u-windows-ci 2>/dev/null || true
+docker rmi c64stream-windows-ci 2>/dev/null || true
 rm -rf "$BUILD_DIR"
 
 echo ""

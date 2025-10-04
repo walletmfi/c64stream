@@ -2,10 +2,10 @@
 set -euo pipefail
 
 # Configurable paths - adjust these as needed
-DOWNLOAD_DIR="${HOME}/Downloads/c64u-obs-tmp"
+DOWNLOAD_DIR="${HOME}/Downloads/c64stream-tmp"
 OBS_PLUGIN_LIB_DIR="${HOME}/.local/lib/obs-plugins"
 OBS_PLUGIN_DATA_DIR="${HOME}/.local/share/obs/obs-plugins"
-GITHUB_REPO="chrisgleissner/c64u-obs"
+GITHUB_REPO="chrisgleissner/c64stream"
 
 # Create temporary download directory
 mkdir -p "${DOWNLOAD_DIR}"
@@ -43,7 +43,7 @@ echo "Downloading artifact ${ARTIFACT_ID}..."
 curl -s -L \
     -H "Accept: application/vnd.github+json" \
     -H "X-GitHub-Api-Version: 2022-11-28" \
-    "https://nightly.link/chrisgleissner/c64u-obs/actions/artifacts/${ARTIFACT_ID}.zip" \
+    "https://nightly.link/chrisgleissner/c64stream/actions/artifacts/${ARTIFACT_ID}.zip" \
     --output plugin.zip
 
 echo "Extracting files..."

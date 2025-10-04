@@ -160,7 +160,7 @@ void test_packet_header()
 
 int main()
 {
-    printf("=== C64U Plugin Unit Tests ===\n\n");
+    printf("=== C64 Stream Plugin Unit Tests ===\n\n");
 
     test_vic_color_palette();
     test_color_conversion();

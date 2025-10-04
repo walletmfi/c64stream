@@ -1,8 +1,8 @@
-# C64U Plugin Tests
-# 
+# C64 Stream Plugin Tests
+#
 # This directory contains the following test components:
 # - test_vic_colors.c: Unit tests for VIC-II color conversion (local builds only)
-# - c64u_mock_server.c: Mock C64U device for testing plugin connectivity (local builds only) 
+# - c64_mock_server.c: Mock C64 Ultimate device for testing plugin connectivity (local builds only)
 # - test_integration.c: Full integration tests with real OBS (disabled by default)
 # - CMakeLists.txt: This build configuration with automatic CI detection
 #
@@ -12,7 +12,7 @@
 #
 cmake_minimum_required(VERSION 3.28)
 
-project(c64u-tests)
+project(c64stream-tests)
 
 # Enable testing
 enable_testing()
@@ -36,14 +36,14 @@ else()
   set(DEFAULT_ENABLE_INTEGRATION_TESTS OFF)  # Disabled by default due to OBS header conflicts
 endif()
 
-# Options for controlling what gets built 
-option(ENABLE_MOCK_SERVER "Build the C64U mock server for local testing" ${DEFAULT_ENABLE_MOCK_SERVER})
+# Options for controlling what gets built
+option(ENABLE_MOCK_SERVER "Build the C64 Ultimate mock server for local testing" ${DEFAULT_ENABLE_MOCK_SERVER})
 option(ENABLE_INTEGRATION_TESTS "Build integration tests (requires refactoring to avoid OBS header conflicts)" ${DEFAULT_ENABLE_INTEGRATION_TESTS})
 
 # Automatically enable mock server if integration tests are enabled
 if(ENABLE_INTEGRATION_TESTS AND NOT ENABLE_MOCK_SERVER)
   message(STATUS "Integration tests enabled - automatically enabling mock server")
-  set(ENABLE_MOCK_SERVER ON CACHE BOOL "Build the C64U mock server for local testing" FORCE)
+  set(ENABLE_MOCK_SERVER ON CACHE BOOL "Build the C64 Ultimate mock server for local testing" FORCE)
 endif()
 
 # Show what's being built
@@ -58,35 +58,35 @@ if(NOT IS_CI_BUILD)
   add_test(NAME VICColors COMMAND test_vic_colors)
 endif()
 
-# C64U mock server (for manual testing) - only build when explicitly enabled
+# C64 mock server (for manual testing) - only build when explicitly enabled
 if(ENABLE_MOCK_SERVER)
-  add_executable(c64u_mock_server c64u_mock_server.c)
-  target_link_libraries(c64u_mock_server Threads::Threads)
-  
+  add_executable(c64_mock_server c64_mock_server.c)
+  target_link_libraries(c64_mock_server Threads::Threads)
+
   # Link math library on non-Windows platforms
   if(NOT WIN32)
-    target_link_libraries(c64u_mock_server m)
+    target_link_libraries(c64_mock_server m)
   endif()
 endif()
 
 # Integration test (plugin + mock server) - only build when explicitly enabled
 if(ENABLE_INTEGRATION_TESTS)
   add_executable(test_integration test_integration.c)
-  
+
   # Link against real OBS libraries and other dependencies
   target_link_libraries(test_integration Threads::Threads obs)
-  
+
   # Link platform-specific libraries
   if(NOT WIN32)
     target_link_libraries(test_integration m dl)
   endif()
-  
+
   # Include OBS headers
   target_include_directories(test_integration PRIVATE /usr/include/obs)
-  
+
   # Integration test loads the plugin as a shared library
-  add_dependencies(test_integration c64u-plugin-for-obs)
-  
+  add_dependencies(test_integration c64stream)
+
   add_test(NAME Integration COMMAND test_integration WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}")
 endif()
 
@@ -101,9 +101,9 @@ endif()
 
 if(ENABLE_MOCK_SERVER)
   if(MSVC)
-    target_compile_options(c64u_mock_server PRIVATE /W4 /std:c17)
+    target_compile_options(c64_mock_server PRIVATE /W4 /std:c17)
   else()
-    target_compile_options(c64u_mock_server PRIVATE -Wall -Wextra -std=c17)
+    target_compile_options(c64_mock_server PRIVATE -Wall -Wextra -std=c17)
   endif()
 endif()
 
@@ -121,7 +121,7 @@ if(NOT IS_CI_BUILD)
   list(APPEND TEST_TARGETS test_vic_colors)
 endif()
 if(ENABLE_MOCK_SERVER)
-  list(APPEND TEST_TARGETS c64u_mock_server)
+  list(APPEND TEST_TARGETS c64_mock_server)
 endif()
 if(ENABLE_INTEGRATION_TESTS)
   list(APPEND TEST_TARGETS test_integration)

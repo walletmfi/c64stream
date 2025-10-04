@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# C64U OBS Plugin - Local Multi-Platform Build Script
+# C64 Stream - Local Multi-Platform Build Script
 # This script provides local builds for all three platforms without GitHub Actions
 
 set -euo pipefail
@@ -32,7 +32,7 @@ log_success() {
 }
 
 log_warning() {
-    echo -e "${YELLOW}[WARNING]${NC} $1" 
+    echo -e "${YELLOW}[WARNING]${NC} $1"
 }
 
 log_error() {
@@ -41,7 +41,7 @@ log_error() {
 
 usage() {
     cat << EOF
-C64U OBS Plugin - Local Multi-Platform Build Script
+C64 Stream - Local Multi-Platform Build Script
 
 Usage: $0 <platform> [options]
 
@@ -87,15 +87,15 @@ detect_platform() {
 
 check_prerequisites() {
     local platform=$1
-    
+
     log_info "Checking prerequisites for $platform..."
-    
+
     # Common requirements
     if ! command -v cmake >/dev/null 2>&1; then
         log_error "CMake is required but not installed"
         exit 1
     fi
-    
+
     local cmake_version
     cmake_version=$(cmake --version | head -1 | sed 's/cmake version //')
     # Use printf to compare versions properly (3.28.3 >= 3.28)
@@ -105,7 +105,7 @@ check_prerequisites() {
         log_error "CMake 3.28+ is required (found $cmake_version)"
         exit 1
     fi
-    
+
     case $platform in
         linux)
             if ! command -v gcc >/dev/null 2>&1 && ! command -v clang >/dev/null 2>&1; then
@@ -131,9 +131,9 @@ check_prerequisites() {
 
 install_dependencies() {
     local platform=$1
-    
+
     log_info "Installing dependencies for $platform..."
-    
+
     case $platform in
         linux)
             # Install build essentials and required tools
@@ -147,15 +147,15 @@ install_dependencies() {
                     git \
                     clang-format \
                     python3-pip
-                    
+
                 # Install gersemi for CMake formatting
                 pip3 install --user gersemi
-                
+
                 # Install SIMDe if available, otherwise continue without system libobs
                 if apt-cache show libsimde-dev >/dev/null 2>&1; then
                     sudo apt-get install -y libsimde-dev
                 fi
-                
+
                 log_info "Note: OBS dependencies will be downloaded automatically by build system"
             else
                 log_error "APT package manager not found. Please install dependencies manually."
@@ -185,9 +185,9 @@ install_dependencies() {
 build_platform() {
     local platform=$1
     local config=$2
-    
-    log_info "Building C64U OBS Plugin for $platform ($config)..."
-    
+
+    log_info "Building C64 Stream for $platform ($config)..."
+
     # Determine build directory and preset
     local build_dir preset_name
     case $platform in
@@ -210,13 +210,13 @@ build_platform() {
             fi
             ;;
     esac
-    
+
     # Clean build if requested
     if [[ "$CLEAN_BUILD" == "true" ]]; then
         log_info "Cleaning build directory: $build_dir"
         rm -rf "$build_dir"
     fi
-    
+
     # Configure
     log_info "Configuring build..."
     if [[ "$VERBOSE" == "true" ]]; then
@@ -224,7 +224,7 @@ build_platform() {
     else
         cmake --preset "$preset_name" -DCMAKE_BUILD_TYPE="$config"
     fi
-    
+
     # Build
     log_info "Building..."
     local build_args=("--build" "$build_dir" "--config" "$config")
@@ -232,11 +232,11 @@ build_platform() {
         build_args+=("--verbose")
     fi
     build_args+=("--parallel")
-    
+
     cmake "${build_args[@]}"
-    
+
     log_success "Build completed successfully!"
-    
+
     # List output files
     log_info "Build artifacts:"
     if [[ -d "$build_dir" ]]; then
@@ -247,11 +247,11 @@ build_platform() {
 run_tests() {
     local platform=$1
     local build_dir
-    
+
     case $platform in
         linux) build_dir="build_x86_64" ;;
         macos) build_dir="build_macos" ;;
-        windows) 
+        windows)
             if [[ "$OSTYPE" == "linux-gnu"* ]]; then
                 build_dir="build_mingw"
             else
@@ -259,9 +259,9 @@ run_tests() {
             fi
             ;;
     esac
-    
+
     log_info "Running tests..."
-    
+
     if [[ -f "$build_dir/CTestTestfile.cmake" ]]; then
         cd "$build_dir"
         ctest --output-on-failure --parallel 2
@@ -277,13 +277,13 @@ main() {
         usage
         exit 1
     fi
-    
+
     # First argument is platform, but allow auto-detection
     if [[ "$1" == "--help" || "$1" == "-h" ]]; then
         usage
         exit 0
     fi
-    
+
     if [[ "$1" != --* ]]; then
         PLATFORM="$1"
         shift
@@ -291,7 +291,7 @@ main() {
         PLATFORM=$(detect_platform)
         log_info "Auto-detected platform: $PLATFORM"
     fi
-    
+
     # Validate platform
     case $PLATFORM in
         linux|macos|windows) ;;
@@ -301,7 +301,7 @@ main() {
             exit 1
             ;;
     esac
-    
+
     # Parse options
     while [[ $# -gt 0 ]]; do
         case $1 in
@@ -336,7 +336,7 @@ main() {
                 ;;
         esac
     done
-    
+
     # Validate build config
     case "$BUILD_CONFIG" in
         Debug|RelWithDebInfo|Release|MinSizeRel) ;;
@@ -346,29 +346,29 @@ main() {
             exit 1
             ;;
     esac
-    
-    log_info "C64U OBS Plugin - Local Build"
+
+    log_info "C64 Stream - Local Build"
     log_info "Platform: $PLATFORM"
     log_info "Config: $BUILD_CONFIG"
-    
+
     # Execute workflow
     check_prerequisites "$PLATFORM"
-    
+
     if [[ "$INSTALL_DEPS" == "true" ]]; then
         install_dependencies "$PLATFORM"
     fi
-    
+
     build_platform "$PLATFORM" "$BUILD_CONFIG"
-    
+
     if [[ "$RUN_TESTS" == "true" ]]; then
         run_tests "$PLATFORM"
     fi
-    
+
     log_success "Local build workflow completed!"
     log_info ""
     log_info "Next steps:"
     log_info "  - Install plugin: See tools/install-plugin.sh"
-    log_info "  - Test with OBS: Start OBS and add C64U source"
+    log_info "  - Test with OBS: Start OBS and add C64 Stream source"
     log_info "  - Package: cmake --build <build_dir> --target package"
 }
 

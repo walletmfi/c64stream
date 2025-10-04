@@ -1,5 +1,5 @@
-#ifndef C64U_LOGGING_H
-#define C64U_LOGGING_H
+#ifndef C64_LOGGING_H
+#define C64_LOGGING_H
 
 #include <obs-module.h>
 #include <stdio.h> // Ensure snprintf is available on all platforms
@@ -54,10 +54,10 @@ static inline int clock_gettime(int clk_id, struct timespec *ts)
 #endif
 
 // Logging control - using extern to avoid multiple definitions
-extern bool c64u_debug_logging;
+extern bool c64_debug_logging;
 
 // Fast milliseconds since epoch for logging
-static inline uint64_t c64u_get_millis(void)
+static inline uint64_t c64_get_millis(void)
 {
 #ifdef _WIN32
     // Windows: Use GetSystemTimeAsFileTime for millisecond precision
@@ -78,26 +78,26 @@ static inline uint64_t c64u_get_millis(void)
 #endif
 }
 
-#define C64U_LOG_INFO(format, ...)                                                                        \
+#define C64_LOG_INFO(format, ...)                                                                        \
     do {                                                                                                   \
-        blog(LOG_INFO, "[%llu] " format, (unsigned long long)c64u_get_millis(), ##__VA_ARGS__);          \
+        blog(LOG_INFO, "[%llu] " format, (unsigned long long)c64_get_millis(), ##__VA_ARGS__);          \
     } while (0)
 
-#define C64U_LOG_DEBUG(format, ...)                                                                       \
+#define C64_LOG_DEBUG(format, ...)                                                                       \
     do {                                                                                                   \
-        if (c64u_debug_logging) {                                                                          \
-            blog(LOG_DEBUG, "[C64U %llu] " format, (unsigned long long)c64u_get_millis(), ##__VA_ARGS__); \
+        if (c64_debug_logging) {                                                                          \
+            blog(LOG_DEBUG, "[C64S %llu] " format, (unsigned long long)c64_get_millis(), ##__VA_ARGS__); \
         }                                                                                                  \
     } while (0)
 
-#define C64U_LOG_WARNING(format, ...)                                                                     \
+#define C64_LOG_WARNING(format, ...)                                                                     \
     do {                                                                                                   \
-        blog(LOG_WARNING, "[%llu] " format, (unsigned long long)c64u_get_millis(), ##__VA_ARGS__);       \
+        blog(LOG_WARNING, "[%llu] " format, (unsigned long long)c64_get_millis(), ##__VA_ARGS__);       \
     } while (0)
 
-#define C64U_LOG_ERROR(format, ...)                                                                       \
+#define C64_LOG_ERROR(format, ...)                                                                       \
     do {                                                                                                   \
-        blog(LOG_ERROR, "[%llu] " format, (unsigned long long)c64u_get_millis(), ##__VA_ARGS__);         \
+        blog(LOG_ERROR, "[%llu] " format, (unsigned long long)c64_get_millis(), ##__VA_ARGS__);         \
     } while (0)
 
-#endif // C64U_LOGGING_H
+#endif // C64_LOGGING_H

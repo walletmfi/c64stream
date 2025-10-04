@@ -1,15 +1,15 @@
 
-# C64 Ultimate OBS Plugin
+# C64 Stream
 
 Bridge your Commodore 64 Ultimate directly to [OBS Studio](https://obsproject.com/) for seamless streaming and recording over your network connection.
 
-<img src="./doc/img/c64u-obs.png" alt="C64U Logo" width="200"/>
+<img src="./docs/images/c64stream.png" alt="C64 Stream Logo" width="200"/>
 
 This plugin implements a native OBS source that receives video and audio streams from C64 Ultimate devices (Commodore 64 Ultimate or Ultimate 64) via the Ultimate's built-in data streaming capability.
 
 The plugin connects directly to the Ultimate's network interface, eliminating the need for capture cards or composite video connections.
 
-![C64U Main Screen](./doc/img/ObsMainScreen.png "C64U Main Screen")
+![C64 Stream Main Screen](./docs/images/main-screen.png "C64 Stream Main Screen")
 
 
 **Features:**
@@ -34,7 +34,7 @@ Grab the right package for your system from the [Releases page](../../releases):
 
 **Windows:**
 1. Close OBS Studio
-2. Extract `c64u-plugin-for-obs-*-windows-x64.zip` to `C:\ProgramData\obs-studio\plugins`
+2. Extract `c64stream-*-windows-x64.zip` to `C:\ProgramData\obs-studio\plugins`
 3. Restart OBS Studio
 
 If you are using Windows Firewall and block all incoming connections, you may have to setup an exclusion to allow for incoming UDP connections
@@ -43,12 +43,12 @@ to port 11000 (Video) and 11001 (Audio) from the C64 Ultimate.
 You can do this with the following Powershell script. Be sure to adjust the `RemoteAddress` to the IP of your C64 Ultimate:
 
 ```powershell
-New-NetFirewallRule -DisplayName "C64U" -Direction Inbound -Protocol UDP -LocalPort 11000,11001 -RemoteAddress 192.168.1.64 -Action Allow
+New-NetFirewallRule -DisplayName "C64 Stream" -Direction Inbound -Protocol UDP -LocalPort 11000,11001 -RemoteAddress 192.168.1.64 -Action Allow
 ```
 
 **macOS:**
 1. Close OBS Studio
-2. Install `c64u-plugin-for-obs-*-macos-universal.pkg` to `~/Library/Application Support/obs-studio/plugins`
+2. Install `c64stream-*-macos-universal.pkg` to `~/Library/Application Support/obs-studio/plugins`
 3. Restart OBS Studio
 
 > [!NOTE]
@@ -56,9 +56,9 @@ New-NetFirewallRule -DisplayName "C64U" -Direction Inbound -Protocol UDP -LocalP
 
 **Linux (Ubuntu/Debian):**
 1. Close OBS Studio
-2. Install `c64u-plugin-for-obs-*-x86_64-linux-gnu.deb` to `~/.config/obs-studio/plugins` by running:
+2. Install `c64stream-*-x86_64-linux-gnu.deb` to `~/.config/obs-studio/plugins` by running:
 ```bash
-sudo dpkg -i c64u-obs-plugin-linux.deb
+sudo dpkg -i c64stream-plugin-linux.deb
 ```
 
 **Further Details:**
@@ -67,16 +67,16 @@ See the [OBS Plugins Guide](https://obsproject.com/kb/plugins-guide).
 
 ### Configuration ⚙️
 
-![C64U Configuration](./doc/img/ObsPluginProperties.png "C64U Configuration")
+![C64 Stream Configuration](./docs/images/properties.png "C64 Stream Configuration")
 
 **Getting Your C64 on Stream:**
 
-1. **Add Source:** In OBS, create a new source and select "C64U" from the available types
-2. **Open Properties:** Select the "C64U" source in your sources list, then click the "Properties" button to open the configuration dialog
+1. **Add Source:** In OBS, create a new source and select "C64 Stream" from the available types
+2. **Open Properties:** Select the "C64 Stream" source in your sources list, then click the "Properties" button to open the configuration dialog
 3. **Debug Logging:** Enable detailed logging for debugging connection issues (optional)
 4. **Configure Network Settings:**
-   - **DNS Server IP:** IP address of DNS server for resolving device hostnames (default: `192.168.1.1` for most home routers). Used when the C64U Host is a hostname rather than an IP address. 
-   - **C64U Host:** Enter your Ultimate device's hostname (default: `c64u`) or IP address to enable automatic streaming control from OBS (recommended for convenience), or set to `0.0.0.0` to accept streams from any C64 Ultimate on your network (requires manual control from the device)
+   - **DNS Server IP:** IP address of DNS server for resolving device hostnames (default: `192.168.1.1` for most home routers). Used when the C64 Ultimate Host is a hostname rather than an IP address.
+   - **C64 Ultimate Host:** Enter your Ultimate device's hostname (default: `c64u`) or IP address to enable automatic streaming control from OBS (recommended for convenience), or set to `0.0.0.0` to accept streams from any C64 Ultimate on your network (requires manual control from the device)
    - **OBS Server IP:** IP address where C64 Ultimate sends streams (auto-detected by default)
    - **Auto-detect OBS IP:** Automatically detect and use OBS server IP in streaming commands (recommended)
 5. **Configure Ports:** Use the default ports (video: 11000, audio: 11001) unless network conflicts require different values
@@ -85,9 +85,13 @@ See the [OBS Plugins Guide](https://obsproject.com/kb/plugins-guide).
    - **Save BMP Frames:** Enable to save individual frames as BMP files (useful for debugging, impacts performance)
    - **Record AVI + WAV:** Enable to record uncompressed video and audio files (high disk usage)
    - **Output Folder:** Choose where recording files are saved. Default locations by OS:
-     - **Windows:** `%USERPROFILE%\Documents\obs-studio\c64u\recordings`
-     - **macOS:** `~/Documents/obs-studio/c64u/recordings`
-     - **Linux:** `~/Documents/obs-studio/c64u/recordings`
+     - #### Recording Directory
+
+The plugin automatically creates recordings in platform-specific directories:
+
+  - **Windows:** `%USERPROFILE%\Documents\obs-studio\c64stream\recordings`
+     - **macOS:** `~/Documents/obs-studio/c64stream/recordings`
+     - **Linux:** `~/Documents/obs-studio/c64stream/recordings`
 8. **Apply Settings:** Click "OK" to save your configuration
 
 Once configured, live video and audio streams from the C64 Ultimate will be available in OBS Studio.
@@ -108,7 +112,7 @@ For comprehensive configuration details, refer to the [official C64 Ultimate doc
 
 ### Hostname vs IP Address 🌐
 
-The plugin supports both **hostnames** and **IP addresses** for the C64U Host field with enhanced DNS resolution that works reliably across all platforms:
+The plugin supports both **hostnames** and **IP addresses** for the C64 Ultimate Host field with enhanced DNS resolution that works reliably across all platforms:
 
 **Using Hostnames (Recommended):**
 - **Default:** `c64u` - The plugin will try to resolve this hostname to an IP address
@@ -170,7 +174,7 @@ The plugin includes built-in recording capabilities that work independently of O
 
 All recording files are organized into session folders with timestamps:
 ```
-~/Documents/obs-studio/c64u/recordings/
+~/Documents/obs-studio/c64stream/recordings/
 ├── session_20240929_143052/
 │   ├── frames/           # BMP frame files (if enabled)
 │   ├── video.avi         # Uncompressed video (if enabled)
@@ -182,9 +186,9 @@ All recording files are organized into session folders with timestamps:
 ### Recording Configuration
 
 - **Output Folder Defaults:**
-  - **Windows:** `%USERPROFILE%\Documents\obs-studio\c64u\recordings`
-  - **macOS:** `~/Documents/obs-studio/c64u/recordings`
-  - **Linux:** `~/Documents/obs-studio/c64u/recordings`
+  - **Windows:** `%USERPROFILE%\Documents\obs-studio\c64stream\recordings`
+  - **macOS:** `~/Documents/obs-studio/c64stream/recordings`
+  - **Linux:** `~/Documents/obs-studio/c64stream/recordings`
 - **Automatic Session Management:** New session folder created each time recording is enabled
 - **Cross-Platform Compatibility:** Works on Windows, macOS, and Linux
 

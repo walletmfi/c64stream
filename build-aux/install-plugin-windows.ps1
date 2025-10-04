@@ -1,7 +1,7 @@
-# PowerShell script to install C64U plugin to OBS Studio on Windows
+# PowerShell script to install C64 Stream plugin to OBS Studio on Windows
 # This script creates the necessary directory structure and copies the plugin files
 
-$PluginPath = "$env:APPDATA\obs-studio\plugins\c64u-plugin-for-obs"
+$PluginPath = "$env:APPDATA\obs-studio\plugins\c64stream"
 $BinPath = "$PluginPath\bin\64bit"
 $DataPath = "$PluginPath\data"
 
@@ -11,8 +11,8 @@ New-Item -ItemType Directory -Force -Path $BinPath | Out-Null
 New-Item -ItemType Directory -Force -Path $DataPath | Out-Null
 
 # Copy plugin DLL
-$SourceDll = "build_x64\Debug\c64u-plugin-for-obs.dll"
-$TargetDll = "$BinPath\c64u-plugin-for-obs.dll"
+$SourceDll = "build_x64\Debug\c64stream.dll"
+$TargetDll = "$BinPath\c64stream.dll"
 
 if (Test-Path $SourceDll) {
     Write-Host "Copying plugin DLL: $SourceDll -> $TargetDll"

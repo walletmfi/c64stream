@@ -1,5 +1,5 @@
 /*
-C64U Plugin for OBS
+C64 Stream Plugin for OBS
 Copyright (C) 2025 Chris Gleissner
 
 This program is free software; you can redistribute it and/or modify
@@ -18,46 +18,46 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #include <obs-module.h>
 #include "plugin-support.h"
-#include "c64u-network.h" // Include network header first to avoid Windows header conflicts
-#include "c64u-logging.h"
-#include "c64u-protocol.h"
-#include "c64u-source.h"
-#include "c64u-version.h"
+#include "c64-network.h" // Include network header first to avoid Windows header conflicts
+#include "c64-logging.h"
+#include "c64-protocol.h"
+#include "c64-source.h"
+#include "c64-version.h"
 
 // Logging control - define the global variable
-bool c64u_debug_logging = true;
+bool c64_debug_logging = true;
 
 OBS_DECLARE_MODULE()
 OBS_MODULE_USE_DEFAULT_LOCALE(PLUGIN_NAME, "en")
 
 bool obs_module_load(void)
 {
-    C64U_LOG_INFO("Loading %s", c64u_get_version_string());
-    C64U_LOG_INFO("Build info: %s", c64u_get_build_info());
+    C64_LOG_INFO("Loading %s", c64_get_version_string());
+    C64_LOG_INFO("Build info: %s", c64_get_build_info());
 
     // DEBUG: This will always be hit when the plugin loads
     // Module loading
 
-    struct obs_source_info c64u_info = {.id = "c64u_source",
-                                        .type = OBS_SOURCE_TYPE_INPUT,
-                                        .output_flags = OBS_SOURCE_VIDEO | OBS_SOURCE_AUDIO,
-                                        .get_name = c64u_get_name,
-                                        .create = c64u_create,
-                                        .destroy = c64u_destroy,
-                                        .update = c64u_update,
-                                        .get_defaults = c64u_defaults,
-                                        .video_render = c64u_render,
-                                        .get_properties = c64u_properties,
-                                        .get_width = c64u_get_width,
-                                        .get_height = c64u_get_height};
+    struct obs_source_info c64_info = {.id = "c64_source",
+                                       .type = OBS_SOURCE_TYPE_INPUT,
+                                       .output_flags = OBS_SOURCE_VIDEO | OBS_SOURCE_AUDIO,
+                                       .get_name = c64_get_name,
+                                       .create = c64_create,
+                                       .destroy = c64_destroy,
+                                       .update = c64_update,
+                                       .get_defaults = c64_defaults,
+                                       .video_render = c64_render,
+                                       .get_properties = c64_properties,
+                                       .get_width = c64_get_width,
+                                       .get_height = c64_get_height};
 
-    obs_register_source(&c64u_info);
-    C64U_LOG_INFO("C64U plugin loaded successfully");
+    obs_register_source(&c64_info);
+    C64_LOG_INFO("C64 Stream plugin loaded successfully");
     return true;
 }
 
 void obs_module_unload(void)
 {
-    C64U_LOG_INFO("Unloading C64U plugin");
-    c64u_cleanup_networking();
+    C64_LOG_INFO("Unloading C64 Stream plugin");
+    c64_cleanup_networking();
 }
