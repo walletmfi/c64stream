@@ -484,6 +484,98 @@ socket_t create_udp_socket(uint32_t port)
     return sock;
 }
 
+// Quick connectivity test with minimal timeout (for async retry tasks)
+bool c64u_test_connectivity_quick(const char *ip, uint32_t port)
+{
+    if (!ip || strlen(ip) == 0) {
+        return false;
+    }
+
+    socket_t sock = socket(AF_INET, SOCK_STREAM, 0);
+    if (sock == INVALID_SOCKET_VALUE) {
+        return false;
+    }
+
+    struct sockaddr_in addr;
+    memset(&addr, 0, sizeof(addr));
+    addr.sin_family = AF_INET;
+    addr.sin_port = htons(port);
+
+    if (inet_pton(AF_INET, ip, &addr.sin_addr) <= 0) {
+        close(sock);
+        return false;
+    }
+
+    // Set socket to non-blocking for timeout control
+#ifdef _WIN32
+    u_long non_blocking = 1;
+    if (ioctlsocket(sock, FIONBIO, &non_blocking) != 0) {
+        close(sock);
+        return false;
+    }
+#else
+    int flags = fcntl(sock, F_GETFL, 0);
+    if (flags == -1 || fcntl(sock, F_SETFL, flags | O_NONBLOCK) == -1) {
+        close(sock);
+        return false;
+    }
+#endif
+
+    // Attempt connection (will return immediately with EINPROGRESS/WSAEWOULDBLOCK)
+    int connect_result = connect(sock, (struct sockaddr *)&addr, sizeof(addr));
+    if (connect_result == 0) {
+        // Connected immediately
+        close(sock);
+        return true;
+    }
+
+    int error = c64u_get_socket_error();
+#ifdef _WIN32
+    if (error != WSAEWOULDBLOCK) {
+#else
+    if (error != EINPROGRESS) {
+#endif
+        close(sock);
+        return false;
+    }
+
+    // Only use fast timeout (50ms) for quick connectivity tests
+    fd_set write_fds;
+    FD_ZERO(&write_fds);
+    FD_SET(sock, &write_fds);
+
+    struct timeval timeout_quick;
+    timeout_quick.tv_sec = 0;
+    timeout_quick.tv_usec = 50000; // 50 milliseconds - very fast
+
+#ifdef _WIN32
+    int select_result = select(0, NULL, &write_fds, NULL, &timeout_quick);
+#else
+    int select_result = select(sock + 1, NULL, &write_fds, NULL, &timeout_quick);
+#endif
+
+    if (select_result <= 0) {
+        // Timeout or error
+        close(sock);
+        return false;
+    }
+
+    // Check if connection succeeded or failed
+    int sock_error;
+    socklen_t len = sizeof(sock_error);
+#ifdef _WIN32
+    if (getsockopt(sock, SOL_SOCKET, SO_ERROR, (char *)&sock_error, &len) != 0) {
+#else
+    if (getsockopt(sock, SOL_SOCKET, SO_ERROR, &sock_error, &len) != 0) {
+#endif
+        close(sock);
+        return false;
+    }
+
+    close(sock);
+    return (sock_error == 0);
+}
+
 socket_t create_tcp_socket(const char *ip, uint32_t port)
 {
     if (!ip || strlen(ip) == 0) {

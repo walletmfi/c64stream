@@ -44,9 +44,8 @@ static void c64u_async_retry_task(void *data)
         tcp_success = true; // c64u_start_streaming handles TCP commands internally
     } else {
         // Already streaming - test connectivity and send start commands (like 0.4.3)
-        socket_t test_sock = create_tcp_socket(context->ip_address, C64U_CONTROL_PORT);
-        if (test_sock != INVALID_SOCKET_VALUE) {
-            close(test_sock);                       // Just testing connectivity
+        // Use quick connectivity test (50ms timeout) instead of blocking TCP socket creation
+        if (c64u_test_connectivity_quick(context->ip_address, C64U_CONTROL_PORT)) {
             send_control_command(context, true, 0); // Video
             send_control_command(context, true, 1); // Audio
             tcp_success = true;
