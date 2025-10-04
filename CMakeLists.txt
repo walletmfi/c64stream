@@ -9,7 +9,7 @@ if(DEFINED ENV{GITHUB_EVENT_NAME} AND "$ENV{GITHUB_EVENT_NAME}" STREQUAL "pull_r
   string(REPLACE "." ";" version_parts "${_version}")
   list(GET version_parts 0 major)
   list(GET version_parts 1 minor)
-  
+
   if(DEFINED ENV{GITHUB_RUN_NUMBER})
     # Use development patch number with limited range to avoid potential issues
     math(EXPR run_mod "$ENV{GITHUB_RUN_NUMBER} % 1000")  # Limit to 0-999 range
@@ -56,9 +56,10 @@ include(helpers)
 
 add_library(${CMAKE_PROJECT_NAME} MODULE)
 
-# Update buildspec.json with authoritative version if it came from git tag (skip for PR builds)
-if(GIT_VERSION_TAG AND GIT_VERSION_TAG MATCHES "^v?([0-9]+\\.[0-9]+\\.[0-9]+)" AND NOT (DEFINED ENV{GITHUB_EVENT_NAME} AND "$ENV{GITHUB_EVENT_NAME}" STREQUAL "pull_request"))
-  # Update buildspec.json with the git tag version to keep it in sync
+# Update buildspec.json with authoritative version for consistent packaging
+# Always update for PR builds (development versions) and tagged releases
+if(AUTHORITATIVE_VERSION)
+  # Update buildspec.json with the calculated version to keep it in sync
   # Use sed to update only line 41 (the main project version, not dependency versions)
   execute_process(
     COMMAND sed -i "41s/\"version\": \"[^\"]*\"/\"version\": \"${AUTHORITATIVE_VERSION}\"/" "${CMAKE_SOURCE_DIR}/buildspec.json"
