@@ -68,7 +68,7 @@ jobs:
 
           plugin_name="$(jq -r '.name' buildspec.json)"
           plugin_display_name="$(jq -r '.displayName // empty' buildspec.json)"
-          
+
           # For PR builds, calculate the same development version that CMake uses
           if [[ "${GITHUB_EVENT_NAME}" == "pull_request" ]]; then
             # Match CMake logic: MAJOR.MINOR.(9000 + GITHUB_RUN_NUMBER)
@@ -76,7 +76,7 @@ jobs:
             IFS='.' read -r major minor patch <<< "${base_version}"
             if [[ -n "${GITHUB_RUN_NUMBER}" ]]; then
               run_mod=$((GITHUB_RUN_NUMBER % 1000))  # Limit to 0-999 range
-              dev_patch=$((900 + run_mod))  # Results in 900-1899 range  
+              dev_patch=$((900 + run_mod))  # Results in 900-1899 range
               plugin_version="${major}.${minor}.${dev_patch}"
             else
               plugin_version="${major}.${minor}.999"
@@ -175,6 +175,7 @@ jobs:
           notarize: ${{ fromJSON(needs.check-event.outputs.notarize) && fromJSON(steps.codesign.outputs.haveNotarizationUser) }}
           codesignUser: ${{ secrets.MACOS_NOTARIZATION_USERNAME }}
           codesignPass: ${{ secrets.MACOS_NOTARIZATION_PASSWORD }}
+          version: ${{ needs.check-event.outputs.pluginVersion }}
 
       - name: Upload Artifacts 📡
         uses: actions/upload-artifact@v4
@@ -243,6 +244,7 @@ jobs:
           target: x86_64
           config: ${{ needs.check-event.outputs.config }}
           package: ${{ fromJSON(needs.check-event.outputs.package) }}
+          version: ${{ needs.check-event.outputs.pluginVersion }}
 
       - name: Upload Source Tarball 🗜️
         uses: actions/upload-artifact@v4
@@ -308,6 +310,7 @@ jobs:
           target: x64
           config: ${{ needs.check-event.outputs.config }}
           package: ${{ fromJSON(needs.check-event.outputs.package) }}
+          version: ${{ needs.check-event.outputs.pluginVersion }}
 
       - name: Upload Artifacts 📡
         uses: actions/upload-artifact@v4

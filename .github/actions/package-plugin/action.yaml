@@ -44,6 +44,10 @@ inputs:
     description: Working directory for packaging
     required: false
     default: ${{ github.workspace }}
+  version:
+    description: Plugin version to use (overrides buildspec.json)
+    required: false
+    default: ''
 runs:
   using: composite
   steps:
@@ -57,6 +61,7 @@ runs:
         CODESIGN_TEAM: ${{ inputs.codesignTeam }}
         CODESIGN_IDENT_USER: ${{ inputs.codesignUser }}
         CODESIGN_IDENT_PASS: ${{ inputs.codesignPass }}
+        PLUGIN_VERSION_OVERRIDE: ${{ inputs.version }}
       run: |
         : Run macOS Packaging
 
@@ -83,6 +88,8 @@ runs:
       if: runner.os == 'Linux'
       shell: zsh --no-rcs --errexit --pipefail {0}
       working-directory: ${{ inputs.workingDirectory }}
+      env:
+        PLUGIN_VERSION_OVERRIDE: ${{ inputs.version }}
       run: |
         : Run Ubuntu Packaging
         package_args=(
@@ -98,6 +105,8 @@ runs:
     - name: Run Windows Packaging
       if: runner.os == 'Windows'
       shell: pwsh
+      env:
+        PLUGIN_VERSION_OVERRIDE: ${{ inputs.version }}
       run: |
         # Run Windows Packaging
         if ( $Env:RUNNER_DEBUG -ne $null ) {

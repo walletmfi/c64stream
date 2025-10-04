@@ -96,6 +96,11 @@ package() {
   local product_version
   read -r product_name product_version <<< \
     "$(jq -r '. | {name, version} | join(" ")' ${buildspec_file})"
+  
+  # Use version override if provided (for centralized version management)
+  if [[ -n "${PLUGIN_VERSION_OVERRIDE}" ]]; then
+    product_version="${PLUGIN_VERSION_OVERRIDE}"
+  fi
 
   local output_name="${product_name}-${product_version}-${host_os}-universal"
 

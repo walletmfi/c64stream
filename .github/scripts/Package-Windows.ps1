@@ -46,6 +46,11 @@ function Package {
     $BuildSpec = Get-Content -Path ${BuildSpecFile} -Raw | ConvertFrom-Json
     $ProductName = $BuildSpec.name
     $ProductVersion = $BuildSpec.version
+    
+    # Use version override if provided (for centralized version management)
+    if ($env:PLUGIN_VERSION_OVERRIDE) {
+        $ProductVersion = $env:PLUGIN_VERSION_OVERRIDE
+    }
 
     $OutputName = "${ProductName}-${ProductVersion}-windows-${Target}"
 
