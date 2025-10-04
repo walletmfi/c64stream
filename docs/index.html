@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Stream your Commodore 64 Ultimate directly to OBS Studio over network connection. Native integration, real-time streaming, perfect colors.">
+    <meta name="keywords" content="Commodore 64, C64, Ultimate 64, OBS Studio, streaming, retro gaming, plugin">
+    <meta name="author" content="Chris Gleissner">
+
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://chrisgleissner.github.io/c64u-obs/">
+    <meta property="og:title" content="C64 Ultimate OBS Plugin">
+    <meta property="og:description" content="Stream your Commodore 64 Ultimate directly to OBS Studio over network connection">
+    <meta property="og:image" content="https://chrisgleissner.github.io/c64u-obs/images/ObsMainScreen.png">
+
+    <!-- Twitter -->
+    <meta property="twitter:card" content="summary_large_image">
+    <meta property="twitter:url" content="https://chrisgleissner.github.io/c64u-obs/">
+    <meta property="twitter:title" content="C64 Ultimate OBS Plugin">
+    <meta property="twitter:description" content="Stream your Commodore 64 Ultimate directly to OBS Studio over network connection">
+    <meta property="twitter:image" content="https://chrisgleissner.github.io/c64u-obs/images/ObsMainScreen.png">
+
+    <title>C64 Ultimate OBS Plugin</title>
+    <link rel="manifest" href="manifest.json">
+    <link rel="icon" type="image/png" href="images/c64u-obs.png">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+
+        header {
+            text-align: center;
+            color: white;
+            margin-bottom: 3rem;
+        }
+
+        .logo {
+            width: 200px;
+            height: auto;
+            margin-bottom: 1rem;
+            border-radius: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+        }
+
+        h1 {
+            font-size: 3rem;
+            font-weight: 300;
+            margin-bottom: 1rem;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .subtitle {
+            font-size: 1.3rem;
+            opacity: 0.9;
+            max-width: 600px;
+            margin: 0 auto;
+        }
+
+        .main-content {
+            background: white;
+            border-radius: 20px;
+            padding: 3rem;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.1);
+            margin-bottom: 2rem;
+        }
+
+        .screenshot {
+            width: 100%;
+            max-width: 800px;
+            height: auto;
+            border-radius: 10px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            margin: 2rem 0;
+            display: block;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        .features {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 2rem;
+            margin: 3rem 0;
+        }
+
+        .feature {
+            background: #f8f9fa;
+            padding: 2rem;
+            border-radius: 15px;
+            border-left: 4px solid #667eea;
+        }
+
+        .feature h3 {
+            color: #333;
+            margin-bottom: 1rem;
+            font-size: 1.2rem;
+        }
+
+        .feature p {
+            color: #666;
+            line-height: 1.5;
+        }
+
+        .cta-section {
+            text-align: center;
+            margin: 3rem 0;
+        }
+
+        .btn {
+            display: inline-block;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            text-decoration: none;
+            padding: 1rem 2rem;
+            border-radius: 50px;
+            font-weight: 600;
+            font-size: 1.1rem;
+            margin: 0.5rem;
+            transition: all 0.3s ease;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(0,0,0,0.3);
+        }
+
+        .btn-secondary {
+            background: linear-gradient(135deg, #42a5f5 0%, #478ed1 100%);
+        }
+
+        footer {
+            text-align: center;
+            color: white;
+            opacity: 0.8;
+            margin-top: 2rem;
+            padding: 2rem 0;
+        }
+
+        footer a {
+            color: white;
+            text-decoration: none;
+        }
+
+        footer a:hover {
+            text-decoration: underline;
+        }
+
+        @media (max-width: 768px) {
+            h1 {
+                font-size: 2rem;
+            }
+
+            .subtitle {
+                font-size: 1.1rem;
+            }
+
+            .main-content {
+                padding: 2rem;
+            }
+
+            .container {
+                padding: 1rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <img src="images/c64u-obs.png" alt="C64 Ultimate OBS Plugin Logo" class="logo">
+            <h1>C64 Ultimate OBS Plugin</h1>
+            <p class="subtitle">Stream your Commodore 64 Ultimate to OBS Studio</p>
+        </header>
+
+        <div class="main-content">
+            <img src="images/ObsMainScreen.png" alt="C64 Ultimate OBS Plugin in action" class="screenshot">
+
+            <div class="features">
+                <div class="feature">
+                    <h3>🎥 Native OBS Integration</h3>
+                    <p>Seamless integration as a standard video source in OBS Studio with real-time streaming capabilities.</p>
+                </div>
+                <div class="feature">
+                    <h3>🌐 Network Streaming</h3>
+                    <p>Direct connection to Ultimate's network interface - no capture cards or composite video needed.</p>
+                </div>
+                <div class="feature">
+                    <h3>🎨 Perfect Colors</h3>
+                    <p>Automatic VIC-II color space conversion ensures authentic Commodore 64 video reproduction.</p>
+                </div>
+                <div class="feature">
+                    <h3>🔊 Synchronized Audio</h3>
+                    <p>16-bit stereo audio streaming at ~48kHz perfectly synchronized with video.</p>
+                </div>
+                <div class="feature">
+                    <h3>💾 Built-in Recording</h3>
+                    <p>Record BMP frames, AVI video, and WAV audio files for archival and debugging.</p>
+                </div>
+                <div class="feature">
+                    <h3>⚡ Cross Platform</h3>
+                    <p>Supports Windows, macOS, and Linux with easy installation packages for each platform.</p>
+                </div>
+            </div>
+
+            <div class="cta-section">
+                <h2 style="margin-bottom: 2rem; color: #333;">Ready to Start Streaming?</h2>
+                <a href="https://github.com/chrisgleissner/c64u-obs/releases" class="btn">Download Latest Release</a>
+                <a href="https://github.com/chrisgleissner/c64u-obs" class="btn btn-secondary">View on GitHub</a>
+            </div>
+
+            <div style="background: #e8f4fd; padding: 2rem; border-radius: 15px; margin-top: 3rem; border-left: 4px solid #42a5f5;">
+                <h3 style="color: #1976d2; margin-bottom: 1rem;">Quick Start</h3>
+                <p style="color: #555; line-height: 1.6;">
+                    1. Download the plugin for your platform from the releases page<br>
+                    2. Install following the platform-specific instructions<br>
+                    3. Add "C64U" source in OBS Studio<br>
+                    4. Configure your Ultimate device's IP address<br>
+                    5. Start streaming your C64!
+                </p>
+                <p style="margin-top: 1rem;">
+                    <a href="https://github.com/chrisgleissner/c64u-obs/blob/main/README.md" style="color: #1976d2; text-decoration: none; font-weight: 600;">📖 Read Full Documentation →</a>
+                </p>
+            </div>
+        </div>
+
+        <footer>
+            <p>
+                Created by <a href="https://github.com/chrisgleissner">Chris Gleissner</a> •
+                <a href="https://github.com/chrisgleissner/c64u-obs">Source Code</a> •
+                <a href="https://github.com/chrisgleissner/c64u-obs/issues">Report Issues</a>
+            </p>
+        </footer>
+    </div>
+</body>
+</html>

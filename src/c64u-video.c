@@ -12,7 +12,6 @@
 #include "c64u-record.h"
 
 #ifdef _WIN32
-#include <windows.h>
 #include <timeapi.h>
 #pragma comment(lib, "winmm.lib") // For timeBeginPeriod/timeEndPeriod
 #endif

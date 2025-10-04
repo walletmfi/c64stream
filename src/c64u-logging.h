@@ -6,6 +6,16 @@
 #include <stdint.h>
 
 #ifdef _WIN32
+// Prevent winsock.h inclusion to avoid conflicts with winsock2.h
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef _WINSOCKAPI_
+#define _WINSOCKAPI_ // Prevent winsock.h from being included
+#endif
+// Include winsock2.h before windows.h to prevent warnings
+#include <winsock2.h>
+#include <ws2tcpip.h>
 #include <windows.h>
 
 // Windows compatibility shims

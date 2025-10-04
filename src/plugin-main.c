@@ -18,9 +18,9 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #include <obs-module.h>
 #include "plugin-support.h"
+#include "c64u-network.h" // Include network header first to avoid Windows header conflicts
 #include "c64u-logging.h"
 #include "c64u-protocol.h"
-#include "c64u-network.h"
 #include "c64u-source.h"
 #include "c64u-version.h"
 
