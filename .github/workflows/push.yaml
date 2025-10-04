@@ -70,6 +70,8 @@ jobs:
 
           root_dir="$(pwd)"
           commit_hash="${GITHUB_SHA:0:9}"
+          # Use the version from the build workflow (ensures consistency with artifacts)
+          version="${{ needs.build-project.outputs.pluginVersion }}"
 
           variants=(
             'windows-x64;zip|exe'
@@ -81,7 +83,8 @@ jobs:
           for variant_data in "${variants[@]}"; do
             IFS=';' read -r variant suffix <<< "${variant_data}"
 
-            candidates=(*-${variant}-${commit_hash}/@(*|*-dbgsym).@(${suffix}))
+            # Look for artifacts with the actual version number from the tag
+            candidates=(*-${version}-${variant}-${commit_hash}/@(*|*-dbgsym).@(${suffix}))
 
             for candidate in "${candidates[@]}"; do
               mv "${candidate}" "${root_dir}"

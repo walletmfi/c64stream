@@ -5,6 +5,9 @@ on:
       pluginName:
         description: Project name detected by parsing build spec file
         value: ${{ jobs.check-event.outputs.pluginName }}
+      pluginVersion:
+        description: Project version detected by parsing build spec file
+        value: ${{ jobs.check-event.outputs.pluginVersion }}
 jobs:
   check-event:
     name: Check GitHub Event Data 🔎
@@ -19,6 +22,7 @@ jobs:
       config: ${{ steps.setup.outputs.config }}
       commitHash: ${{ steps.setup.outputs.commitHash }}
       pluginName: ${{ steps.setup.outputs.pluginName }}
+      pluginVersion: ${{ steps.setup.outputs.pluginVersion }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -62,14 +66,31 @@ jobs:
           done
           echo "commitHash=${GITHUB_SHA:0:9}" >> $GITHUB_OUTPUT
 
-          plugin_name="$(grep 'name' buildspec.json | sed -E -e 's/^.+"name":[^"]+"(.+)",?$/\1/g')"
-          plugin_display_name="$(grep 'displayName' buildspec.json | sed -E -e 's/^.+"displayName":[^"]+"(.+)",?$/\1/g' || echo "")"
+          plugin_name="$(jq -r '.name' buildspec.json)"
+          plugin_display_name="$(jq -r '.displayName // empty' buildspec.json)"
+
+          # For PR builds, calculate the same development version that CMake uses
+          if [[ "${GITHUB_EVENT_NAME}" == "pull_request" ]]; then
+            # Match CMake logic: MAJOR.MINOR.(9000 + GITHUB_RUN_NUMBER)
+            base_version="$(jq -r '.version' buildspec.json)"
+            IFS='.' read -r major minor patch <<< "${base_version}"
+            if [[ -n "${GITHUB_RUN_NUMBER}" ]]; then
+              run_mod=$((GITHUB_RUN_NUMBER % 1000))  # Limit to 0-999 range
+              dev_patch=$((900 + run_mod))  # Results in 900-1899 range
+              plugin_version="${major}.${minor}.${dev_patch}"
+            else
+              plugin_version="${major}.${minor}.999"
+            fi
+          else
+            plugin_version="$(jq -r '.version' buildspec.json)"
+          fi
 
           if [[ "${plugin_display_name}" ]]; then
             echo "pluginName=${plugin_display_name}" >> $GITHUB_OUTPUT
           else
             echo "pluginName=${plugin_name}" >> $GITHUB_OUTPUT
           fi
+          echo "pluginVersion=${plugin_version}" >> $GITHUB_OUTPUT
 
   macos-build:
     name: Build for macOS 🍏
@@ -105,12 +126,11 @@ jobs:
           print '::endgroup::'
 
           local product_name
-          local product_version
-          read -r product_name product_version <<< \
-            "$(jq -r '. | {name, version} | join(" ")' buildspec.json)"
+          read -r product_name <<< \
+            "$(jq -r '.name' buildspec.json)"
 
           print "pluginName=${product_name}" >> $GITHUB_OUTPUT
-          print "pluginVersion=${product_version}" >> $GITHUB_OUTPUT
+          print "pluginVersion=${{ needs.check-event.outputs.pluginVersion }}" >> $GITHUB_OUTPUT
 
       - uses: actions/cache/restore@v4
         id: ccache-cache
@@ -155,6 +175,7 @@ jobs:
           notarize: ${{ fromJSON(needs.check-event.outputs.notarize) && fromJSON(steps.codesign.outputs.haveNotarizationUser) }}
           codesignUser: ${{ secrets.MACOS_NOTARIZATION_USERNAME }}
           codesignPass: ${{ secrets.MACOS_NOTARIZATION_PASSWORD }}
+          version: ${{ needs.check-event.outputs.pluginVersion }}
 
       - name: Upload Artifacts 📡
         uses: actions/upload-artifact@v4
@@ -197,11 +218,11 @@ jobs:
           : Set Up Environment 🔧
           if [[ "${RUNNER_DEBUG}" ]]; then set -x; fi
 
-          read -r product_name product_version <<< \
-            "$(jq -r '. | {name, version} | join(" ")' buildspec.json)"
+          read -r product_name <<< \
+            "$(jq -r '.name' buildspec.json)"
 
           echo "pluginName=${product_name}" >> $GITHUB_OUTPUT
-          echo "pluginVersion=${product_version}" >> $GITHUB_OUTPUT
+          echo "pluginVersion=${{ needs.check-event.outputs.pluginVersion }}" >> $GITHUB_OUTPUT
 
       - uses: actions/cache/restore@v4
         id: ccache-cache
@@ -223,6 +244,7 @@ jobs:
           target: x86_64
           config: ${{ needs.check-event.outputs.config }}
           package: ${{ fromJSON(needs.check-event.outputs.package) }}
+          version: ${{ needs.check-event.outputs.pluginVersion }}
 
       - name: Upload Source Tarball 🗜️
         uses: actions/upload-artifact@v4
@@ -272,10 +294,9 @@ jobs:
 
           $BuildSpec = Get-Content -Path buildspec.json -Raw | ConvertFrom-Json
           $ProductName = $BuildSpec.name
-          $ProductVersion = $BuildSpec.version
 
           "pluginName=${ProductName}" >> $env:GITHUB_OUTPUT
-          "pluginVersion=${ProductVersion}" >> $env:GITHUB_OUTPUT
+          "pluginVersion=${{ needs.check-event.outputs.pluginVersion }}" >> $env:GITHUB_OUTPUT
 
       - name: Build Plugin 🧱
         uses: ./.github/actions/build-plugin
@@ -289,6 +310,7 @@ jobs:
           target: x64
           config: ${{ needs.check-event.outputs.config }}
           package: ${{ fromJSON(needs.check-event.outputs.package) }}
+          version: ${{ needs.check-event.outputs.pluginVersion }}
 
       - name: Upload Artifacts 📡
         uses: actions/upload-artifact@v4

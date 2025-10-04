@@ -146,6 +146,11 @@ ${_usage_host:-}"
   local product_version
   read -r product_name product_version <<< \
     "$(jq -r '. | {name, version} | join(" ")' ${buildspec_file})"
+  
+  # Use version override if provided (for centralized version management)
+  if [[ -n "${PLUGIN_VERSION_OVERRIDE}" ]]; then
+    product_version="${PLUGIN_VERSION_OVERRIDE}"
+  fi
 
   local -a cmake_args=()
   if (( _loglevel > 1 )) cmake_args+=(--verbose)
