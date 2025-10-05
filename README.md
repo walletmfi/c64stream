@@ -125,34 +125,6 @@ The plugin supports both **hostnames** and **IP addresses** for the C64 Ultimate
 - **Direct IP:** `192.168.1.64` - Standard IPv4 address format
 - **Fallback:** `0.0.0.0` - Accept streams from any C64 Ultimate (no automatic control)
 
-**DNS Resolution:**
-
-The plugin offers hostname resolution that works reliably on Linux and macOS where system DNS may fail for local device names:
-
-1. **System DNS First:** Tries standard system DNS resolution (works for internet hostnames and properly configured networks)
-2. **FQDN Resolution:** Attempts resolution with trailing dot (e.g., `c64u.` for some network configurations)
-3. **Direct DNS Queries:** On Linux/macOS, bypasses systemd-resolved by querying DNS servers directly:
-   - Uses configured **DNS Server IP** (default: `192.168.1.1`)
-   - Falls back to common router IPs: `192.168.0.1`, `10.0.0.1`, `172.16.0.1`
-4. **Cross-Platform:** Windows uses system DNS (which works reliably), Linux/macOS use enhanced resolution
-
-**DNS Server Configuration:**
-- **Default:** `192.168.1.1` (most common home router DNS server)
-- **Custom:** Set to your router's IP or a specific DNS server (e.g., `192.168.0.1`, `10.0.0.1`)
-- **Automatic Fallback:** If the configured DNS server fails, tries other common router IPs
-- **Why This Helps:** Solves Linux/macOS issues where `c64u` hostname doesn't resolve through system DNS but works via direct router queries
-
-**Examples:**
-- `c64u` → resolves to `192.168.1.64` via enhanced DNS resolution
-- `192.168.1.64` → used directly as IP address
-- `retro-basement.local` → resolves via mDNS/Bonjour or direct DNS
-- `ultimate64` → tries system DNS first, then direct router DNS queries
-
-**Platform-Specific Behavior:**
-- **Windows:** Uses system DNS (typically works without issues)
-- **Linux/macOS:** Uses enhanced DNS resolution to bypass systemd-resolved limitations
-- **All Platforms:** Support both hostname and IP address formats seamlessly
-
 ## Recording Features 📹
 
 The plugin includes built-in recording capabilities that work independently of OBS Studio's recording system, letting you save raw C64 Ultimate data streams directly to disk.
