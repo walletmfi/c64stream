@@ -15,7 +15,7 @@ The plugin connects directly to the Ultimate's network interface, eliminating th
 - Native OBS integration as a standard video source
 - Real-time video streaming (PAL 384x272, NTSC 384x240) with automatic adjustment to 50 or 60 Hertz
 - Synchronized audio streaming (16-bit stereo, ~48kHz)
-- Network-based connection (UDP/TCP) with autimatic streaming start and reconnect
+- Network-based connection (UDP/TCP) with automatic start of streaming
 - Automatic VIC-II color space conversion
 - Built-in recording capabilities (BMP frames, AVI video, WAV audio)
 
