@@ -157,15 +157,6 @@ All recording files are organized into session folders with timestamps:
     └── ...
 ```
 
-### Recording Configuration
-
-- **Output Folder Defaults:**
-  - **Windows:** `%USERPROFILE%\Documents\obs-studio\c64stream\recordings`
-  - **macOS:** `~/Documents/obs-studio/c64stream/recordings`
-  - **Linux:** `~/Documents/obs-studio/c64stream/recordings`
-- **Automatic Session Management:** New session folder created each time recording is enabled
-- **Cross-Platform Compatibility:** Works on Windows, macOS, and Linux
-
 ### Usage Notes
 
 - Recording operates independently of OBS Studio's built-in recording
