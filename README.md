@@ -67,13 +67,22 @@ See the [OBS Plugins Guide](https://obsproject.com/kb/plugins-guide).
 
 ### Configuration ⚙️
 
-![C64 Stream Configuration](./docs/images/properties.png "C64 Stream Configuration")
-
 **Getting Your C64 on Stream:**
 
-1. **Add Source:** In OBS, create a new source and select "C64 Stream" from the available types
+1. **Add Source:** In OBS, click the "+" icon in the Sources tab. A window of all sources appears. Select "C64 Source":
+
+   <img src="./docs/images/select-plugin.png" alt="Select Plugin" title="Select C64 Stream Plugin" width="250"/>
+
+A new window opens. Keep the default settings and click "OK":
+
+   <img src="./docs/images/create-source.png" alt="Create Source" title="Create C64 Stream Source" width="250"/>
+
 2. **Open Properties:** Select the "C64 Stream" source in your sources list, then click the "Properties" button to open the configuration dialog
+
+![C64 Stream Configuration](./docs/images/properties.png "C64 Stream Configuration")
+
 3. **Debug Logging:** Enable detailed logging for debugging connection issues (optional)
+
 4. **Configure Network Settings:**
    - **DNS Server IP:** IP address of DNS server for resolving device hostnames (default: `192.168.1.1` for most home routers). Used when the C64 Ultimate Host is a hostname rather than an IP address.
    - **C64 Ultimate Host:** Enter your Ultimate device's hostname (default: `c64u`) or IP address to enable automatic streaming control from OBS (recommended for convenience), or set to `0.0.0.0` to accept streams from any C64 Ultimate on your network (requires manual control from the device)
