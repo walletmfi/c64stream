@@ -1,4 +1,3 @@
-
 # C64 Stream
 
 Bridge your Commodore 64 Ultimate directly to [OBS Studio](https://obsproject.com/) for seamless streaming and recording over your network connection.
@@ -67,8 +66,6 @@ See the [OBS Plugins Guide](https://obsproject.com/kb/plugins-guide).
 
 ### Configuration ⚙️
 
-**Getting Your C64 on Stream:**
-
 1. **Add Source:** In OBS, click the "+" icon in the Sources tab. A window of all sources appears. Select "C64 Source":
 
    <img src="./docs/images/select-plugin.png" alt="Select Plugin" title="Select C64 Stream Plugin" width="250"/>
@@ -93,14 +90,10 @@ A new window opens. Keep the default settings and click "OK":
 7. **Recording Options (Optional):**
    - **Save BMP Frames:** Enable to save individual frames as BMP files (useful for debugging, impacts performance)
    - **Record AVI + WAV:** Enable to record uncompressed video and audio files (high disk usage)
-   - **Output Folder:** Choose where recording files are saved. Default locations by OS:
-     - #### Recording Directory
-
-The plugin automatically creates recordings in platform-specific directories:
-
-  - **Windows:** `%USERPROFILE%\Documents\obs-studio\c64stream\recordings`
-     - **macOS:** `~/Documents/obs-studio/c64stream/recordings`
-     - **Linux:** `~/Documents/obs-studio/c64stream/recordings`
+   - **Recording Directory:** Choose where recording files are saved. Default locations by OS:
+    - **Windows:** `%USERPROFILE%\Documents\obs-studio\c64stream\recordings`
+    - **macOS:** `~/Documents/obs-studio/c64stream/recordings`
+    - **Linux:** `~/Documents/obs-studio/c64stream/recordings`
 8. **Apply Settings:** Click "OK" to save your configuration
 
 Once configured, live video and audio streams from the C64 Ultimate will be available in OBS Studio.
