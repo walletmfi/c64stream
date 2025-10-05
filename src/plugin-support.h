@@ -1,6 +1,6 @@
 /*
-Plugin Name
-Copyright (C) <Year> <Developer> <Email Address>
+C64 Stream Plugin for OBS
+Copyright (C) 2025 Chris Gleissner
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
