@@ -90,10 +90,10 @@ A new window opens. Keep the default settings and click "OK":
 7. **Recording Options (Optional):**
    - **Save BMP Frames:** Enable to save individual frames as BMP files (useful for debugging, impacts performance)
    - **Record AVI + WAV:** Enable to record uncompressed video and audio files (high disk usage)
-   - **Recording Directory:** Choose where recording files are saved. Default locations by OS:
-    - **Windows:** `%USERPROFILE%\Documents\obs-studio\c64stream\recordings`
-    - **macOS:** `~/Documents/obs-studio/c64stream/recordings`
-    - **Linux:** `~/Documents/obs-studio/c64stream/recordings`
+   - **Output Folder:** Choose where recording files are saved. Default locations by OS:
+     - **Windows:** `%USERPROFILE%\Documents\obs-studio\c64stream\recordings`
+     - **macOS:** `~/Documents/obs-studio/c64stream/recordings`
+     - **Linux:** `~/Documents/obs-studio/c64stream/recordings`
 8. **Apply Settings:** Click "OK" to save your configuration
 
 Once configured, live video and audio streams from the C64 Ultimate will be available in OBS Studio.
