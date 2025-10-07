@@ -9,9 +9,7 @@
 
 obs_properties_t *c64_create_properties(void *data)
 {
-    // C64S properties setup
     UNUSED_PARAMETER(data);
-
     obs_properties_t *props = obs_properties_create();
 
     // Plugin Information Group (at the top)

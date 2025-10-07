@@ -104,8 +104,8 @@ static void audio_rb_push(struct audio_ring_buffer *rb, const uint8_t *data, siz
     atomic_store_explicit(&rb->head, next, memory_order_release);
 }
 
-// Pop the latest video packet within active slots
-static int video_rb_pop_latest(struct video_ring_buffer *rb, struct packet_slot **out)
+// Pop the oldest video packet (FIFO order) - essential for proper frame assembly
+static int video_rb_pop_oldest(struct video_ring_buffer *rb, struct packet_slot **out)
 {
     if (!rb || !out) {
         return 0;
@@ -113,21 +113,19 @@ static int video_rb_pop_latest(struct video_ring_buffer *rb, struct packet_slot 
 
     size_t head = atomic_load_explicit(&rb->head, memory_order_acquire);
     size_t tail = atomic_load_explicit(&rb->tail, memory_order_acquire);
-    size_t count = (head >= tail) ? (head - tail) : (rb->max_capacity - tail + head);
 
-    if (count == 0) {
+    if (head == tail) {
         // No packets available
         return 0;
     }
 
-    size_t last = (head == 0) ? rb->max_capacity - 1 : head - 1;
-    *out = &rb->slots[last];
-    atomic_store_explicit(&rb->tail, head, memory_order_release);
+    *out = &rb->slots[tail];
+    atomic_store_explicit(&rb->tail, (tail + 1) % rb->max_capacity, memory_order_release);
     return 1;
 }
 
-// Pop the latest audio packet within active slots
-static int audio_rb_pop_latest(struct audio_ring_buffer *rb, struct packet_slot **out)
+// Pop the oldest audio packet (FIFO order)
+static int audio_rb_pop_oldest(struct audio_ring_buffer *rb, struct packet_slot **out)
 {
     if (!rb || !out) {
         return 0;
@@ -135,16 +133,14 @@ static int audio_rb_pop_latest(struct audio_ring_buffer *rb, struct packet_slot 
 
     size_t head = atomic_load_explicit(&rb->head, memory_order_acquire);
     size_t tail = atomic_load_explicit(&rb->tail, memory_order_acquire);
-    size_t count = (head >= tail) ? (head - tail) : (rb->max_capacity - tail + head);
 
-    if (count == 0) {
+    if (head == tail) {
         // No packets available
         return 0;
     }
 
-    size_t last = (head == 0) ? rb->max_capacity - 1 : head - 1;
-    *out = &rb->slots[last];
-    atomic_store_explicit(&rb->tail, head, memory_order_release);
+    *out = &rb->slots[tail];
+    atomic_store_explicit(&rb->tail, (tail + 1) % rb->max_capacity, memory_order_release);
     return 1;
 }
 
@@ -284,8 +280,8 @@ int c64_network_buffer_pop(struct c64_network_buffer *buf, const uint8_t **video
 
     struct packet_slot *v, *a;
 
-    // Try to get video packet (required)
-    if (!video_rb_pop_latest(&buf->video, &v)) {
+    // Try to get video packet (required) - use FIFO order for proper frame assembly
+    if (!video_rb_pop_oldest(&buf->video, &v)) {
         static int no_video_count = 0;
         if ((no_video_count++ % 1000) == 0) {
             printf("[DEBUG] Network buffer pop: no video packets available (count: %d)\n", no_video_count);
@@ -294,7 +290,7 @@ int c64_network_buffer_pop(struct c64_network_buffer *buf, const uint8_t **video
     }
 
     // Try to get audio packet (optional - may not always be available)
-    bool has_audio = audio_rb_pop_latest(&buf->audio, &a);
+    bool has_audio = audio_rb_pop_oldest(&buf->audio, &a);
 
     static int pop_count = 0;
     if ((pop_count++ % 100) == 0) {

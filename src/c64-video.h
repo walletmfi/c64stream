@@ -26,12 +26,6 @@ bool c64_is_frame_timeout(struct frame_assembly *frame);
 void c64_swap_frame_buffers(struct c64_source *context);
 void c64_assemble_frame_to_buffer(struct c64_source *context, struct frame_assembly *frame);
 
-// DEPRECATED: Legacy delay queue functions (replaced by network buffer)
-void c64_init_delay_queue(struct c64_source *context);                                                           // STUB
-bool c64_enqueue_delayed_frame(struct c64_source *context, struct frame_assembly *frame, uint16_t sequence_num); // STUB
-bool c64_dequeue_delayed_frame(struct c64_source *context);                                                      // STUB
-void c64_clear_delay_queue(struct c64_source *context);                                                          // STUB
-
 // Performance optimization functions
 void c64_process_video_statistics_batch(struct c64_source *context, uint64_t current_time);
 void c64_process_audio_statistics_batch(struct c64_source *context, uint64_t current_time);

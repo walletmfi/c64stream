@@ -68,9 +68,6 @@ void *audio_thread_func(void *data)
         if (context->network_buffer) {
             c64_network_buffer_push_audio(context->network_buffer, packet, received, audio_now);
         }
-
-        // Note: Audio output now happens in c64_render() using buffered packets
-        // This eliminates immediate processing and allows synchronized audio/video output
     }
 
     C64_LOG_DEBUG("Audio thread stopped for C64S source '%s'", obs_source_get_name(context->source));

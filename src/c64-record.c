@@ -170,7 +170,6 @@ static void write_avi_header(FILE *file, uint32_t width, uint32_t height, double
 static void update_avi_header(FILE *file, uint32_t frame_count, uint32_t audio_samples_written)
 {
     UNUSED_PARAMETER(audio_samples_written);
-
     if (!file)
         return;
 
@@ -583,14 +582,10 @@ void c64_record_audio_data(struct c64_source *context, const uint8_t *audio_data
         return;
     }
 
-    // Write audio data to separate WAV file (preserve original behavior)
     size_t wav_written = fwrite(audio_data, 1, data_size, context->audio_file);
 
-    // Note: Audio is only written to separate WAV file, not to AVI (video-only AVI)
-
     if (wav_written == data_size) {
-        context->recorded_audio_samples += (uint32_t)(data_size / 4); // 16-bit stereo = 4 bytes per sample
-        // Note: No AVI header update needed since audio is not in AVI file
+        context->recorded_audio_samples += (uint32_t)(data_size / 4);
     } else {
         C64_LOG_WARNING("Failed to write audio data to WAV recording");
     }

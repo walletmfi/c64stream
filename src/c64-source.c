@@ -5,14 +5,14 @@
 #include <string.h>
 #include <inttypes.h>
 #include <pthread.h>
-#include "c64-network.h" // Include network header first to avoid Windows header conflicts
+#include "c64-network.h"
 #include "c64-network-buffer.h"
 
 #include "c64-logging.h"
 #include "c64-source.h"
 
 // Forward declarations
-// (Network buffer processing handled by dedicated processor thread)
+
 #include "c64-types.h"
 #include "c64-protocol.h"
 #include "c64-video.h"
@@ -43,7 +43,7 @@ static void c64_async_retry_task(void *data)
     bool tcp_success = false;
 
     if (!context->streaming) {
-        // Not streaming - need to create UDP sockets and threads (like 0.4.3)
+
         c64_start_streaming(context);
         tcp_success = true; // c64_start_streaming handles TCP commands internally
     } else {
@@ -328,12 +328,7 @@ void c64_destroy(void *data)
         context->streaming = false;
         context->thread_active = false;
 
-        // Note: No TCP calls in destroy - async system handles cleanup
-
-        // Close sockets
         close_and_reset_sockets(context);
-
-        // Wait for threads to finish
         if (context->video_thread_active) {
             pthread_join(context->video_thread, NULL);
             context->video_thread_active = false;
@@ -572,12 +567,7 @@ void c64_stop_streaming(struct c64_source *context)
     context->streaming = false;
     context->thread_active = false;
 
-    // Note: No TCP stop commands in OBS callback thread - async system handles cleanup
-
-    // Close sockets to wake up threads
     close_and_reset_sockets(context);
-
-    // Wait for threads to finish
     if (context->video_thread_active && pthread_join(context->video_thread, NULL) != 0) {
         C64_LOG_WARNING("Failed to join video thread");
     }
@@ -640,46 +630,32 @@ void c64_render(void *data, gs_effect_t *effect)
         context->logo_load_attempted = true;
     }
 
-    // Check if we should show logo:
-    // 1. Not streaming, OR
-    // 2. No frames ready, OR
-    // 3. No frame buffer, OR
-    // 4. Frames have timed out (no new frames for timeout period)
     uint64_t now = os_gettime_ns();
     bool frames_timed_out = false;
     bool needs_initial_connection = false;
 
     if (context->last_frame_time > 0) {
-        // We have received frames before - check for timeout regardless of frame_ready state
         uint64_t frame_age = now - context->last_frame_time;
         frames_timed_out = (frame_age > C64_FRAME_TIMEOUT_NS);
     } else {
-        // No frames received yet - need initial connection (regardless of streaming flag)
-        // This handles both: OBS started first, and failed connection attempts
         needs_initial_connection = true;
     }
 
-    // Simple retry detection: render thread detects need, delegates to async task
     if (frames_timed_out || needs_initial_connection) {
         static uint64_t last_retry_time = 0;
         uint64_t time_since_last_retry = now - last_retry_time;
 
-        // Simple timing: 1 second between retries, no complex backoff needed
-        // The async task will handle the actual TCP timeouts and failures
-        bool should_retry = (time_since_last_retry >= 1000000000ULL) &&  // 1 second between retries
-                            !context->retry_in_progress &&               // Don't overlap retries
-                            strcmp(context->ip_address, "0.0.0.0") != 0; // Valid IP configured
+        bool should_retry = (time_since_last_retry >= 1000000000ULL) && !context->retry_in_progress &&
+                            strcmp(context->ip_address, "0.0.0.0") != 0;
 
         if (should_retry) {
             last_retry_time = now;
             context->retry_in_progress = true;
 
-            // Just delegate to async task - keep render thread fast
             C64_LOG_INFO("� Connection needed - delegating to async task");
             obs_queue_task(OBS_TASK_UI, c64_async_retry_task, context, false);
         }
     } else if (context->frame_ready && context->last_frame_time > 0) {
-        // Frames are arriving normally - reset retry counters
         context->retry_in_progress = false;
         context->retry_count = 0;
         context->consecutive_failures = 0;
@@ -720,11 +696,6 @@ void c64_render(void *data, gs_effect_t *effect)
         context->frame_ready = false;
     }
 
-    // REMOVED: Self-healing TCP calls from render thread (causes UI blocking)
-    // Self-healing will be handled by a separate async mechanism
-    // For now, just detect timeout conditions without making network calls
-
-    // Network buffer processing is handled by video/audio threads
     // Render function just displays already-assembled frames
 
     if (should_show_logo) {
@@ -848,207 +819,6 @@ void c64_render(void *data, gs_effect_t *effect)
             pthread_mutex_unlock(&context->frame_mutex);
         }
     }
-}
-
-// Helper function to process video packets from network buffer
-static void c64_process_buffered_video_packet(struct c64_source *context, const uint8_t *packet_data,
-                                              size_t packet_size, uint64_t timestamp_us)
-{
-    UNUSED_PARAMETER(timestamp_us); // Timestamp used for synchronization in buffer system
-
-    C64_LOG_DEBUG("🎬 Processing buffered video packet (size=%zu)", packet_size);
-
-    if (!context || !packet_data || packet_size != C64_VIDEO_PACKET_SIZE) {
-        C64_LOG_DEBUG("❌ Invalid packet: context=%p, packet_data=%p, size=%zu (expected %d)", context,
-                      (void *)packet_data, packet_size, C64_VIDEO_PACKET_SIZE);
-        return;
-    }
-
-    // Parse video packet header
-    uint16_t frame_num = *(uint16_t *)(packet_data + 2);
-    uint16_t line_num = *(uint16_t *)(packet_data + 4);
-    uint8_t lines_per_packet = packet_data[8];
-
-    bool last_packet = (line_num & 0x8000) != 0;
-    line_num &= 0x7FFF;
-
-    static uint16_t last_logged_frame = 0;
-    if (frame_num != last_logged_frame) {
-        C64_LOG_DEBUG("🎬 New frame %u, line %u, lines_per_packet=%u, last_packet=%d", frame_num, line_num,
-                      lines_per_packet, last_packet);
-        last_logged_frame = frame_num;
-    }
-
-    // Always log packet details to understand the pattern
-    uint16_t packet_index = line_num / lines_per_packet;
-    C64_LOG_DEBUG("📦 Packet: frame=%u, packet_idx=%u, line=%u, size=%zu, lines_per_packet=%u", frame_num, packet_index,
-                  line_num, packet_size, lines_per_packet);
-
-    // Update statistics
-    context->video_packets_received++;
-    context->video_bytes_received += packet_size;
-
-    // Simple frame assembly - assemble directly to back buffer when packet completes a frame
-    if (pthread_mutex_lock(&context->assembly_mutex) == 0) {
-        bool should_init_frame = false;
-
-        // Check if this is a new frame
-        if (context->current_frame.frame_num != frame_num) {
-            // Strategy: Only switch frames if:
-            // 1. No current frame (frame_num == 0)
-            // 2. Current frame is complete
-            // 3. Current frame has timed out (200ms with no new packets)
-
-            uint64_t frame_age = os_gettime_ns() - context->current_frame.start_time;
-            bool frame_timed_out = frame_age > 200000000ULL; // 200ms timeout
-            bool no_current_frame = (context->current_frame.frame_num == 0);
-            bool current_frame_complete = c64_is_frame_complete(&context->current_frame);
-
-            if (no_current_frame || current_frame_complete || frame_timed_out) {
-                should_init_frame = true;
-                C64_LOG_DEBUG("🔄 Switching to frame %u (was %u, packets=%u, complete=%d, timeout=%d)", frame_num,
-                              context->current_frame.frame_num, context->current_frame.received_packets,
-                              current_frame_complete, frame_timed_out);
-            } else {
-                // Keep current frame, but log this for analysis
-                C64_LOG_DEBUG("⏭️  Packet from frame %u while assembling %u (packets=%u, age=%.1fms)", frame_num,
-                              context->current_frame.frame_num, context->current_frame.received_packets,
-                              frame_age / 1000000.0);
-                pthread_mutex_unlock(&context->assembly_mutex);
-                return;
-            }
-        }
-
-        if (should_init_frame) {
-            // Initialize new frame
-            c64_init_frame_assembly(&context->current_frame, frame_num);
-
-            // Detect video format from last packet
-            if (last_packet) {
-                uint32_t frame_height = line_num + lines_per_packet;
-                if (!context->format_detected || context->detected_frame_height != frame_height) {
-                    context->detected_frame_height = frame_height;
-                    context->format_detected = true;
-                    context->height = frame_height;
-                    context->width = C64_PIXELS_PER_LINE;
-
-                    // Update expected packets based on detected format
-                    uint16_t expected_packets = (frame_height == C64_PAL_HEIGHT) ? 68 : 60;
-                    context->current_frame.expected_packets = expected_packets;
-
-                    if (frame_height == C64_PAL_HEIGHT) {
-                        context->expected_fps = 50.125;
-                        C64_LOG_INFO("🎥 Detected PAL format: 384x%u @ %.3f Hz (%u packets/frame)", frame_height,
-                                     context->expected_fps, expected_packets);
-                    } else if (frame_height == C64_NTSC_HEIGHT) {
-                        context->expected_fps = 59.826; // Actual C64 NTSC timing
-                        C64_LOG_INFO("🎥 Detected NTSC format: 384x%u @ %.3f Hz (%u packets/frame)", frame_height,
-                                     context->expected_fps, expected_packets);
-                    } else {
-                        C64_LOG_WARNING("🎥 Unknown format: 384x%u (%u packets/frame)", frame_height, expected_packets);
-                    }
-                }
-            }
-        }
-
-        // Add packet to frame (according to C64 Ultimate spec)
-        uint32_t packet_index = line_num / lines_per_packet;
-        if (packet_index < C64_MAX_PACKETS_PER_FRAME) {
-            struct frame_packet *fp = &context->current_frame.packets[packet_index];
-            if (!fp->received) {
-                fp->line_num = line_num;
-                fp->lines_per_packet = lines_per_packet;
-                fp->received = true;
-                memcpy(fp->packet_data, packet_data + C64_VIDEO_HEADER_SIZE,
-                       C64_VIDEO_PACKET_SIZE - C64_VIDEO_HEADER_SIZE);
-                context->current_frame.received_packets++;
-
-                // Set expected packets based on C64 Ultimate specification
-                if (last_packet) {
-                    // Calculate total expected packets from the last packet's position
-                    context->current_frame.expected_packets = packet_index + 1;
-                    C64_LOG_DEBUG("🎬 Frame %u: last packet at index %u, expected_packets=%u", frame_num, packet_index,
-                                  context->current_frame.expected_packets);
-                } else if (context->current_frame.expected_packets == 0) {
-                    // If we haven't seen the last packet yet, set expected based on detected format
-                    // PAL: 272 lines ÷ 4 lines/packet = 68 packets
-                    // NTSC: 240 lines ÷ 4 lines/packet = 60 packets
-                    if (context->format_detected) {
-                        context->current_frame.expected_packets = (context->height == C64_PAL_HEIGHT) ? 68 : 60;
-                    } else {
-                        // Default to PAL if format not detected yet
-                        context->current_frame.expected_packets = 68;
-                    }
-                    C64_LOG_DEBUG("🎬 Frame %u: setting expected_packets=%u (format %s)", frame_num,
-                                  context->current_frame.expected_packets,
-                                  context->format_detected ? "detected" : "default PAL");
-                }
-
-                C64_LOG_DEBUG("🎬 Frame %u: packet %u/%u added (line %u, packet_idx %u)", frame_num,
-                              context->current_frame.received_packets, context->current_frame.expected_packets,
-                              line_num, packet_index);
-            } else {
-                C64_LOG_DEBUG("🔄 Frame %u: duplicate packet at index %u (line %u)", frame_num, packet_index, line_num);
-            }
-        } else {
-            C64_LOG_WARNING("❌ Frame %u: packet_index %u >= MAX_PACKETS_PER_FRAME %u (line %u)", frame_num,
-                            packet_index, C64_MAX_PACKETS_PER_FRAME, line_num);
-        }
-
-        // Check if frame is complete
-        if (c64_is_frame_complete(&context->current_frame)) {
-            C64_LOG_DEBUG("🎬 Frame %u complete! Assembling to buffer (packets: %u/%u)",
-                          context->current_frame.frame_num, context->current_frame.received_packets,
-                          context->current_frame.expected_packets);
-
-            // Assemble frame to back buffer
-            if (pthread_mutex_lock(&context->frame_mutex) == 0) {
-                c64_assemble_frame_to_buffer(context, &context->current_frame);
-                c64_swap_frame_buffers(context);
-                context->frame_ready = true;
-                context->frames_completed++;
-                C64_LOG_DEBUG("✅ Frame %u assembled and ready! Total frames: %u", context->current_frame.frame_num,
-                              context->frames_completed);
-                pthread_mutex_unlock(&context->frame_mutex);
-            }
-
-            // Reset for next frame
-            c64_init_frame_assembly(&context->current_frame, 0);
-        }
-
-        pthread_mutex_unlock(&context->assembly_mutex);
-    }
-}
-
-// Helper function to process audio packets from network buffer
-static void c64_process_buffered_audio_packet(struct c64_source *context, const uint8_t *packet_data,
-                                              size_t packet_size, uint64_t timestamp_us)
-{
-    if (!context || !packet_data || packet_size != C64_AUDIO_PACKET_SIZE) {
-        return;
-    }
-
-    // Update statistics
-    context->audio_packets_received++;
-    context->audio_bytes_received += packet_size;
-
-    // Parse audio packet and send to OBS
-    int16_t *audio_data = (int16_t *)(packet_data + C64_AUDIO_HEADER_SIZE);
-
-    struct obs_source_audio audio_frame = {0};
-    audio_frame.data[0] = (uint8_t *)audio_data;
-    audio_frame.frames = 192;
-    audio_frame.speakers = SPEAKERS_STEREO;
-    audio_frame.format = AUDIO_FORMAT_16BIT;
-    audio_frame.samples_per_sec = 48000;
-    audio_frame.timestamp = timestamp_us * 1000; // Convert microseconds to nanoseconds
-
-    // Record audio data if recording is enabled
-    if (context->record_video) {
-        c64_record_audio_data(context, (const uint8_t *)audio_data, 192 * 2 * 2);
-    }
-
-    obs_source_output_audio(context->source, &audio_frame);
 }
 
 uint32_t c64_get_width(void *data)

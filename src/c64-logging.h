@@ -37,7 +37,6 @@
 #define CLOCK_REALTIME 0
 static inline int clock_gettime(int clk_id, struct timespec *ts)
 {
-    (void)clk_id; // Unused parameter
     FILETIME ft;
     GetSystemTimeAsFileTime(&ft);
     unsigned long long t = ((unsigned long long)ft.dwHighDateTime << 32) | ft.dwLowDateTime;
