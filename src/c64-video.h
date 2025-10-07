@@ -43,4 +43,7 @@ void *c64_video_processor_thread_func(void *data);
 void c64_process_video_packet_direct(struct c64_source *context, const uint8_t *packet, size_t packet_size,
                                      uint64_t timestamp_ns);
 
+// Logo rendering function
+void c64_render_logo_frame(struct c64_source *context, uint64_t timestamp_ns);
+
 #endif // C64_VIDEO_H

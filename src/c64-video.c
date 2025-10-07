@@ -380,6 +380,41 @@ void *c64_video_thread_func(void *data)
     return NULL;
 }
 
+// Calculate ideal timestamp for a frame based on sequence number and video standard
+static uint64_t c64_calculate_ideal_timestamp(struct c64_source *context, uint16_t frame_num)
+{
+    // Establish base timestamp on first frame
+    if (!context->timestamp_base_set) {
+        context->stream_start_time_ns = os_gettime_ns();
+        context->first_frame_num = frame_num;
+        context->timestamp_base_set = true;
+        C64_LOG_INFO("📐 Established timestamp base: frame %u at %" PRIu64 " ns", frame_num,
+                     context->stream_start_time_ns);
+    }
+
+    // Calculate frame offset from the first frame
+    int32_t frame_offset = (int32_t)(frame_num - context->first_frame_num);
+
+    // Handle sequence number wraparound (16-bit counter)
+    if (frame_offset < -32768) {
+        frame_offset += 65536; // Wrapped forward
+    } else if (frame_offset > 32768) {
+        frame_offset -= 65536; // Wrapped backward
+    }
+
+    // Calculate ideal timestamp: base + (frame_offset * frame_interval)
+    uint64_t ideal_timestamp = context->stream_start_time_ns + ((uint64_t)frame_offset * context->frame_interval_ns);
+
+    // Debug log occasionally to verify timestamp calculation
+    static uint32_t log_counter = 0;
+    if ((log_counter++ % 250) == 0) { // Log every 250 frames (~5 seconds at 50Hz)
+        C64_LOG_DEBUG("📐 Ideal timestamp: frame %u (offset %d) = %" PRIu64 " ns", frame_num, frame_offset,
+                      ideal_timestamp);
+    }
+
+    return ideal_timestamp;
+}
+
 // Direct packet processing function (based on main branch logic)
 void c64_process_video_packet_direct(struct c64_source *context, const uint8_t *packet, size_t packet_size,
                                      uint64_t timestamp_ns)
@@ -430,8 +465,12 @@ void c64_process_video_packet_direct(struct c64_source *context, const uint8_t *
                 if (c64_is_frame_complete(&context->current_frame) || c64_is_frame_timeout(&context->current_frame)) {
                     if (c64_is_frame_complete(&context->current_frame)) {
                         if (context->last_completed_frame != context->current_frame.frame_num) {
-                            // Direct rendering - assembly and output in one call!
-                            c64_render_frame_direct(context, &context->current_frame, capture_time);
+                            // Calculate ideal timestamp for smooth OBS async video rendering
+                            uint64_t ideal_timestamp =
+                                c64_calculate_ideal_timestamp(context, context->current_frame.frame_num);
+
+                            // Direct rendering - assembly and output with ideal timestamp!
+                            c64_render_frame_direct(context, &context->current_frame, ideal_timestamp);
                             context->last_completed_frame = context->current_frame.frame_num;
 
                             // Track diagnostics
@@ -481,16 +520,20 @@ void c64_process_video_packet_direct(struct c64_source *context, const uint8_t *
                 context->detected_frame_height = frame_height;
                 context->format_detected = true;
 
-                // Calculate expected FPS based on detected format
+                // Calculate expected FPS and frame interval based on detected format
                 if (frame_height == C64_PAL_HEIGHT) {
                     context->expected_fps = 50.125;
+                    context->frame_interval_ns = C64_PAL_FRAME_INTERVAL_NS;
                     C64_LOG_INFO("🎥 Detected PAL format: 384x%u @ %.3f Hz", frame_height, context->expected_fps);
                 } else if (frame_height == C64_NTSC_HEIGHT) {
                     context->expected_fps = 59.826;
+                    context->frame_interval_ns = C64_NTSC_FRAME_INTERVAL_NS;
                     C64_LOG_INFO("🎥 Detected NTSC format: 384x%u @ %.3f Hz", frame_height, context->expected_fps);
                 } else {
                     // Unknown format, estimate based on packet count
                     context->expected_fps = (frame_height <= 250) ? 59.826 : 50.125;
+                    context->frame_interval_ns = (frame_height <= 250) ? C64_NTSC_FRAME_INTERVAL_NS
+                                                                       : C64_PAL_FRAME_INTERVAL_NS;
                     C64_LOG_WARNING("⚠️ Unknown video format: 384x%u, assuming %.3f Hz", frame_height,
                                     context->expected_fps);
                 }
@@ -522,13 +565,79 @@ void c64_process_video_packet_direct(struct c64_source *context, const uint8_t *
     }
 }
 
+// Render logo frame for async video output when no C64 connection
+void c64_render_logo_frame(struct c64_source *context, uint64_t timestamp_ns)
+{
+    if (!context->frame_buffer) {
+        return;
+    }
+
+    // Create a simple logo pattern: dark blue background with C64 blue borders
+    const uint32_t bg_color = 0xFF000080;     // Dark blue background (RGBA)
+    const uint32_t border_color = 0xFF4040FF; // C64 blue border (RGBA)
+    const uint32_t text_color = 0xFFFFFFFF;   // White text (RGBA)
+
+    uint32_t *buffer = context->frame_buffer;
+    uint32_t width = context->width;
+    uint32_t height = context->height;
+
+    // Fill background
+    for (uint32_t y = 0; y < height; y++) {
+        for (uint32_t x = 0; x < width; x++) {
+            uint32_t color = bg_color;
+
+            // Add borders (top/bottom 8 pixels, left/right 16 pixels)
+            if (y < 8 || y >= height - 8 || x < 16 || x >= width - 16) {
+                color = border_color;
+            }
+
+            // Add centered text region (simple pattern for "C64 STREAM")
+            uint32_t center_x = width / 2;
+            uint32_t center_y = height / 2;
+            uint32_t text_width = 160; // Approximate text width
+            uint32_t text_height = 24; // Text height
+
+            if (x >= center_x - text_width / 2 && x < center_x + text_width / 2 && y >= center_y - text_height / 2 &&
+                y < center_y + text_height / 2) {
+                // Simple text pattern - every 8th pixel horizontally, every 2nd row vertically
+                if (((y - (center_y - text_height / 2)) % 4 == 0 || (y - (center_y - text_height / 2)) % 4 == 1) &&
+                    (x - (center_x - text_width / 2)) % 8 < 6) {
+                    color = text_color;
+                }
+            }
+
+            buffer[y * width + x] = color;
+        }
+    }
+
+    // Output logo frame via async video
+    struct obs_source_frame obs_frame = {0};
+    obs_frame.data[0] = (uint8_t *)context->frame_buffer;
+    obs_frame.linesize[0] = context->width * 4; // 4 bytes per pixel (RGBA)
+    obs_frame.width = context->width;
+    obs_frame.height = context->height;
+    obs_frame.format = VIDEO_FORMAT_RGBA;
+    obs_frame.timestamp = timestamp_ns;
+    obs_frame.flip = false;
+
+    obs_source_output_video(context->source, &obs_frame);
+
+    C64_LOG_DEBUG("🔷 Logo frame rendered: %ux%u RGBA, timestamp=%" PRIu64, obs_frame.width, obs_frame.height,
+                  obs_frame.timestamp);
+}
+
 void *c64_video_processor_thread_func(void *data)
 {
     struct c64_source *context = data;
+    uint64_t last_logo_frame_time = 0;
+    const uint64_t logo_frame_interval_ns = 20000000ULL; // 50Hz (20ms) for logo frames
 
     C64_LOG_DEBUG("Video processor thread started");
 
     while (context->thread_active) {
+        uint64_t current_time = os_gettime_ns();
+        bool packet_processed = false;
+
         if (context->network_buffer) {
             const uint8_t *video_data, *audio_data;
             size_t video_size, audio_size;
@@ -545,12 +654,23 @@ void *c64_video_processor_thread_func(void *data)
                     c64_process_audio_packet(context, audio_data, audio_size, timestamp_us * 1000);
                 }
 
-                context->last_frame_time = os_gettime_ns();
-            } else {
-                os_sleep_ms(1);
+                context->last_frame_time = current_time;
+                packet_processed = true;
             }
-        } else {
-            os_sleep_ms(10);
+        }
+
+        // If no packets processed and enough time has passed, show logo at 50Hz
+        if (!packet_processed) {
+            uint64_t time_since_last_frame = current_time - context->last_frame_time;
+            uint64_t time_since_last_logo = current_time - last_logo_frame_time;
+
+            // Show logo if no frames for 100ms AND we haven't shown logo recently
+            if (time_since_last_frame > 100000000ULL && time_since_last_logo >= logo_frame_interval_ns) {
+                c64_render_logo_frame(context, current_time);
+                last_logo_frame_time = current_time;
+                context->last_frame_time = current_time;
+            }
+            os_sleep_ms(1);
         }
     }
 

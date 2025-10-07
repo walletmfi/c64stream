@@ -93,6 +93,14 @@ struct c64_source {
     uint64_t last_frame_time;
     uint64_t frame_interval_ns; // Target frame interval (20ms for 50Hz PAL)
 
+    // Ideal timestamp generation for OBS async video
+    uint64_t stream_start_time_ns; // Base timestamp when streaming started
+    uint16_t first_frame_num;      // First frame number seen (for offset calculation)
+    bool timestamp_base_set;       // Flag indicating if base timestamp is established
+
+    // Logo texture for no-connection display
+    gs_texture_t *logo_texture; // Loaded logo texture for async video output
+
     // Render callback based timeout detection
     uint64_t last_udp_packet_time; // Timestamp of last UDP packet
     bool retry_in_progress;        // Flag to prevent redundant retry attempts
