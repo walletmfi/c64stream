@@ -426,11 +426,13 @@ struct c64_network_buffer *c64_network_buffer_create(void)
     // Initialize video buffer
     buf->video.max_capacity = C64_MAX_VIDEO_PACKETS;
     buf->video.packet_size = C64_VIDEO_PACKET_SIZE;
+    buf->video.delay_us = 0; // Initialize with no delay by default
     video_rb_reset(&buf->video, C64_MAX_VIDEO_PACKETS);
 
     // Initialize audio buffer (use smaller allocation for audio)
     buf->audio.max_capacity = C64_MAX_AUDIO_PACKETS;
     buf->audio.packet_size = C64_AUDIO_PACKET_SIZE;
+    buf->audio.delay_us = 0; // Initialize with no delay by default
     audio_rb_reset(&buf->audio, C64_MAX_AUDIO_PACKETS);
 
     C64_LOG_INFO("Network buffer created - Video: %zu slots, Audio: %zu slots", (size_t)C64_MAX_VIDEO_PACKETS,
@@ -479,6 +481,10 @@ void c64_network_buffer_set_delay(struct c64_network_buffer *buf, size_t video_d
     uint64_t old_audio_delay = buf->audio.delay_us;
     buf->video.delay_us = video_delay_ms * 1000;
     buf->audio.delay_us = audio_delay_ms * 1000;
+
+    C64_LOG_INFO("Buffer delay values set: video=%llu us (%zu ms), audio=%llu us (%zu ms)", 
+                 (unsigned long long)buf->video.delay_us, video_delay_ms,
+                 (unsigned long long)buf->audio.delay_us, audio_delay_ms);
 
     // If delay was reduced, discard packets older than new delay
     uint64_t current_time = os_gettime_ns() / 1000; // Convert to microseconds
@@ -534,7 +540,7 @@ void c64_network_buffer_set_delay(struct c64_network_buffer *buf, size_t video_d
 }
 
 void c64_network_buffer_push_video(struct c64_network_buffer *buf, const uint8_t *data, size_t len,
-                                   uint64_t timestamp_us)
+                                   uint64_t timestamp_ns)
 {
     if (!buf || !data) {
         return;
@@ -545,15 +551,20 @@ void c64_network_buffer_push_video(struct c64_network_buffer *buf, const uint8_t
         printf("[DEBUG] Network buffer push video: packet %d (len=%zu)\n", push_count, len);
     }
 
+    // Convert nanoseconds to microseconds for internal storage
+    uint64_t timestamp_us = timestamp_ns / 1000;
     video_rb_push(&buf->video, data, len, timestamp_us);
 }
 
 void c64_network_buffer_push_audio(struct c64_network_buffer *buf, const uint8_t *data, size_t len,
-                                   uint64_t timestamp_us)
+                                   uint64_t timestamp_ns)
 {
     if (!buf || !data) {
         return;
     }
+    
+    // Convert nanoseconds to microseconds for internal storage
+    uint64_t timestamp_us = timestamp_ns / 1000;
     audio_rb_push(&buf->audio, data, len, timestamp_us);
 }
 
@@ -567,8 +578,17 @@ static bool is_packet_ready_for_pop(struct packet_slot *slot, uint64_t delay_us)
     // Get current time in microseconds (OBS uses nanoseconds, so convert)
     uint64_t now_us = os_gettime_ns() / 1000;
     uint64_t age_us = now_us - slot->timestamp_us;
+    bool ready = age_us >= delay_us;
 
-    return age_us >= delay_us;
+    // Debug logging for delay timing
+    static int delay_debug_count = 0;
+    if ((delay_debug_count++ % 1000) == 0) {
+        C64_LOG_DEBUG("Packet delay check: age=%llu us, required=%llu us, ready=%s (seq=%u)", 
+                      (unsigned long long)age_us, (unsigned long long)delay_us, 
+                      ready ? "YES" : "NO", slot->sequence_num);
+    }
+
+    return ready;
 }
 
 int c64_network_buffer_pop(struct c64_network_buffer *buf, const uint8_t **video_data, size_t *video_size,

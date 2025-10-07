@@ -37,11 +37,11 @@ void c64_network_buffer_destroy(struct c64_network_buffer *buf);
 // Set dynamic delay in milliseconds (flushes buffer)
 void c64_network_buffer_set_delay(struct c64_network_buffer *buf, size_t video_delay_ms, size_t audio_delay_ms);
 
-// Push packet from network thread
+// Push packet from network thread (timestamp in nanoseconds, converted internally to microseconds)
 void c64_network_buffer_push_video(struct c64_network_buffer *buf, const uint8_t *data, size_t len,
-                                   uint64_t timestamp_us);
+                                   uint64_t timestamp_ns);
 void c64_network_buffer_push_audio(struct c64_network_buffer *buf, const uint8_t *data, size_t len,
-                                   uint64_t timestamp_us);
+                                   uint64_t timestamp_ns);
 
 // Pop the latest aligned pair for render thread
 // Returns 1 if a pair is available, 0 if buffers empty
