@@ -514,7 +514,7 @@ void *c64_video_processor_thread_func(void *data)
                 }
 
                 if (audio_data && audio_size > 0) {
-                    // TODO: Audio processing
+                    c64_record_audio_data(context, audio_data, audio_size);
                 }
 
                 context->last_frame_time = os_gettime_ns();

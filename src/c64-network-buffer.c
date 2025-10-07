@@ -9,6 +9,8 @@ struct packet_slot {
     uint8_t data[C64_VIDEO_PACKET_SIZE > C64_AUDIO_PACKET_SIZE ? C64_VIDEO_PACKET_SIZE : C64_AUDIO_PACKET_SIZE];
     size_t size;
     uint64_t timestamp_us;
+    uint16_t sequence_num;
+    bool valid; // Indicates if this slot contains valid data
 };
 
 struct video_ring_buffer {
@@ -17,7 +19,9 @@ struct video_ring_buffer {
     size_t active_slots;                             // computed from delay
     atomic_size_t head;
     atomic_size_t tail;
-    size_t packet_size; // C64_VIDEO_PACKET_SIZE
+    size_t packet_size;         // C64_VIDEO_PACKET_SIZE
+    uint16_t next_expected_seq; // Expected next sequence number
+    bool seq_initialized;       // Whether we have initialized sequence tracking
 };
 
 struct audio_ring_buffer {
@@ -26,7 +30,9 @@ struct audio_ring_buffer {
     size_t active_slots;                             // computed from delay
     atomic_size_t head;
     atomic_size_t tail;
-    size_t packet_size; // C64_AUDIO_PACKET_SIZE
+    size_t packet_size;         // C64_AUDIO_PACKET_SIZE
+    uint16_t next_expected_seq; // Expected next sequence number
+    bool seq_initialized;       // Whether we have initialized sequence tracking
 };
 
 struct c64_network_buffer {
@@ -46,15 +52,50 @@ struct c64_network_buffer {
     (rb)->active_slots = (active); \
 } while(0)
 
-// Push packet into video ring buffer. Drops oldest if full.
+// Push packet into video ring buffer with sequence-based ordering
 static void video_rb_push(struct video_ring_buffer *rb, const uint8_t *data, size_t len, uint64_t ts)
 {
-    if (!rb || !data || len == 0) {
+    if (!rb || !data || len < 2) { // Need at least 2 bytes for sequence number
         return;
     }
 
+    // Extract sequence number from packet header (first 2 bytes, little-endian)
+    uint16_t seq_num = *(uint16_t *)(data);
+
+    // Initialize sequence tracking on first packet
+    if (!rb->seq_initialized) {
+        rb->next_expected_seq = seq_num;
+        rb->seq_initialized = true;
+        C64_LOG_DEBUG("Video buffer: initialized with sequence %u", seq_num);
+    }
+
+    // Check if this is the next expected packet in sequence
+    bool is_next_expected = (seq_num == rb->next_expected_seq);
+
+    if (!is_next_expected) {
+        // Handle out-of-order packet: check if it's from the future or past
+        int16_t seq_diff = (int16_t)(seq_num - rb->next_expected_seq);
+        if (seq_diff > 0 && seq_diff < 100) {
+            // Future packet - this indicates missing packets
+            C64_LOG_WARNING("Video: Out-of-order packet seq=%u (expected %u, gap=%d)", seq_num, rb->next_expected_seq,
+                            seq_diff);
+        } else if (seq_diff < 0 && seq_diff > -100) {
+            // Old packet - likely duplicate, drop it
+            C64_LOG_DEBUG("Video: Dropping old packet seq=%u (expected %u)", seq_num, rb->next_expected_seq);
+            return;
+        } else {
+            // Large sequence jump - likely a reset, re-initialize
+            C64_LOG_INFO("Video: Large sequence jump from %u to %u, re-initializing", rb->next_expected_seq, seq_num);
+            rb->next_expected_seq = seq_num;
+        }
+    }
+
+    // Find insertion point to maintain sequence order
     size_t head = atomic_load_explicit(&rb->head, memory_order_relaxed);
     size_t tail = atomic_load_explicit(&rb->tail, memory_order_acquire);
+
+    // For now, use simple FIFO but track sequence numbers for diagnostics
+    // TODO: Implement full sequence-based insertion sort if needed
     size_t next = (head + 1) % rb->max_capacity;
 
     if (next == tail) {
@@ -72,14 +113,53 @@ static void video_rb_push(struct video_ring_buffer *rb, const uint8_t *data, siz
 
     rb->slots[head].size = rb->packet_size;
     rb->slots[head].timestamp_us = ts;
+    rb->slots[head].sequence_num = seq_num;
+    rb->slots[head].valid = true;
+
+    // Update expected sequence number if this was the expected packet
+    if (is_next_expected) {
+        rb->next_expected_seq = seq_num + 1;
+    }
+
     atomic_store_explicit(&rb->head, next, memory_order_release);
 }
 
-// Push packet into audio ring buffer. Drops oldest if full.
+// Push packet into audio ring buffer with sequence-based ordering
 static void audio_rb_push(struct audio_ring_buffer *rb, const uint8_t *data, size_t len, uint64_t ts)
 {
-    if (!rb || !data || len == 0) {
+    if (!rb || !data || len < 2) { // Need at least 2 bytes for sequence number
         return;
+    }
+
+    // Extract sequence number from packet header (first 2 bytes, little-endian)
+    uint16_t seq_num = *(uint16_t *)(data);
+
+    // Initialize sequence tracking on first packet
+    if (!rb->seq_initialized) {
+        rb->next_expected_seq = seq_num;
+        rb->seq_initialized = true;
+        C64_LOG_DEBUG("Audio buffer: initialized with sequence %u", seq_num);
+    }
+
+    // Check if this is the next expected packet in sequence
+    bool is_next_expected = (seq_num == rb->next_expected_seq);
+
+    if (!is_next_expected) {
+        // Handle out-of-order packet
+        int16_t seq_diff = (int16_t)(seq_num - rb->next_expected_seq);
+        if (seq_diff > 0 && seq_diff < 50) {
+            // Future packet - this indicates missing packets
+            C64_LOG_WARNING("Audio: Out-of-order packet seq=%u (expected %u, gap=%d)", seq_num, rb->next_expected_seq,
+                            seq_diff);
+        } else if (seq_diff < 0 && seq_diff > -50) {
+            // Old packet - likely duplicate, drop it
+            C64_LOG_DEBUG("Audio: Dropping old packet seq=%u (expected %u)", seq_num, rb->next_expected_seq);
+            return;
+        } else {
+            // Large sequence jump - likely a reset, re-initialize
+            C64_LOG_INFO("Audio: Large sequence jump from %u to %u, re-initializing", rb->next_expected_seq, seq_num);
+            rb->next_expected_seq = seq_num;
+        }
     }
 
     size_t head = atomic_load_explicit(&rb->head, memory_order_relaxed);
@@ -101,6 +181,14 @@ static void audio_rb_push(struct audio_ring_buffer *rb, const uint8_t *data, siz
 
     rb->slots[head].size = rb->packet_size;
     rb->slots[head].timestamp_us = ts;
+    rb->slots[head].sequence_num = seq_num;
+    rb->slots[head].valid = true;
+
+    // Update expected sequence number if this was the expected packet
+    if (is_next_expected) {
+        rb->next_expected_seq = seq_num + 1;
+    }
+
     atomic_store_explicit(&rb->head, next, memory_order_release);
 }
 
@@ -158,6 +246,15 @@ static void video_rb_reset(struct video_ring_buffer *rb, size_t active_slots)
     rb->active_slots = active_slots;
     atomic_store_explicit(&rb->head, 0, memory_order_release);
     atomic_store_explicit(&rb->tail, 0, memory_order_release);
+
+    // Reset sequence tracking
+    rb->next_expected_seq = 0;
+    rb->seq_initialized = false;
+
+    // Clear all slot validity
+    for (size_t i = 0; i < rb->max_capacity; i++) {
+        rb->slots[i].valid = false;
+    }
 }
 
 // Reset audio buffer with new active slot count
@@ -174,6 +271,15 @@ static void audio_rb_reset(struct audio_ring_buffer *rb, size_t active_slots)
     rb->active_slots = active_slots;
     atomic_store_explicit(&rb->head, 0, memory_order_release);
     atomic_store_explicit(&rb->tail, 0, memory_order_release);
+
+    // Reset sequence tracking
+    rb->next_expected_seq = 0;
+    rb->seq_initialized = false;
+
+    // Clear all slot validity
+    for (size_t i = 0; i < rb->max_capacity; i++) {
+        rb->slots[i].valid = false;
+    }
 }
 
 // ----------------------------------
