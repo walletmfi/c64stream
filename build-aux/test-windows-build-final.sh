@@ -121,13 +121,19 @@ cat > test_windows_core.c << 'EOF'
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
 
-#include "../src/c64-network.h"  // Must come before atomic due to winsock
-#include "../src/c64-atomic.h"
+// Include winsock2 first on Windows to avoid header order warnings
+#ifdef _WIN32
+#include <winsock2.h>
+#endif
+
+#include "../src/c64-network.h"  // Network operations
+#include "../src/c64-network-buffer.h" // Buffer with atomic operations via stdatomic.h
 #include <stdio.h>
+#include <stdatomic.h>
 
 // Test compilation only - don't actually call socket functions
 int test_headers_only() {
-    atomic_uint32_t counter = ATOMIC_VAR_INIT(0);
+    atomic_uint_least32_t counter = ATOMIC_VAR_INIT(0);
     atomic_store(&counter, 42);
     uint32_t value = atomic_load(&counter);
 

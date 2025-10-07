@@ -48,6 +48,42 @@ struct c64_network_buffer {
 // Internal helpers
 // ----------------------------------
 
+// Debug function to verify buffer sequence ordering
+static void debug_verify_buffer_ordering(struct video_ring_buffer *rb, const char *context)
+{
+#ifdef DEBUG_SEQUENCE_ORDERING
+    size_t head = atomic_load_explicit(&rb->head, memory_order_acquire);
+    size_t tail = atomic_load_explicit(&rb->tail, memory_order_acquire);
+
+    if (head == tail)
+        return; // Empty buffer
+
+    uint16_t prev_seq = 0;
+    bool first = true;
+    size_t current = tail;
+
+    while (current != head) {
+        if (rb->slots[current].valid) {
+            uint16_t seq = rb->slots[current].sequence_num;
+            if (!first) {
+                int16_t diff = (int16_t)(seq - prev_seq);
+                if (diff <= 0) {
+                    C64_LOG_ERROR("%s: Buffer ordering violation - seq %u after %u at pos %zu", context, seq, prev_seq,
+                                  current);
+                }
+            }
+            prev_seq = seq;
+            first = false;
+        }
+        current = (current + 1) % rb->max_capacity;
+    }
+#else
+    // Avoid unused parameter warnings in release builds
+    (void)rb;
+    (void)context;
+#endif
+}
+
 // Generic ring buffer operations using macros to work with both buffer types
 #define RB_INCREMENT(rb) (((rb)->head + 1) % (rb)->max_capacity)
 #define RB_RESET(rb, active) do { \
@@ -98,34 +134,78 @@ static void video_rb_push(struct video_ring_buffer *rb, const uint8_t *data, siz
     size_t head = atomic_load_explicit(&rb->head, memory_order_relaxed);
     size_t tail = atomic_load_explicit(&rb->tail, memory_order_acquire);
 
-    // For now, use simple FIFO but track sequence numbers for diagnostics
-    // TODO: Implement full sequence-based insertion sort if needed
-    size_t next = (head + 1) % rb->max_capacity;
-
-    if (next == tail) {
+    // Check if buffer is full
+    size_t next_head = (head + 1) % rb->max_capacity;
+    if (next_head == tail) {
         // Buffer full: drop oldest packet
         atomic_store_explicit(&rb->tail, (tail + 1) % rb->max_capacity, memory_order_release);
+        tail = (tail + 1) % rb->max_capacity;
     }
 
+    // Find correct insertion position based on sequence number
+    size_t insert_pos = head;
+    size_t current = head;
+
+    // Walk backwards from head to find insertion point
+    while (current != tail) {
+        size_t prev = (current == 0) ? rb->max_capacity - 1 : current - 1;
+        if (prev == tail)
+            break; // Reached tail, insert at current position
+
+        if (!rb->slots[prev].valid) {
+            current = prev;
+            continue;
+        }
+
+        // Compare sequence numbers with wraparound handling
+        int16_t seq_diff = (int16_t)(seq_num - rb->slots[prev].sequence_num);
+        if (seq_diff >= 0) {
+            // Current packet should go after this position
+            break;
+        }
+
+        current = prev;
+        insert_pos = current;
+    }
+
+    // Shift packets forward if we're not inserting at head
+    if (insert_pos != head) {
+        size_t shift_pos = head;
+        while (shift_pos != insert_pos) {
+            size_t prev = (shift_pos == 0) ? rb->max_capacity - 1 : shift_pos - 1;
+            rb->slots[shift_pos] = rb->slots[prev];
+            shift_pos = prev;
+        }
+    }
+
+    // Insert the new packet
     size_t copy_len = len < rb->packet_size ? len : rb->packet_size;
-    memcpy(rb->slots[head].data, data, copy_len);
+    memcpy(rb->slots[insert_pos].data, data, copy_len);
 
     // Zero-pad if packet is smaller than expected size
     if (copy_len < rb->packet_size) {
-        memset(rb->slots[head].data + copy_len, 0, rb->packet_size - copy_len);
+        memset(rb->slots[insert_pos].data + copy_len, 0, rb->packet_size - copy_len);
     }
 
-    rb->slots[head].size = rb->packet_size;
-    rb->slots[head].timestamp_us = ts;
-    rb->slots[head].sequence_num = seq_num;
-    rb->slots[head].valid = true;
+    rb->slots[insert_pos].size = rb->packet_size;
+    rb->slots[insert_pos].timestamp_us = ts;
+    rb->slots[insert_pos].sequence_num = seq_num;
+    rb->slots[insert_pos].valid = true;
 
     // Update expected sequence number if this was the expected packet
     if (is_next_expected) {
         rb->next_expected_seq = seq_num + 1;
     }
 
-    atomic_store_explicit(&rb->head, next, memory_order_release);
+    // Log sequence insertion details for debugging
+    if (insert_pos != head) {
+        C64_LOG_DEBUG("Video: Inserted seq %u at pos %zu (head was %zu)", seq_num, insert_pos, head);
+    }
+
+    atomic_store_explicit(&rb->head, next_head, memory_order_release);
+
+    // Verify buffer ordering in debug builds
+    debug_verify_buffer_ordering(rb, "video_rb_push");
 }
 
 // Push packet into audio ring buffer with sequence-based ordering
@@ -166,34 +246,79 @@ static void audio_rb_push(struct audio_ring_buffer *rb, const uint8_t *data, siz
         }
     }
 
+    // Find insertion point to maintain sequence order
     size_t head = atomic_load_explicit(&rb->head, memory_order_relaxed);
     size_t tail = atomic_load_explicit(&rb->tail, memory_order_acquire);
-    size_t next = (head + 1) % rb->max_capacity;
 
-    if (next == tail) {
+    // Check if buffer is full
+    size_t next_head = (head + 1) % rb->max_capacity;
+    if (next_head == tail) {
         // Buffer full: drop oldest packet
         atomic_store_explicit(&rb->tail, (tail + 1) % rb->max_capacity, memory_order_release);
+        tail = (tail + 1) % rb->max_capacity;
     }
 
+    // Find correct insertion position based on sequence number
+    size_t insert_pos = head;
+    size_t current = head;
+
+    // Walk backwards from head to find insertion point
+    while (current != tail) {
+        size_t prev = (current == 0) ? rb->max_capacity - 1 : current - 1;
+        if (prev == tail)
+            break; // Reached tail, insert at current position
+
+        if (!rb->slots[prev].valid) {
+            current = prev;
+            continue;
+        }
+
+        // Compare sequence numbers with wraparound handling
+        int16_t seq_diff = (int16_t)(seq_num - rb->slots[prev].sequence_num);
+        if (seq_diff >= 0) {
+            // Current packet should go after this position
+            break;
+        }
+
+        current = prev;
+        insert_pos = current;
+    }
+
+    // Shift packets forward if we're not inserting at head
+    if (insert_pos != head) {
+        size_t shift_pos = head;
+        while (shift_pos != insert_pos) {
+            size_t prev = (shift_pos == 0) ? rb->max_capacity - 1 : shift_pos - 1;
+            rb->slots[shift_pos] = rb->slots[prev];
+            shift_pos = prev;
+        }
+    }
+
+    // Insert the new packet
     size_t copy_len = len < rb->packet_size ? len : rb->packet_size;
-    memcpy(rb->slots[head].data, data, copy_len);
+    memcpy(rb->slots[insert_pos].data, data, copy_len);
 
     // Zero-pad if packet is smaller than expected size
     if (copy_len < rb->packet_size) {
-        memset(rb->slots[head].data + copy_len, 0, rb->packet_size - copy_len);
+        memset(rb->slots[insert_pos].data + copy_len, 0, rb->packet_size - copy_len);
     }
 
-    rb->slots[head].size = rb->packet_size;
-    rb->slots[head].timestamp_us = ts;
-    rb->slots[head].sequence_num = seq_num;
-    rb->slots[head].valid = true;
+    rb->slots[insert_pos].size = rb->packet_size;
+    rb->slots[insert_pos].timestamp_us = ts;
+    rb->slots[insert_pos].sequence_num = seq_num;
+    rb->slots[insert_pos].valid = true;
 
     // Update expected sequence number if this was the expected packet
     if (is_next_expected) {
         rb->next_expected_seq = seq_num + 1;
     }
 
-    atomic_store_explicit(&rb->head, next, memory_order_release);
+    // Log sequence insertion details for debugging
+    if (insert_pos != head) {
+        C64_LOG_DEBUG("Audio: Inserted seq %u at pos %zu (head was %zu)", seq_num, insert_pos, head);
+    }
+
+    atomic_store_explicit(&rb->head, next_head, memory_order_release);
 }
 
 // Pop the oldest video packet (FIFO order) - essential for proper frame assembly
@@ -349,13 +474,60 @@ void c64_network_buffer_set_delay(struct c64_network_buffer *buf, size_t video_d
         audio_slots = buf->audio.max_capacity;
     }
 
-    // Store delay values in microseconds for time-based checking
+    // Store new delay values in microseconds
+    uint64_t old_video_delay = buf->video.delay_us;
+    uint64_t old_audio_delay = buf->audio.delay_us;
     buf->video.delay_us = video_delay_ms * 1000;
     buf->audio.delay_us = audio_delay_ms * 1000;
 
-    // Reset buffers with new active slot counts
-    video_rb_reset(&buf->video, video_slots);
-    audio_rb_reset(&buf->audio, audio_slots);
+    // If delay was reduced, discard packets older than new delay
+    uint64_t current_time = os_gettime_ns() / 1000; // Convert to microseconds
+
+    if (buf->video.delay_us < old_video_delay) {
+        // Discard old video packets
+        size_t head = atomic_load_explicit(&buf->video.head, memory_order_acquire);
+        size_t tail = atomic_load_explicit(&buf->video.tail, memory_order_acquire);
+        size_t discarded = 0;
+
+        while (tail != head) {
+            struct packet_slot *slot = &buf->video.slots[tail];
+            if (slot->valid && (current_time - slot->timestamp_us) > buf->video.delay_us) {
+                slot->valid = false;
+                atomic_store_explicit(&buf->video.tail, (tail + 1) % buf->video.max_capacity, memory_order_release);
+                tail = (tail + 1) % buf->video.max_capacity;
+                discarded++;
+            } else {
+                break; // First packet within new delay, stop discarding
+            }
+        }
+
+        if (discarded > 0) {
+            C64_LOG_INFO("Video buffer: discarded %zu old packets due to delay reduction", discarded);
+        }
+    }
+
+    if (buf->audio.delay_us < old_audio_delay) {
+        // Discard old audio packets
+        size_t head = atomic_load_explicit(&buf->audio.head, memory_order_acquire);
+        size_t tail = atomic_load_explicit(&buf->audio.tail, memory_order_acquire);
+        size_t discarded = 0;
+
+        while (tail != head) {
+            struct packet_slot *slot = &buf->audio.slots[tail];
+            if (slot->valid && (current_time - slot->timestamp_us) > buf->audio.delay_us) {
+                slot->valid = false;
+                atomic_store_explicit(&buf->audio.tail, (tail + 1) % buf->audio.max_capacity, memory_order_release);
+                tail = (tail + 1) % buf->audio.max_capacity;
+                discarded++;
+            } else {
+                break; // First packet within new delay, stop discarding
+            }
+        }
+
+        if (discarded > 0) {
+            C64_LOG_INFO("Audio buffer: discarded %zu old packets due to delay reduction", discarded);
+        }
+    }
 
     C64_LOG_INFO("Network buffer delay set - Video: %zu ms (%zu slots), Audio: %zu ms (%zu slots)", video_delay_ms,
                  video_slots, audio_delay_ms, audio_slots);
