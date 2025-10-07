@@ -18,6 +18,7 @@
 #include "c64-video.h"
 #include "c64-color.h"
 #include "c64-audio.h"
+#include "c64-logo.h"
 #include "c64-record.h"
 #include "c64-version.h"
 #include "c64-properties.h"
@@ -81,35 +82,6 @@ static void close_and_reset_sockets(struct c64_source *context)
         close(context->audio_socket);
         context->audio_socket = INVALID_SOCKET_VALUE;
     }
-}
-
-// Load the C64S logo texture from module data directory
-static gs_texture_t *load_logo_texture(void)
-{
-    C64_LOG_DEBUG("Attempting to load logo texture...");
-
-    // Use obs_module_file() to get the path to the logo in the data directory
-    char *logo_path = obs_module_file("images/c64stream-logo.png");
-    if (!logo_path) {
-        C64_LOG_WARNING("Failed to locate logo file in module data directory");
-        return NULL;
-    }
-
-    C64_LOG_DEBUG("Logo path resolved to: %s", logo_path);
-
-    // Load texture from file
-    gs_texture_t *logo_texture = gs_texture_create_from_file(logo_path);
-
-    if (!logo_texture) {
-        C64_LOG_WARNING("Failed to load logo texture from: %s", logo_path);
-    } else {
-        uint32_t width = gs_texture_get_width(logo_texture);
-        uint32_t height = gs_texture_get_height(logo_texture);
-        C64_LOG_DEBUG("Loaded logo texture from: %s (size: %ux%u)", logo_path, width, height);
-    }
-
-    bfree(logo_path);
-    return logo_texture;
 }
 
 void *c64_create(obs_data_t *settings, obs_source_t *source)
@@ -306,13 +278,13 @@ void *c64_create(obs_data_t *settings, obs_source_t *source)
     context->timestamp_base_set = false;
     context->frame_interval_ns = C64_PAL_FRAME_INTERVAL_NS; // Default to PAL, will be updated on detection
 
-    // Initialize logo display
-    context->logo_texture = load_logo_texture();
+    // Initialize logo system with pre-rendered frame
+    if (!c64_logo_init(context)) {
+        C64_LOG_WARNING("Logo system initialization failed - continuing without logo");
+    }
 
     // Initialize recording for this source
-    c64_record_init(context);
-
-    // Start initial connection asynchronously to avoid blocking OBS startup
+    c64_record_init(context); // Start initial connection asynchronously to avoid blocking OBS startup
     C64_LOG_INFO("C64S source created successfully - queuing async initial connection");
     context->retry_in_progress = true; // Prevent render thread from also starting retry
     obs_queue_task(OBS_TASK_UI, c64_async_retry_task, context, false);
@@ -353,12 +325,11 @@ void c64_destroy(void *data)
 
     c64_record_cleanup(context);
 
+    // Cleanup logo system
+    c64_logo_cleanup(context);
+
     // Cleanup resources
     pthread_mutex_destroy(&context->assembly_mutex);
-    if (context->logo_texture) {
-        gs_texture_destroy(context->logo_texture);
-        context->logo_texture = NULL;
-    }
     if (context->frame_buffer) {
         bfree(context->frame_buffer);
     }
@@ -464,6 +435,13 @@ void c64_update(void *data, obs_data_t *settings)
         if (context->network_buffer) {
             c64_network_buffer_set_delay(context->network_buffer, new_buffer_delay_ms, new_buffer_delay_ms);
         }
+
+        // Reset timestamp base to prevent OBS async video stuttering
+        // Buffer delay changes alter frame arrival timing, so we need fresh timestamp calculation
+        context->timestamp_base_set = false;
+        context->stream_start_time_ns = 0;
+        context->first_frame_num = 0;
+        C64_LOG_INFO("🔄 Reset timestamp base due to buffer delay change - preventing OBS stuttering");
     }
 
     // Update recording settings

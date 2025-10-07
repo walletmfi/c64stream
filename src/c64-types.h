@@ -51,6 +51,9 @@ struct c64_source {
     // Single frame buffer for direct async video output
     uint32_t *frame_buffer; // Single buffer for UDP assembly and direct output via obs_source_output_video()
 
+    // Pre-rendered logo frame buffer for instant no-connection display
+    uint32_t *logo_frame_buffer; // Pre-rendered logo frame for instant async video output
+
     // Frame assembly and packet reordering
     struct frame_assembly current_frame;
     uint16_t last_completed_frame;

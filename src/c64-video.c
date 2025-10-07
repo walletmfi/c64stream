@@ -8,6 +8,7 @@
 
 #include "c64-logging.h"
 #include "c64-video.h"
+#include "c64-logo.h"
 #include "c64-audio.h"
 #include "c64-color.h"
 #include "c64-types.h"
@@ -415,6 +416,37 @@ static uint64_t c64_calculate_ideal_timestamp(struct c64_source *context, uint16
     return ideal_timestamp;
 }
 
+// Render black screen fallback when no logo is available
+static void c64_render_black_screen(struct c64_source *context, uint64_t timestamp_ns)
+{
+    if (!context->frame_buffer) {
+        return;
+    }
+
+    // Fill frame buffer with black (fully transparent in RGBA)
+    uint32_t *buffer = context->frame_buffer;
+    uint32_t width = context->width;
+    uint32_t height = context->height;
+
+    // Black screen: 0x00000000 (fully transparent black in RGBA)
+    memset(buffer, 0, width * height * sizeof(uint32_t));
+
+    // Output black frame via async video
+    struct obs_source_frame obs_frame = {0};
+    obs_frame.data[0] = (uint8_t *)context->frame_buffer;
+    obs_frame.linesize[0] = context->width * 4; // 4 bytes per pixel (RGBA)
+    obs_frame.width = context->width;
+    obs_frame.height = context->height;
+    obs_frame.format = VIDEO_FORMAT_RGBA;
+    obs_frame.timestamp = timestamp_ns;
+    obs_frame.flip = false;
+
+    obs_source_output_video(context->source, &obs_frame);
+
+    C64_LOG_DEBUG("⚫ Black screen rendered: %ux%u RGBA, timestamp=%" PRIu64, obs_frame.width, obs_frame.height,
+                  obs_frame.timestamp);
+}
+
 // Direct packet processing function (based on main branch logic)
 void c64_process_video_packet_direct(struct c64_source *context, const uint8_t *packet, size_t packet_size,
                                      uint64_t timestamp_ns)
@@ -565,67 +597,6 @@ void c64_process_video_packet_direct(struct c64_source *context, const uint8_t *
     }
 }
 
-// Render logo frame for async video output when no C64 connection
-void c64_render_logo_frame(struct c64_source *context, uint64_t timestamp_ns)
-{
-    if (!context->frame_buffer) {
-        return;
-    }
-
-    // Create a simple logo pattern: dark blue background with C64 blue borders
-    const uint32_t bg_color = 0xFF000080;     // Dark blue background (RGBA)
-    const uint32_t border_color = 0xFF4040FF; // C64 blue border (RGBA)
-    const uint32_t text_color = 0xFFFFFFFF;   // White text (RGBA)
-
-    uint32_t *buffer = context->frame_buffer;
-    uint32_t width = context->width;
-    uint32_t height = context->height;
-
-    // Fill background
-    for (uint32_t y = 0; y < height; y++) {
-        for (uint32_t x = 0; x < width; x++) {
-            uint32_t color = bg_color;
-
-            // Add borders (top/bottom 8 pixels, left/right 16 pixels)
-            if (y < 8 || y >= height - 8 || x < 16 || x >= width - 16) {
-                color = border_color;
-            }
-
-            // Add centered text region (simple pattern for "C64 STREAM")
-            uint32_t center_x = width / 2;
-            uint32_t center_y = height / 2;
-            uint32_t text_width = 160; // Approximate text width
-            uint32_t text_height = 24; // Text height
-
-            if (x >= center_x - text_width / 2 && x < center_x + text_width / 2 && y >= center_y - text_height / 2 &&
-                y < center_y + text_height / 2) {
-                // Simple text pattern - every 8th pixel horizontally, every 2nd row vertically
-                if (((y - (center_y - text_height / 2)) % 4 == 0 || (y - (center_y - text_height / 2)) % 4 == 1) &&
-                    (x - (center_x - text_width / 2)) % 8 < 6) {
-                    color = text_color;
-                }
-            }
-
-            buffer[y * width + x] = color;
-        }
-    }
-
-    // Output logo frame via async video
-    struct obs_source_frame obs_frame = {0};
-    obs_frame.data[0] = (uint8_t *)context->frame_buffer;
-    obs_frame.linesize[0] = context->width * 4; // 4 bytes per pixel (RGBA)
-    obs_frame.width = context->width;
-    obs_frame.height = context->height;
-    obs_frame.format = VIDEO_FORMAT_RGBA;
-    obs_frame.timestamp = timestamp_ns;
-    obs_frame.flip = false;
-
-    obs_source_output_video(context->source, &obs_frame);
-
-    C64_LOG_DEBUG("🔷 Logo frame rendered: %ux%u RGBA, timestamp=%" PRIu64, obs_frame.width, obs_frame.height,
-                  obs_frame.timestamp);
-}
-
 void *c64_video_processor_thread_func(void *data)
 {
     struct c64_source *context = data;
@@ -666,7 +637,12 @@ void *c64_video_processor_thread_func(void *data)
 
             // Show logo if no frames for 100ms AND we haven't shown logo recently
             if (time_since_last_frame > 100000000ULL && time_since_last_logo >= logo_frame_interval_ns) {
-                c64_render_logo_frame(context, current_time);
+                if (c64_logo_is_available(context)) {
+                    c64_logo_render_to_frame(context, current_time);
+                } else {
+                    // Fallback: render black screen if no logo available
+                    c64_render_black_screen(context, current_time);
+                }
                 last_logo_frame_time = current_time;
                 context->last_frame_time = current_time;
             }

@@ -140,6 +140,7 @@ target_sources(
     src/c64-record.c
     src/c64-version.c
     src/c64-properties.c
+    src/c64-logo.c
 )
 
 # Link resolver library for DNS functionality on Unix platforms
