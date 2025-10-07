@@ -482,9 +482,9 @@ void c64_network_buffer_set_delay(struct c64_network_buffer *buf, size_t video_d
     buf->video.delay_us = video_delay_ms * 1000;
     buf->audio.delay_us = audio_delay_ms * 1000;
 
-    C64_LOG_INFO("Buffer delay values set: video=%llu us (%zu ms), audio=%llu us (%zu ms)", 
-                 (unsigned long long)buf->video.delay_us, video_delay_ms,
-                 (unsigned long long)buf->audio.delay_us, audio_delay_ms);
+    C64_LOG_INFO("Buffer delay values set: video=%llu us (%zu ms), audio=%llu us (%zu ms)",
+                 (unsigned long long)buf->video.delay_us, video_delay_ms, (unsigned long long)buf->audio.delay_us,
+                 audio_delay_ms);
 
     // If delay was reduced, discard packets older than new delay
     uint64_t current_time = os_gettime_ns() / 1000; // Convert to microseconds
@@ -562,7 +562,7 @@ void c64_network_buffer_push_audio(struct c64_network_buffer *buf, const uint8_t
     if (!buf || !data) {
         return;
     }
-    
+
     // Convert nanoseconds to microseconds for internal storage
     uint64_t timestamp_us = timestamp_ns / 1000;
     audio_rb_push(&buf->audio, data, len, timestamp_us);
@@ -583,9 +583,9 @@ static bool is_packet_ready_for_pop(struct packet_slot *slot, uint64_t delay_us)
     // Debug logging for delay timing
     static int delay_debug_count = 0;
     if ((delay_debug_count++ % 1000) == 0) {
-        C64_LOG_DEBUG("Packet delay check: age=%llu us, required=%llu us, ready=%s (seq=%u)", 
-                      (unsigned long long)age_us, (unsigned long long)delay_us, 
-                      ready ? "YES" : "NO", slot->sequence_num);
+        C64_LOG_DEBUG("Packet delay check: age=%llu us, required=%llu us, ready=%s (seq=%u)",
+                      (unsigned long long)age_us, (unsigned long long)delay_us, ready ? "YES" : "NO",
+                      slot->sequence_num);
     }
 
     return ready;

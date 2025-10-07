@@ -661,8 +661,11 @@ void c64_render(void *data, gs_effect_t *effect)
         context->consecutive_failures = 0;
     }
 
-    bool should_show_logo = !context->streaming || !context->frame_ready || !context->frame_buffer_front ||
-                            frames_timed_out;
+    // More stable logo display logic with hysteresis
+    // Only show logo if streaming hasn't started OR frames have been timed out for a while
+    bool should_show_logo = !context->streaming || !context->frame_buffer_front ||
+                            (frames_timed_out && context->last_frame_time > 0 &&
+                             (now - context->last_frame_time) > (C64_FRAME_TIMEOUT_NS * 2));
 
     // Debug logging (only when debug logging is enabled)
     if (c64_debug_logging) {
@@ -691,8 +694,8 @@ void c64_render(void *data, gs_effect_t *effect)
         last_debug_log = now;
     }
 
-    // Clear frame ready state immediately when frames timeout to show logo
-    if (frames_timed_out) {
+    // Only clear frame ready state after extended timeout (avoid flickering)
+    if (frames_timed_out && (now - context->last_frame_time) > (C64_FRAME_TIMEOUT_NS * 3)) {
         context->frame_ready = false;
     }
 
