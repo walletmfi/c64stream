@@ -181,16 +181,14 @@ void *c64_create(obs_data_t *settings, obs_source_t *source)
     context->width = C64_PAL_WIDTH;
     context->height = C64_PAL_HEIGHT;
 
-    // Allocate frame buffer for async video output (RGBA, 4 bytes per pixel)
-    // Only need back buffer since we output directly via obs_source_output_video()
+    // Allocate single frame buffer for direct async video output (RGBA, 4 bytes per pixel)
     size_t frame_size = context->width * context->height * sizeof(uint32_t);
-    context->frame_buffer_back = bmalloc(frame_size);
-    if (!context->frame_buffer_back) {
+    context->frame_buffer = bmalloc(frame_size);
+    if (!context->frame_buffer) {
         C64_LOG_ERROR("Failed to allocate frame buffer");
         return NULL;
     }
-    memset(context->frame_buffer_back, 0, frame_size);
-    context->frame_ready = false;
+    memset(context->frame_buffer, 0, frame_size);
 
     // Allocate pre-allocated recording buffers to eliminate malloc/free in hot paths
     context->recording_buffer_size = frame_size;                               // Same as RGBA frame size
@@ -198,8 +196,8 @@ void *c64_create(obs_data_t *settings, obs_source_t *source)
     context->bgr_frame_buffer = bmalloc(context->width * context->height * 3); // BGR24 frame
     if (!context->bmp_row_buffer || !context->bgr_frame_buffer) {
         C64_LOG_ERROR("Failed to allocate recording buffers");
-        if (context->frame_buffer_back)
-            bfree(context->frame_buffer_back);
+        if (context->frame_buffer)
+            bfree(context->frame_buffer);
         if (context->bmp_row_buffer)
             bfree(context->bmp_row_buffer);
         if (context->bgr_frame_buffer)
@@ -217,7 +215,7 @@ void *c64_create(obs_data_t *settings, obs_source_t *source)
     // Initialize mutexes (frame_mutex no longer needed for async video output)
     if (pthread_mutex_init(&context->assembly_mutex, NULL) != 0) {
         C64_LOG_ERROR("Failed to initialize assembly mutex");
-        bfree(context->frame_buffer_back);
+        bfree(context->frame_buffer);
         bfree(context->bmp_row_buffer);
         bfree(context->bgr_frame_buffer);
         bfree(context);
@@ -234,8 +232,8 @@ void *c64_create(obs_data_t *settings, obs_source_t *source)
     context->network_buffer = c64_network_buffer_create();
     if (!context->network_buffer) {
         C64_LOG_ERROR("Failed to create network buffer");
-        if (context->frame_buffer_back)
-            bfree(context->frame_buffer_back);
+        if (context->frame_buffer)
+            bfree(context->frame_buffer);
         if (context->bmp_row_buffer)
             bfree(context->bmp_row_buffer);
         if (context->bgr_frame_buffer)
@@ -320,10 +318,10 @@ void c64_destroy(void *data)
 
     c64_record_cleanup(context);
 
-    // Cleanup resources (async video sources don't need logo textures or front buffer)
+    // Cleanup resources
     pthread_mutex_destroy(&context->assembly_mutex);
-    if (context->frame_buffer_back) {
-        bfree(context->frame_buffer_back);
+    if (context->frame_buffer) {
+        bfree(context->frame_buffer);
     }
     if (context->bmp_row_buffer) {
         bfree(context->bmp_row_buffer);
@@ -555,14 +553,10 @@ void c64_stop_streaming(struct c64_source *context)
     }
     context->audio_thread_active = false;
 
-    // Reset frame state and clear buffer
-    context->frame_ready = false;
-    context->buffer_swap_pending = false;
-
     // Clear frame buffer (async video will stop automatically)
-    if (context->frame_buffer_back) {
+    if (context->frame_buffer) {
         uint32_t frame_size = context->width * context->height * 4;
-        memset(context->frame_buffer_back, 0, frame_size);
+        memset(context->frame_buffer, 0, frame_size);
     }
 
     // Reset frame assembly state

@@ -48,10 +48,8 @@ struct c64_source {
     uint32_t height;
     uint8_t *video_buffer;
 
-    // Frame buffer for async video output
-    uint32_t *frame_buffer_back; // For UDP assembly (video thread) - output directly via obs_source_output_video()
-    bool frame_ready;
-    bool buffer_swap_pending;
+    // Single frame buffer for direct async video output
+    uint32_t *frame_buffer; // Single buffer for UDP assembly and direct output via obs_source_output_video()
 
     // Frame assembly and packet reordering
     struct frame_assembly current_frame;
@@ -64,7 +62,6 @@ struct c64_source {
     uint32_t frames_captured;
     uint32_t frames_delivered_to_obs;
     uint32_t frames_completed;
-    uint32_t buffer_swaps;
     uint64_t last_capture_time;
     uint64_t total_capture_latency;
     uint64_t total_pipeline_latency;

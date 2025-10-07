@@ -23,8 +23,8 @@ struct frame_assembly;
 void c64_init_frame_assembly(struct frame_assembly *frame, uint16_t frame_num);
 bool c64_is_frame_complete(struct frame_assembly *frame);
 bool c64_is_frame_timeout(struct frame_assembly *frame);
-void c64_swap_frame_buffers(struct c64_source *context);
-void c64_assemble_frame_to_buffer(struct c64_source *context, struct frame_assembly *frame);
+void c64_render_frame_direct(struct c64_source *context, struct frame_assembly *frame, uint64_t timestamp_ns);
+void c64_assemble_frame_with_interpolation(struct c64_source *context, struct frame_assembly *frame);
 
 // Performance optimization functions
 void c64_process_video_statistics_batch(struct c64_source *context, uint64_t current_time);

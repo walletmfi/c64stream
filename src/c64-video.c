@@ -40,50 +40,60 @@ bool c64_is_frame_timeout(struct frame_assembly *frame)
     return elapsed > C64_FRAME_TIMEOUT_MS;
 }
 
-void c64_swap_frame_buffers(struct c64_source *context)
+// Direct frame rendering with row interpolation for missing packets
+void c64_render_frame_direct(struct c64_source *context, struct frame_assembly *frame, uint64_t timestamp_ns)
 {
-    // Save frame to disk if enabled (before output to avoid race conditions)
+    // First, assemble the frame with interpolation for missing rows
+    c64_assemble_frame_with_interpolation(context, frame);
+
+    // Save frame to disk if enabled
     if (context->save_frames) {
-        c64_save_frame_as_bmp(context, context->frame_buffer_back);
+        c64_save_frame_as_bmp(context, context->frame_buffer);
     }
 
     // Record frame to video file if recording is enabled
     if (context->record_video) {
-        c64_record_video_frame(context, context->frame_buffer_back);
+        c64_record_video_frame(context, context->frame_buffer);
     }
 
-    // PERFORMANCE OPTIMIZATION: Use async video output instead of render callback
-    // This eliminates texture create/destroy on every frame - OBS handles this efficiently
-
+    // DIRECT ASYNC VIDEO OUTPUT - no buffer swapping needed!
     struct obs_source_frame obs_frame = {0};
 
     // Set up frame data - RGBA format (4 bytes per pixel)
-    obs_frame.data[0] = (uint8_t *)context->frame_buffer_back;
+    obs_frame.data[0] = (uint8_t *)context->frame_buffer;
     obs_frame.linesize[0] = context->width * 4; // 4 bytes per pixel (RGBA)
     obs_frame.width = context->width;
     obs_frame.height = context->height;
     obs_frame.format = VIDEO_FORMAT_RGBA;
-    obs_frame.timestamp = os_gettime_ns(); // Current timestamp for A/V sync
-    obs_frame.flip = false;                // No vertical flip needed
+    obs_frame.timestamp = timestamp_ns; // Use packet timestamp for A/V sync
+    obs_frame.flip = false;             // No vertical flip needed
 
-    // Output frame directly to OBS - much faster than synchronous rendering!
+    // Output frame directly to OBS - super efficient!
     obs_source_output_video(context->source, &obs_frame);
 
     // Update timing and status
-    context->frame_ready = true;
-    context->last_frame_time = obs_frame.timestamp;
-    context->buffer_swap_pending = false;
+    context->last_frame_time = timestamp_ns;
     context->frames_delivered_to_obs++;
+    context->video_frames_processed++;
 
-    C64_LOG_DEBUG("🎬 Async video frame output: %ux%u RGBA, timestamp=%" PRIu64, obs_frame.width, obs_frame.height,
-                  obs_frame.timestamp);
+    C64_LOG_DEBUG("🎬 Direct async frame: %ux%u RGBA, timestamp=%" PRIu64 ", packets=%u/%u", obs_frame.width,
+                  obs_frame.height, obs_frame.timestamp, frame->received_packets, frame->expected_packets);
 }
 
-void c64_assemble_frame_to_buffer(struct c64_source *context, struct frame_assembly *frame)
+// Simplified frame assembly with row interpolation for missing packets
+void c64_assemble_frame_with_interpolation(struct c64_source *context, struct frame_assembly *frame)
 {
-    C64_LOG_DEBUG("🎬 Assembling frame %u: %u/%u packets received", frame->frame_num, frame->received_packets,
-                  frame->expected_packets);
+    C64_LOG_DEBUG("🎬 Assembling frame %u with interpolation: %u/%u packets received", frame->frame_num,
+                  frame->received_packets, frame->expected_packets);
 
+    // Track which lines have been written
+    bool *line_written = calloc(context->height, sizeof(bool));
+    if (!line_written) {
+        C64_LOG_ERROR("Failed to allocate line tracking array");
+        return;
+    }
+
+    // First pass: assemble all received packets
     for (int i = 0; i < C64_MAX_PACKETS_PER_FRAME; i++) {
         struct frame_packet *packet = &frame->packets[i];
         if (!packet->received)
@@ -92,27 +102,41 @@ void c64_assemble_frame_to_buffer(struct c64_source *context, struct frame_assem
         uint16_t line_num = packet->line_num;
         uint8_t lines_per_packet = packet->lines_per_packet;
 
-        if (lines_per_packet != C64_LINES_PER_PACKET) {
-            C64_LOG_WARNING("❌ Packet %d has %u lines per packet (expected %u)", i, lines_per_packet,
-                            C64_LINES_PER_PACKET);
-        }
-
         for (int line = 0; line < (int)lines_per_packet && (int)(line_num + line) < (int)context->height; line++) {
-            uint32_t dst_line_offset = (line_num + line) * C64_PIXELS_PER_LINE;
-            uint32_t *dst_line = context->frame_buffer_back + dst_line_offset;
+            uint32_t current_line = line_num + line;
+            if (current_line >= context->height)
+                break;
+
+            uint32_t dst_line_offset = current_line * C64_PIXELS_PER_LINE;
+            uint32_t *dst_line = context->frame_buffer + dst_line_offset;
             uint8_t *src_line = packet->packet_data + (line * C64_BYTES_PER_LINE);
 
-            uint32_t current_line = (uint32_t)(line_num + line);
-            if (current_line >= context->height) {
-                C64_LOG_WARNING("❌ Line %u exceeds frame height %u", current_line, context->height);
-                break;
-            }
-
             c64_convert_pixels_optimized(src_line, dst_line, C64_BYTES_PER_LINE);
+            line_written[current_line] = true;
         }
     }
 
-    C64_LOG_DEBUG("✅ Frame %u assembly complete", frame->frame_num);
+    // Second pass: interpolate missing lines by duplicating the nearest valid line above
+    for (uint32_t line = 0; line < context->height; line++) {
+        if (!line_written[line]) {
+            // Find nearest valid line above this one
+            uint32_t source_line = 0;
+            for (uint32_t search = line; search > 0; search--) {
+                if (line_written[search - 1]) {
+                    source_line = search - 1;
+                    break;
+                }
+            }
+
+            // Copy the source line to fill the gap
+            uint32_t *dst = context->frame_buffer + (line * C64_PIXELS_PER_LINE);
+            uint32_t *src = context->frame_buffer + (source_line * C64_PIXELS_PER_LINE);
+            memcpy(dst, src, C64_PIXELS_PER_LINE * sizeof(uint32_t));
+        }
+    }
+
+    free(line_written);
+    C64_LOG_DEBUG("✅ Frame %u assembly with interpolation complete", frame->frame_num);
 }
 
 void c64_process_video_statistics_batch(struct c64_source *context, uint64_t current_time)
@@ -158,9 +182,8 @@ void c64_process_video_statistics_batch(struct c64_source *context, uint64_t cur
         C64_LOG_INFO("🎯 DELIVERY: Expected %.0f fps | Captured %.1f fps | Delivered %.1f fps | Completed %.1f fps",
                      expected_fps, context->frames_captured / duration_seconds, frame_delivery_rate,
                      frame_completion_rate);
-        C64_LOG_INFO(
-            "📊 PIPELINE: Capture drops %.1f%% | Delivery drops %.1f%% | Avg latency %.1f ms | Buffer swaps %u",
-            capture_drop_pct, delivery_drop_pct, avg_pipeline_latency, context->buffer_swaps);
+        C64_LOG_INFO("📊 PIPELINE: Capture drops %.1f%% | Delivery drops %.1f%% | Avg latency %.1f ms",
+                     capture_drop_pct, delivery_drop_pct, avg_pipeline_latency);
     }
 
     // Reset diagnostic counters and update timestamp
@@ -168,7 +191,6 @@ void c64_process_video_statistics_batch(struct c64_source *context, uint64_t cur
     context->frames_captured = 0;
     context->frames_delivered_to_obs = 0;
     context->frames_completed = 0;
-    context->buffer_swaps = 0;
     context->total_pipeline_latency = 0;
     context->last_stats_log_time = current_time;
 }
@@ -408,18 +430,13 @@ void c64_process_video_packet_direct(struct c64_source *context, const uint8_t *
                 if (c64_is_frame_complete(&context->current_frame) || c64_is_frame_timeout(&context->current_frame)) {
                     if (c64_is_frame_complete(&context->current_frame)) {
                         if (context->last_completed_frame != context->current_frame.frame_num) {
-                            // CRITICAL: Do frame assembly OUTSIDE mutex to reduce lock contention
-                            c64_assemble_frame_to_buffer(context, &context->current_frame);
-
-                            // Direct async video output - no mutex needed
-                            c64_swap_frame_buffers(context);
+                            // Direct rendering - assembly and output in one call!
+                            c64_render_frame_direct(context, &context->current_frame, capture_time);
                             context->last_completed_frame = context->current_frame.frame_num;
 
-                            // Track diagnostics (only once per completed frame!)
+                            // Track diagnostics
                             context->frames_completed++;
-                            context->buffer_swaps++;
                             context->total_pipeline_latency += (os_gettime_ns() - capture_time);
-                            context->video_frames_processed++;
                         }
                     } else {
                         // Frame timeout - log drop and continue
@@ -488,18 +505,13 @@ void c64_process_video_packet_direct(struct c64_source *context, const uint8_t *
 
         if (c64_is_frame_complete(&context->current_frame)) {
             if (context->last_completed_frame != context->current_frame.frame_num) {
-                // CRITICAL: Do frame assembly OUTSIDE mutex to reduce lock contention
-                c64_assemble_frame_to_buffer(context, &context->current_frame);
-
-                // Direct async video output - no mutex needed
-                c64_swap_frame_buffers(context);
+                // Direct rendering - assembly and output in one call!
+                c64_render_frame_direct(context, &context->current_frame, capture_time);
                 context->last_completed_frame = context->current_frame.frame_num;
 
-                // Track diagnostics (only once per completed frame!)
+                // Track diagnostics
                 context->frames_completed++;
-                context->buffer_swaps++;
                 context->total_pipeline_latency += (os_gettime_ns() - capture_time);
-                context->video_frames_processed++;
             }
 
             // Reset for next frame
