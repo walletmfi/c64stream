@@ -131,6 +131,7 @@ target_sources(
   PRIVATE
     src/plugin-main.c
     src/c64-network.c
+    src/c64-network-buffer.c
     src/c64-protocol.c
     src/c64-video.c
     src/c64-color.c

@@ -6,8 +6,9 @@
 #include "c64-color.h"
 
 // Rendering defaults
-#define C64_DEFAULT_RENDER_DELAY_FRAMES 3  // Default frame delay to smooth UDP packet loss/reordering
-#define C64_MAX_RENDER_DELAY_FRAMES 100    // Maximum allowed render delay frames
+// Legacy defines kept for compatibility during transition
+#define C64_DEFAULT_RENDER_DELAY_FRAMES 3  // DEPRECATED - use network buffer instead
+#define C64_MAX_RENDER_DELAY_FRAMES 100    // DEPRECATED - use network buffer instead
 #define C64_RENDER_BUFFER_SAFETY_MARGIN 10 // Extra buffer frames for queue safety
 
 // Timing constants (nanoseconds)
@@ -25,11 +26,11 @@ bool c64_is_frame_timeout(struct frame_assembly *frame);
 void c64_swap_frame_buffers(struct c64_source *context);
 void c64_assemble_frame_to_buffer(struct c64_source *context, struct frame_assembly *frame);
 
-// Delay queue management
-void c64_init_delay_queue(struct c64_source *context);
-bool c64_enqueue_delayed_frame(struct c64_source *context, struct frame_assembly *frame, uint16_t sequence_num);
-bool c64_dequeue_delayed_frame(struct c64_source *context);
-void c64_clear_delay_queue(struct c64_source *context);
+// DEPRECATED: Legacy delay queue functions (replaced by network buffer)
+void c64_init_delay_queue(struct c64_source *context);                                                           // STUB
+bool c64_enqueue_delayed_frame(struct c64_source *context, struct frame_assembly *frame, uint16_t sequence_num); // STUB
+bool c64_dequeue_delayed_frame(struct c64_source *context);                                                      // STUB
+void c64_clear_delay_queue(struct c64_source *context);                                                          // STUB
 
 // Performance optimization functions
 void c64_process_video_statistics_batch(struct c64_source *context, uint64_t current_time);

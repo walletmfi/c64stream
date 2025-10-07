@@ -61,11 +61,12 @@ obs_properties_t *c64_create_properties(void *data)
     obs_property_t *audio_port_prop = obs_properties_add_int(network_props, "audio_port", "Audio Port", 1024, 65535, 1);
     obs_property_set_long_description(audio_port_prop, "UDP port for audio stream from C64 Ultimate");
 
-    // Rendering Delay (moved to Plugin Information group)
-    obs_property_t *delay_prop = obs_properties_add_int_slider(
-        info_props, "render_delay_frames", "Render Delay (frames)", 0, C64_MAX_RENDER_DELAY_FRAMES, 1);
+    // Buffer Delay (moved to Plugin Information group)
+    obs_property_t *delay_prop =
+        obs_properties_add_int_slider(info_props, "buffer_delay_ms", "Buffer Delay (millis)", 0, 2000, 5);
     obs_property_set_long_description(
-        delay_prop, "Delay frames before rendering to smooth UDP packet loss/reordering (default: 3)");
+        delay_prop,
+        "Buffer network packets for specified milliseconds to smooth UDP packet loss/jitter (default: 10ms)");
 
     // Recording Group (compact layout)
     obs_property_t *recording_group =
@@ -101,7 +102,7 @@ void c64_set_property_defaults(obs_data_t *settings)
     obs_data_set_default_string(settings, "obs_ip_address", ""); // Empty by default, will be auto-detected
     obs_data_set_default_int(settings, "video_port", C64_DEFAULT_VIDEO_PORT);
     obs_data_set_default_int(settings, "audio_port", C64_DEFAULT_AUDIO_PORT);
-    obs_data_set_default_int(settings, "render_delay_frames", C64_DEFAULT_RENDER_DELAY_FRAMES);
+    obs_data_set_default_int(settings, "buffer_delay_ms", 10); // Default 10ms buffer delay
 
     // Frame saving defaults
     obs_data_set_default_bool(settings, "save_frames", false); // Disabled by default

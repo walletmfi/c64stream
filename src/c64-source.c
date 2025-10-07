@@ -244,31 +244,28 @@ void *c64_create(obs_data_t *settings, obs_source_t *source)
         return NULL;
     }
 
-    // Initialize delay queue mutex
-    if (pthread_mutex_init(&context->delay_mutex, NULL) != 0) {
-        C64_LOG_ERROR("Failed to initialize delay mutex");
-        pthread_mutex_destroy(&context->frame_mutex);
-        pthread_mutex_destroy(&context->assembly_mutex);
-        bfree(context->frame_buffer_front);
-        bfree(context->frame_buffer_back);
+    // Initialize buffer delay from settings
+    context->buffer_delay_ms = (uint32_t)obs_data_get_int(settings, "buffer_delay_ms");
+    if (context->buffer_delay_ms == 0) {
+        context->buffer_delay_ms = 10; // Default 10ms
+    }
+
+    // Initialize network buffer for packet jitter correction
+    context->network_buffer = c64_network_buffer_create();
+    if (!context->network_buffer) {
+        C64_LOG_ERROR("Failed to create network buffer");
+        if (context->frame_buffer_front)
+            bfree(context->frame_buffer_front);
+        if (context->frame_buffer_back)
+            bfree(context->frame_buffer_back);
         bfree(context);
         return NULL;
     }
 
-    // Initialize rendering delay from settings
-    context->render_delay_frames = (uint32_t)obs_data_get_int(settings, "render_delay_frames");
-    if (context->render_delay_frames == 0) {
-        context->render_delay_frames = C64_DEFAULT_RENDER_DELAY_FRAMES;
-    }
+    // Set initial buffer delay for both video and audio
+    c64_network_buffer_set_delay(context->network_buffer, context->buffer_delay_ms, context->buffer_delay_ms);
 
-    // Initialize delay queue - allocate for maximum delay + some extra buffer
-    context->delay_queue_size = 0;
-    context->delay_queue_head = 0;
-    context->delay_queue_tail = 0;
-    context->delayed_frame_queue = NULL;
-    context->delay_sequence_queue = NULL;
-
-    C64_LOG_INFO("Rendering delay initialized: %u frames", context->render_delay_frames);
+    C64_LOG_INFO("Network buffer initialized: %u ms delay", context->buffer_delay_ms);
 
     // Initialize sockets to invalid
     context->video_socket = INVALID_SOCKET_VALUE;
@@ -352,18 +349,15 @@ void c64_destroy(void *data)
     // Cleanup resources
     pthread_mutex_destroy(&context->frame_mutex);
     pthread_mutex_destroy(&context->assembly_mutex);
-    pthread_mutex_destroy(&context->delay_mutex);
     if (context->frame_buffer_front) {
         bfree(context->frame_buffer_front);
     }
     if (context->frame_buffer_back) {
         bfree(context->frame_buffer_back);
     }
-    if (context->delayed_frame_queue) {
-        bfree(context->delayed_frame_queue);
-    }
-    if (context->delay_sequence_queue) {
-        bfree(context->delay_sequence_queue);
+    if (context->network_buffer) {
+        c64_network_buffer_destroy(context->network_buffer);
+        context->network_buffer = NULL;
     }
 
     bfree(context);
@@ -446,30 +440,16 @@ void c64_update(void *data, obs_data_t *settings)
     context->video_port = new_video_port;
     context->audio_port = new_audio_port;
 
-    // Update rendering delay setting
-    uint32_t new_delay_frames = (uint32_t)obs_data_get_int(settings, "render_delay_frames");
-    if (new_delay_frames != context->render_delay_frames) {
-        C64_LOG_INFO("Rendering delay changed from %u to %u frames", context->render_delay_frames, new_delay_frames);
+    // Update buffer delay setting
+    uint32_t new_buffer_delay_ms = (uint32_t)obs_data_get_int(settings, "buffer_delay_ms");
+    if (new_buffer_delay_ms != context->buffer_delay_ms) {
+        C64_LOG_INFO("Buffer delay changed from %u to %u ms", context->buffer_delay_ms, new_buffer_delay_ms);
 
-        if (pthread_mutex_lock(&context->delay_mutex) == 0) {
-            context->render_delay_frames = new_delay_frames;
+        context->buffer_delay_ms = new_buffer_delay_ms;
 
-            // Reset delay queue when delay changes
-            context->delay_queue_size = 0;
-            context->delay_queue_head = 0;
-            context->delay_queue_tail = 0;
-
-            // Force reallocation of delay buffers on next frame
-            if (context->delayed_frame_queue) {
-                bfree(context->delayed_frame_queue);
-                context->delayed_frame_queue = NULL;
-            }
-            if (context->delay_sequence_queue) {
-                bfree(context->delay_sequence_queue);
-                context->delay_sequence_queue = NULL;
-            }
-
-            pthread_mutex_unlock(&context->delay_mutex);
+        // Update network buffer delay (this automatically flushes the buffers)
+        if (context->network_buffer) {
+            c64_network_buffer_set_delay(context->network_buffer, new_buffer_delay_ms, new_buffer_delay_ms);
         }
     }
 
@@ -550,9 +530,6 @@ void c64_start_streaming(struct c64_source *context)
     }
     context->audio_thread_active = true;
 
-    // Initialize delay queue for rendering delay
-    c64_init_delay_queue(context);
-
     C64_LOG_INFO("C64S streaming started successfully");
 }
 
@@ -611,9 +588,6 @@ void c64_stop_streaming(struct c64_source *context)
         context->frames_completed = 0;
         pthread_mutex_unlock(&context->assembly_mutex);
     }
-
-    // Clear delay queue
-    c64_clear_delay_queue(context);
 
     C64_LOG_INFO("C64S streaming stopped");
 }

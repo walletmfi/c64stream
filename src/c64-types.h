@@ -8,6 +8,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include "c64-network.h"
+#include "c64-network-buffer.h"
 #include "c64-protocol.h"
 
 // Frame packet structure for reordering
@@ -101,14 +102,9 @@ struct c64_source {
     uint32_t retry_count;          // Number of retry attempts
     uint32_t consecutive_failures; // Consecutive TCP failures for backoff
 
-    // Rendering delay
-    uint32_t render_delay_frames;   // Delay in frames before making buffer available to OBS
-    uint32_t *delayed_frame_queue;  // Circular buffer for delayed frames
-    uint32_t delay_queue_size;      // Current size of delay queue
-    uint32_t delay_queue_head;      // Head position in delay queue
-    uint32_t delay_queue_tail;      // Tail position in delay queue
-    uint16_t *delay_sequence_queue; // Sequence numbers for delayed frames
-    pthread_mutex_t delay_mutex;    // Mutex for delay queue access
+    // Network buffer for packet jitter correction
+    struct c64_network_buffer *network_buffer; // Unified network buffer for video and audio packets
+    uint32_t buffer_delay_ms;                  // Buffer delay in milliseconds
 
     // Auto-start control
     bool auto_start_attempted;
