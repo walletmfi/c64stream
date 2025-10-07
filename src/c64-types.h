@@ -48,9 +48,8 @@ struct c64_source {
     uint32_t height;
     uint8_t *video_buffer;
 
-    // Double buffering for smooth video
-    uint32_t *frame_buffer_front; // For rendering (OBS thread)
-    uint32_t *frame_buffer_back;  // For UDP assembly (video thread)
+    // Frame buffer for async video output
+    uint32_t *frame_buffer_back; // For UDP assembly (video thread) - output directly via obs_source_output_video()
     bool frame_ready;
     bool buffer_swap_pending;
 
@@ -90,8 +89,7 @@ struct c64_source {
     bool video_processor_thread_active;
     bool audio_thread_active;
 
-    // Synchronization
-    pthread_mutex_t frame_mutex;
+    // Synchronization (frame_mutex no longer needed for async video output)
     pthread_mutex_t assembly_mutex;
 
     // Frame timing
@@ -120,11 +118,7 @@ struct c64_source {
     uint64_t audio_bytes_received;   // Total audio bytes received
     uint64_t last_stats_log_time;    // Last time statistics were logged (non-atomic)
 
-    // Logo display for network issues
-    gs_texture_t *logo_texture; // Loaded logo texture
-    bool logo_load_attempted;   // Have we tried to load the logo?
-
-    // Frame saving for analysis
+    // Frame saving for analysis (logo handled by async video - no manual logo needed)
     bool save_frames;
     char save_folder[512];
     uint32_t saved_frame_count;
@@ -139,6 +133,11 @@ struct c64_source {
     uint32_t recorded_frames;
     uint32_t recorded_audio_samples;
     pthread_mutex_t recording_mutex;
+
+    // Pre-allocated recording buffers (eliminates malloc/free in hot paths)
+    uint8_t *bmp_row_buffer;      // Pre-allocated BMP row buffer for frame saving
+    uint8_t *bgr_frame_buffer;    // Pre-allocated BGR buffer for video recording
+    size_t recording_buffer_size; // Size of allocated recording buffers
 };
 
 #endif // C64_TYPES_H

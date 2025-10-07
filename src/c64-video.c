@@ -1,6 +1,7 @@
 #include <obs-module.h>
 #include <util/platform.h>
 #include <string.h>
+#include <inttypes.h>
 #include <pthread.h>
 #include "c64-network.h"
 #include "c64-network-buffer.h"
@@ -41,7 +42,7 @@ bool c64_is_frame_timeout(struct frame_assembly *frame)
 
 void c64_swap_frame_buffers(struct c64_source *context)
 {
-    // Save frame to disk if enabled (before swap to avoid race conditions)
+    // Save frame to disk if enabled (before output to avoid race conditions)
     if (context->save_frames) {
         c64_save_frame_as_bmp(context, context->frame_buffer_back);
     }
@@ -51,13 +52,31 @@ void c64_swap_frame_buffers(struct c64_source *context)
         c64_record_video_frame(context, context->frame_buffer_back);
     }
 
-    // Swap front and back buffers
-    uint32_t *temp = context->frame_buffer_front;
-    context->frame_buffer_front = context->frame_buffer_back;
-    context->frame_buffer_back = temp;
+    // PERFORMANCE OPTIMIZATION: Use async video output instead of render callback
+    // This eliminates texture create/destroy on every frame - OBS handles this efficiently
+
+    struct obs_source_frame obs_frame = {0};
+
+    // Set up frame data - RGBA format (4 bytes per pixel)
+    obs_frame.data[0] = (uint8_t *)context->frame_buffer_back;
+    obs_frame.linesize[0] = context->width * 4; // 4 bytes per pixel (RGBA)
+    obs_frame.width = context->width;
+    obs_frame.height = context->height;
+    obs_frame.format = VIDEO_FORMAT_RGBA;
+    obs_frame.timestamp = os_gettime_ns(); // Current timestamp for A/V sync
+    obs_frame.flip = false;                // No vertical flip needed
+
+    // Output frame directly to OBS - much faster than synchronous rendering!
+    obs_source_output_video(context->source, &obs_frame);
+
+    // Update timing and status
     context->frame_ready = true;
-    context->last_frame_time = os_gettime_ns(); // Update timestamp for timeout detection
+    context->last_frame_time = obs_frame.timestamp;
     context->buffer_swap_pending = false;
+    context->frames_delivered_to_obs++;
+
+    C64_LOG_DEBUG("🎬 Async video frame output: %ux%u RGBA, timestamp=%" PRIu64, obs_frame.width, obs_frame.height,
+                  obs_frame.timestamp);
 }
 
 void c64_assemble_frame_to_buffer(struct c64_source *context, struct frame_assembly *frame)
@@ -392,20 +411,15 @@ void c64_process_video_packet_direct(struct c64_source *context, const uint8_t *
                             // CRITICAL: Do frame assembly OUTSIDE mutex to reduce lock contention
                             c64_assemble_frame_to_buffer(context, &context->current_frame);
 
-                            // Only hold mutex for the quick buffer swap
-                            if (pthread_mutex_lock(&context->frame_mutex) == 0) {
-                                c64_swap_frame_buffers(context);
-                                context->last_completed_frame = context->current_frame.frame_num;
+                            // Direct async video output - no mutex needed
+                            c64_swap_frame_buffers(context);
+                            context->last_completed_frame = context->current_frame.frame_num;
 
-                                // Track diagnostics (only once per completed frame!)
-                                context->frames_completed++;
-                                context->buffer_swaps++;
-                                context->frames_delivered_to_obs++;
-                                context->total_pipeline_latency += (os_gettime_ns() - capture_time);
-                                context->video_frames_processed++;
-
-                                pthread_mutex_unlock(&context->frame_mutex);
-                            }
+                            // Track diagnostics (only once per completed frame!)
+                            context->frames_completed++;
+                            context->buffer_swaps++;
+                            context->total_pipeline_latency += (os_gettime_ns() - capture_time);
+                            context->video_frames_processed++;
                         }
                     } else {
                         // Frame timeout - log drop and continue
@@ -477,20 +491,15 @@ void c64_process_video_packet_direct(struct c64_source *context, const uint8_t *
                 // CRITICAL: Do frame assembly OUTSIDE mutex to reduce lock contention
                 c64_assemble_frame_to_buffer(context, &context->current_frame);
 
-                // Only hold mutex for the quick buffer swap
-                if (pthread_mutex_lock(&context->frame_mutex) == 0) {
-                    c64_swap_frame_buffers(context);
-                    context->last_completed_frame = context->current_frame.frame_num;
+                // Direct async video output - no mutex needed
+                c64_swap_frame_buffers(context);
+                context->last_completed_frame = context->current_frame.frame_num;
 
-                    // Track diagnostics (only once per completed frame!)
-                    context->frames_completed++;
-                    context->buffer_swaps++;
-                    context->frames_delivered_to_obs++;
-                    context->total_pipeline_latency += (os_gettime_ns() - capture_time);
-                    context->video_frames_processed++;
-
-                    pthread_mutex_unlock(&context->frame_mutex);
-                }
+                // Track diagnostics (only once per completed frame!)
+                context->frames_completed++;
+                context->buffer_swaps++;
+                context->total_pipeline_latency += (os_gettime_ns() - capture_time);
+                context->video_frames_processed++;
             }
 
             // Reset for next frame

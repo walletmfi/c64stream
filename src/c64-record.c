@@ -391,8 +391,9 @@ void c64_save_frame_as_bmp(struct c64_source *context, uint32_t *frame_buffer)
     fwrite(header, 1, 54, file);
 
     // Write image data (BMP stores bottom-to-top, convert RGBA to BGR)
-    uint8_t *row_buffer = malloc(row_padded);
-    if (row_buffer) {
+    // CRITICAL: Use pre-allocated buffer to eliminate malloc/free in hot path
+    if (context->bmp_row_buffer) {
+        uint8_t *row_buffer = context->bmp_row_buffer;
         for (int y = height - 1; y >= 0; y--) { // Bottom-to-top
             uint32_t *src_row = frame_buffer + (y * width);
             uint8_t *dst = row_buffer;
@@ -411,7 +412,7 @@ void c64_save_frame_as_bmp(struct c64_source *context, uint32_t *frame_buffer)
 
             fwrite(row_buffer, 1, row_padded, file);
         }
-        free(row_buffer);
+        // No free() needed - using pre-allocated buffer
     }
 
     fclose(file);
@@ -507,8 +508,10 @@ void c64_record_video_frame(struct c64_source *context, uint32_t *frame_buffer)
 
     // Write AVI frame chunk with proper header
     size_t frame_size = context->width * context->height * 3; // BGR24
-    uint8_t *bgr_buffer = malloc(frame_size);
-    if (bgr_buffer) {
+    // CRITICAL: Use pre-allocated buffer to eliminate malloc/free in hot path
+    if (context->bgr_frame_buffer) {
+        uint8_t *bgr_buffer = context->bgr_frame_buffer;
+
         // Check if frame_buffer has non-zero data
         uint32_t non_zero_pixels = 0;
         for (uint32_t i = 0; i < context->width * context->height && i < 100; i++) {
@@ -546,7 +549,7 @@ void c64_record_video_frame(struct c64_source *context, uint32_t *frame_buffer)
             fwrite(&pad, 1, 1, context->video_file);
         }
 
-        free(bgr_buffer);
+        // No free() needed - using pre-allocated buffer
 
         if (written == frame_size) {
             context->recorded_frames++;

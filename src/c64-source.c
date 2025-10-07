@@ -83,34 +83,7 @@ static void close_and_reset_sockets(struct c64_source *context)
     }
 }
 
-// Load the C64S logo texture from module data directory
-static gs_texture_t *load_logo_texture(void)
-{
-    C64_LOG_DEBUG("Attempting to load logo texture...");
-
-    // Use obs_module_file() to get the path to the logo in the data directory
-    char *logo_path = obs_module_file("images/c64stream-logo.png");
-    if (!logo_path) {
-        C64_LOG_WARNING("Failed to locate logo file in module data directory");
-        return NULL;
-    }
-
-    C64_LOG_DEBUG("Logo path resolved to: %s", logo_path);
-
-    // Load texture directly from the data directory
-    gs_texture_t *logo_texture = gs_texture_create_from_file(logo_path);
-
-    if (!logo_texture) {
-        C64_LOG_WARNING("Failed to load logo texture from: %s", logo_path);
-    } else {
-        uint32_t width = gs_texture_get_width(logo_texture);
-        uint32_t height = gs_texture_get_height(logo_texture);
-        C64_LOG_DEBUG("Loaded logo texture from: %s (size: %ux%u)", logo_path, width, height);
-    }
-
-    bfree(logo_path);
-    return logo_texture;
-}
+// Logo loading removed - async video sources handle "no signal" states automatically
 
 void *c64_create(obs_data_t *settings, obs_source_t *source)
 {
@@ -208,22 +181,32 @@ void *c64_create(obs_data_t *settings, obs_source_t *source)
     context->width = C64_PAL_WIDTH;
     context->height = C64_PAL_HEIGHT;
 
-    // Allocate video buffers (double buffering)
-    size_t frame_size = context->width * context->height * 4; // RGBA
-    context->frame_buffer_front = bmalloc(frame_size);
+    // Allocate frame buffer for async video output (RGBA, 4 bytes per pixel)
+    // Only need back buffer since we output directly via obs_source_output_video()
+    size_t frame_size = context->width * context->height * sizeof(uint32_t);
     context->frame_buffer_back = bmalloc(frame_size);
-    if (!context->frame_buffer_front || !context->frame_buffer_back) {
-        C64_LOG_ERROR("Failed to allocate video frame buffers");
-        if (context->frame_buffer_front)
-            bfree(context->frame_buffer_front);
+    if (!context->frame_buffer_back) {
+        C64_LOG_ERROR("Failed to allocate frame buffer");
+        return NULL;
+    }
+    memset(context->frame_buffer_back, 0, frame_size);
+    context->frame_ready = false;
+
+    // Allocate pre-allocated recording buffers to eliminate malloc/free in hot paths
+    context->recording_buffer_size = frame_size;                               // Same as RGBA frame size
+    context->bmp_row_buffer = bmalloc(context->width * 4 + 4);                 // Row + padding for BMP
+    context->bgr_frame_buffer = bmalloc(context->width * context->height * 3); // BGR24 frame
+    if (!context->bmp_row_buffer || !context->bgr_frame_buffer) {
+        C64_LOG_ERROR("Failed to allocate recording buffers");
         if (context->frame_buffer_back)
             bfree(context->frame_buffer_back);
+        if (context->bmp_row_buffer)
+            bfree(context->bmp_row_buffer);
+        if (context->bgr_frame_buffer)
+            bfree(context->bgr_frame_buffer);
         bfree(context);
         return NULL;
     }
-    memset(context->frame_buffer_front, 0, frame_size);
-    memset(context->frame_buffer_back, 0, frame_size);
-    context->frame_ready = false;
     context->last_frame_time = 0; // Initialize frame timeout detection
 
     // Initialize video format detection
@@ -231,19 +214,12 @@ void *c64_create(obs_data_t *settings, obs_source_t *source)
     context->format_detected = false;
     context->expected_fps = 50.125; // Default to PAL timing until detected
 
-    // Initialize mutexes
-    if (pthread_mutex_init(&context->frame_mutex, NULL) != 0) {
-        C64_LOG_ERROR("Failed to initialize frame mutex");
-        bfree(context->frame_buffer_front);
-        bfree(context->frame_buffer_back);
-        bfree(context);
-        return NULL;
-    }
+    // Initialize mutexes (frame_mutex no longer needed for async video output)
     if (pthread_mutex_init(&context->assembly_mutex, NULL) != 0) {
         C64_LOG_ERROR("Failed to initialize assembly mutex");
-        pthread_mutex_destroy(&context->frame_mutex);
-        bfree(context->frame_buffer_front);
         bfree(context->frame_buffer_back);
+        bfree(context->bmp_row_buffer);
+        bfree(context->bgr_frame_buffer);
         bfree(context);
         return NULL;
     }
@@ -258,10 +234,12 @@ void *c64_create(obs_data_t *settings, obs_source_t *source)
     context->network_buffer = c64_network_buffer_create();
     if (!context->network_buffer) {
         C64_LOG_ERROR("Failed to create network buffer");
-        if (context->frame_buffer_front)
-            bfree(context->frame_buffer_front);
         if (context->frame_buffer_back)
             bfree(context->frame_buffer_back);
+        if (context->bmp_row_buffer)
+            bfree(context->bmp_row_buffer);
+        if (context->bgr_frame_buffer)
+            bfree(context->bgr_frame_buffer);
         bfree(context);
         return NULL;
     }
@@ -298,9 +276,6 @@ void *c64_create(obs_data_t *settings, obs_source_t *source)
     context->consecutive_failures = 0;
 
     // Initialize logo display
-    context->logo_texture = NULL;
-    context->logo_load_attempted = false;
-
     // Initialize recording for this source
     c64_record_init(context);
 
@@ -345,19 +320,16 @@ void c64_destroy(void *data)
 
     c64_record_cleanup(context);
 
-    if (context->logo_texture) {
-        gs_texture_destroy(context->logo_texture);
-        context->logo_texture = NULL;
-    }
-
-    // Cleanup resources
-    pthread_mutex_destroy(&context->frame_mutex);
+    // Cleanup resources (async video sources don't need logo textures or front buffer)
     pthread_mutex_destroy(&context->assembly_mutex);
-    if (context->frame_buffer_front) {
-        bfree(context->frame_buffer_front);
-    }
     if (context->frame_buffer_back) {
         bfree(context->frame_buffer_back);
+    }
+    if (context->bmp_row_buffer) {
+        bfree(context->bmp_row_buffer);
+    }
+    if (context->bgr_frame_buffer) {
+        bfree(context->bgr_frame_buffer);
     }
     if (context->network_buffer) {
         c64_network_buffer_destroy(context->network_buffer);
@@ -583,19 +555,14 @@ void c64_stop_streaming(struct c64_source *context)
     }
     context->audio_thread_active = false;
 
-    // Reset frame state and clear buffers
-    if (pthread_mutex_lock(&context->frame_mutex) == 0) {
-        context->frame_ready = false;
-        context->buffer_swap_pending = false;
+    // Reset frame state and clear buffer
+    context->frame_ready = false;
+    context->buffer_swap_pending = false;
 
-        // Clear frame buffers to prevent yellow screen
-        if (context->frame_buffer_front && context->frame_buffer_back) {
-            uint32_t frame_size = context->width * context->height * 4;
-            memset(context->frame_buffer_front, 0, frame_size);
-            memset(context->frame_buffer_back, 0, frame_size);
-        }
-
-        pthread_mutex_unlock(&context->frame_mutex);
+    // Clear frame buffer (async video will stop automatically)
+    if (context->frame_buffer_back) {
+        uint32_t frame_size = context->width * context->height * 4;
+        memset(context->frame_buffer_back, 0, frame_size);
     }
 
     // Reset frame assembly state
@@ -614,243 +581,7 @@ void c64_stop_streaming(struct c64_source *context)
     C64_LOG_INFO("C64S streaming stopped");
 }
 
-void c64_render(void *data, gs_effect_t *effect)
-{
-    struct c64_source *context = data;
-    UNUSED_PARAMETER(effect);
-
-    if (!context) {
-        C64_LOG_ERROR("Render called with NULL context!");
-        return;
-    }
-
-    // Lazy load logo texture on first render (when graphics context is available)
-    if (!context->logo_load_attempted) {
-        context->logo_texture = load_logo_texture();
-        context->logo_load_attempted = true;
-    }
-
-    uint64_t now = os_gettime_ns();
-    bool frames_timed_out = false;
-    bool needs_initial_connection = false;
-
-    if (context->last_frame_time > 0) {
-        uint64_t frame_age = now - context->last_frame_time;
-        frames_timed_out = (frame_age > C64_FRAME_TIMEOUT_NS);
-    } else {
-        needs_initial_connection = true;
-    }
-
-    if (frames_timed_out || needs_initial_connection) {
-        static uint64_t last_retry_time = 0;
-        uint64_t time_since_last_retry = now - last_retry_time;
-
-        bool should_retry = (time_since_last_retry >= 1000000000ULL) && !context->retry_in_progress &&
-                            strcmp(context->ip_address, "0.0.0.0") != 0;
-
-        if (should_retry) {
-            last_retry_time = now;
-            context->retry_in_progress = true;
-
-            C64_LOG_INFO("� Connection needed - delegating to async task");
-            obs_queue_task(OBS_TASK_UI, c64_async_retry_task, context, false);
-        }
-    } else if (context->frame_ready && context->last_frame_time > 0) {
-        context->retry_in_progress = false;
-        context->retry_count = 0;
-        context->consecutive_failures = 0;
-    }
-
-    // More stable logo display logic with hysteresis
-    // Only show logo if streaming hasn't started OR frames have been timed out for a while
-    bool should_show_logo = !context->streaming || !context->frame_buffer_front ||
-                            (frames_timed_out && context->last_frame_time > 0 &&
-                             (now - context->last_frame_time) > (C64_FRAME_TIMEOUT_NS * 2));
-
-    // Debug logging (only when debug logging is enabled)
-    if (c64_debug_logging) {
-        static uint64_t last_frame_debug_log = 0;
-        if (last_frame_debug_log == 0 || (now - last_frame_debug_log) >= C64_DEBUG_LOG_INTERVAL_NS) {
-            uint64_t frame_age = (context->last_frame_time > 0) ? (now - context->last_frame_time) / 1000000000ULL
-                                                                : 999;
-            C64_LOG_DEBUG(
-                "🎬 Frame state: should_show_logo=%d, streaming=%d, frame_ready=%d, frames_timed_out=%d, frame_age=%" PRIu64
-                "s",
-                should_show_logo, context->streaming, context->frame_ready, frames_timed_out, frame_age);
-            last_frame_debug_log = now;
-        }
-    }
-
-    // Additional debug when logo should be showing
-    static uint64_t last_debug_log = 0;
-    if (should_show_logo && (last_debug_log == 0 || (now - last_debug_log) >= C64_DEBUG_LOG_INTERVAL_NS)) {
-        const char *reason = !context->streaming            ? "not_streaming"
-                             : !context->frame_ready        ? "no_frames"
-                             : !context->frame_buffer_front ? "no_buffer"
-                             : frames_timed_out             ? "frame_timeout"
-                                                            : "unknown";
-        C64_LOG_DEBUG("🖼️ Showing logo (%s): streaming=%d, frame_ready=%d, frames_timed_out=%d, C64_IP='%s'", reason,
-                      context->streaming, context->frame_ready, frames_timed_out, context->ip_address);
-        last_debug_log = now;
-    }
-
-    // Only clear frame ready state after extended timeout (avoid flickering)
-    if (frames_timed_out && (now - context->last_frame_time) > (C64_FRAME_TIMEOUT_NS * 3)) {
-        context->frame_ready = false;
-    }
-
-    // Render function just displays already-assembled frames
-
-    if (should_show_logo) {
-        // Show C64S logo centered on black background
-        if (context->logo_texture) {
-            // First draw black background
-            gs_effect_t *solid = obs_get_base_effect(OBS_EFFECT_SOLID);
-            gs_eparam_t *color = gs_effect_get_param_by_name(solid, "color");
-
-            if (solid && color) {
-                gs_technique_t *tech = gs_effect_get_technique(solid, "Solid");
-                if (tech) {
-                    gs_technique_begin(tech);
-                    gs_technique_begin_pass(tech, 0);
-
-                    // Black background
-                    struct vec4 black = {0.0f, 0.0f, 0.0f, 1.0f};
-                    gs_effect_set_vec4(color, &black);
-                    gs_draw_sprite(NULL, 0, context->width, context->height);
-
-                    gs_technique_end_pass(tech);
-                    gs_technique_end(tech);
-                }
-            }
-
-            // Then draw centered logo
-            gs_effect_t *default_effect = obs_get_base_effect(OBS_EFFECT_DEFAULT);
-            if (default_effect) {
-                gs_technique_t *tech = gs_effect_get_technique(default_effect, "Draw");
-                if (tech) {
-                    uint32_t logo_width = gs_texture_get_width(context->logo_texture);
-                    uint32_t logo_height = gs_texture_get_height(context->logo_texture);
-
-                    // Calculate scale to fit logo within canvas while maintaining aspect ratio
-                    float scale_x = (float)context->width / (float)logo_width;
-                    float scale_y = (float)context->height / (float)logo_height;
-                    float scale = (scale_x < scale_y) ? scale_x : scale_y;
-
-                    // Limit scale to max 1.0 (don't enlarge small logos)
-                    if (scale > 1.0f) {
-                        scale = 1.0f;
-                    }
-
-                    // Calculate scaled dimensions
-                    float scaled_width = logo_width * scale;
-                    float scaled_height = logo_height * scale;
-
-                    // Center the scaled logo
-                    float x = (context->width - scaled_width) / 2.0f;
-                    float y = (context->height - scaled_height) / 2.0f;
-
-                    gs_matrix_push();
-                    gs_matrix_translate3f(x, y, 0.0f);
-                    gs_matrix_scale3f(scale, scale, 1.0f);
-
-                    gs_technique_begin(tech);
-                    gs_technique_begin_pass(tech, 0);
-
-                    gs_eparam_t *image = gs_effect_get_param_by_name(default_effect, "image");
-                    gs_effect_set_texture(image, context->logo_texture);
-
-                    gs_draw_sprite(context->logo_texture, 0, logo_width, logo_height);
-
-                    gs_technique_end_pass(tech);
-                    gs_technique_end(tech);
-
-                    gs_matrix_pop();
-                }
-            }
-        } else {
-            // Fallback to colored background if logo failed to load
-            gs_effect_t *solid = obs_get_base_effect(OBS_EFFECT_SOLID);
-            gs_eparam_t *color = gs_effect_get_param_by_name(solid, "color");
-
-            if (solid && color) {
-                gs_technique_t *tech = gs_effect_get_technique(solid, "Solid");
-                if (tech) {
-                    gs_technique_begin(tech);
-                    gs_technique_begin_pass(tech, 0);
-
-                    // Show Commodore dark blue if logo cannot be found
-                    struct vec4 commodore_blue = {0.02f, 0.16f, 0.42f, 1.0f}; // #053DA8 - classic C64 blue
-                    gs_effect_set_vec4(color, &commodore_blue);
-
-                    gs_draw_sprite(NULL, 0, context->width, context->height);
-
-                    gs_technique_end_pass(tech);
-                    gs_technique_end(tech);
-                }
-            }
-        }
-    } else {
-        // Render actual C64S video frame from front buffer
-        // CRITICAL: Minimize mutex hold time - only copy frame data, NOT GPU operations
-        uint32_t *frame_data_copy = NULL;
-        size_t frame_data_size = context->width * context->height * sizeof(uint32_t);
-
-        if (pthread_mutex_lock(&context->frame_mutex) == 0) {
-            // Quick copy of frame data while holding mutex
-            if (context->frame_buffer_front) {
-                frame_data_copy = bmalloc(frame_data_size);
-                if (frame_data_copy) {
-                    memcpy(frame_data_copy, context->frame_buffer_front, frame_data_size);
-                }
-            }
-            pthread_mutex_unlock(&context->frame_mutex);
-        }
-
-        // GPU operations OUTSIDE mutex to prevent blocking video thread
-        if (frame_data_copy) {
-            gs_texture_t *texture =
-                gs_texture_create(context->width, context->height, GS_RGBA, 1, (const uint8_t **)&frame_data_copy, 0);
-            if (texture) {
-                // Use default effect for texture rendering
-                gs_effect_t *default_effect = obs_get_base_effect(OBS_EFFECT_DEFAULT);
-                if (default_effect) {
-                    gs_eparam_t *image_param = gs_effect_get_param_by_name(default_effect, "image");
-                    if (image_param) {
-                        gs_effect_set_texture(image_param, texture);
-
-                        gs_technique_t *tech = gs_effect_get_technique(default_effect, "Draw");
-                        if (tech) {
-                            gs_technique_begin(tech);
-                            gs_technique_begin_pass(tech, 0);
-                            gs_draw_sprite(texture, 0, context->width, context->height);
-                            gs_technique_end_pass(tech);
-                            gs_technique_end(tech);
-                        }
-                    }
-                }
-
-                // Clean up texture
-                gs_texture_destroy(texture);
-            }
-
-            // Clean up frame data copy
-            bfree(frame_data_copy);
-        }
-    }
-}
-
-uint32_t c64_get_width(void *data)
-{
-    struct c64_source *context = data;
-    return context->width;
-}
-
-uint32_t c64_get_height(void *data)
-{
-    struct c64_source *context = data;
-    return context->height;
-}
+// Synchronous render callback removed - now using async video output via obs_source_output_video()
 
 const char *c64_get_name(void *unused)
 {
