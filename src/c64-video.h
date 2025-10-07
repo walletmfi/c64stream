@@ -41,7 +41,12 @@ void c64_init_frame_assembly_lockfree(struct frame_assembly *frame, uint16_t fra
 bool c64_try_add_packet_lockfree(struct frame_assembly *frame, uint16_t packet_index);
 bool c64_is_frame_complete_lockfree(struct frame_assembly *frame);
 
-// Video thread function
+// Video thread functions
 void *c64_video_thread_func(void *data);
+void *c64_video_processor_thread_func(void *data);
+
+// Packet processing functions
+void c64_process_video_packet_direct(struct c64_source *context, const uint8_t *packet, size_t packet_size,
+                                     uint64_t timestamp_ns);
 
 #endif // C64_VIDEO_H

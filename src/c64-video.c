@@ -61,7 +61,12 @@ void c64_swap_frame_buffers(struct c64_source *context)
 
 void c64_assemble_frame_to_buffer(struct c64_source *context, struct frame_assembly *frame)
 {
-    // Assemble complete frame into back buffer
+    // Assemble complete frame into back buffer according to C64 Ultimate specification
+    // Each packet contains 4 lines of 384 pixels (192 bytes per line when packed as 4-bit)
+
+    C64_LOG_DEBUG("🎬 Assembling frame %u: %u/%u packets received", frame->frame_num, frame->received_packets,
+                  frame->expected_packets);
+
     for (int i = 0; i < C64_MAX_PACKETS_PER_FRAME; i++) {
         struct frame_packet *packet = &frame->packets[i];
         if (!packet->received)
@@ -70,14 +75,32 @@ void c64_assemble_frame_to_buffer(struct c64_source *context, struct frame_assem
         uint16_t line_num = packet->line_num;
         uint8_t lines_per_packet = packet->lines_per_packet;
 
+        // Validate packet bounds
+        if (lines_per_packet != C64_LINES_PER_PACKET) {
+            C64_LOG_WARNING("❌ Packet %d has %u lines per packet (expected %u)", i, lines_per_packet,
+                            C64_LINES_PER_PACKET);
+        }
+
+        // Process each line in the packet (should be 4 lines per packet)
         for (int line = 0; line < (int)lines_per_packet && (int)(line_num + line) < (int)context->height; line++) {
-            uint32_t *dst_line = context->frame_buffer_back + ((line_num + line) * C64_PIXELS_PER_LINE);
+            uint32_t dst_line_offset = (line_num + line) * C64_PIXELS_PER_LINE;
+            uint32_t *dst_line = context->frame_buffer_back + dst_line_offset;
             uint8_t *src_line = packet->packet_data + (line * C64_BYTES_PER_LINE);
 
-            // Optimized color conversion using lookup table
+            // Bounds checking
+            uint32_t current_line = (uint32_t)(line_num + line);
+            if (current_line >= context->height) {
+                C64_LOG_WARNING("❌ Line %u exceeds frame height %u", current_line, context->height);
+                break;
+            }
+
+            // Convert 4-bit VIC colors to 32-bit RGBA using optimized lookup table
+            // Each source byte contains 2 pixels (4 bits each)
             c64_convert_pixels_optimized(src_line, dst_line, C64_BYTES_PER_LINE);
         }
     }
+
+    C64_LOG_DEBUG("✅ Frame %u assembly complete", frame->frame_num);
 }
 
 // DEPRECATED: Legacy delay queue functions - stubbed out (network buffer replaces this functionality)
@@ -209,13 +232,16 @@ void c64_process_audio_statistics_batch(struct c64_source *context, uint64_t cur
 // Lock-free frame assembly optimization functions
 void c64_init_frame_assembly_lockfree(struct frame_assembly *frame, uint16_t frame_num)
 {
-    // Initialize frame structure
+    // Initialize frame structure according to C64 Ultimate spec
     memset(frame, 0, sizeof(struct frame_assembly));
     frame->frame_num = frame_num;
     frame->start_time = os_gettime_ns();
     frame->received_packets = 0;
+    frame->expected_packets = 0; // Will be set when we detect format or see last packet
     frame->complete = false;
     frame->packets_received_mask = 0;
+
+    C64_LOG_DEBUG("🎬 Initialized frame assembly for frame %u", frame_num);
 }
 
 bool c64_try_add_packet_lockfree(struct frame_assembly *frame, uint16_t packet_index)
@@ -245,21 +271,33 @@ bool c64_is_frame_complete_lockfree(struct frame_assembly *frame)
 {
     // Load current packet count
     uint16_t received = frame->received_packets;
-
-    // Frame is complete when we have all expected packets
-    // For PAL: 68 packets (272 lines / 4 lines per packet)
-    // For NTSC: 60 packets (240 lines / 4 lines per packet)
     uint16_t expected = frame->expected_packets;
+
+    // Frame must have expected packets set before we can check completion
     if (expected == 0) {
-        // Auto-detect based on received packet pattern
-        expected = 68; // Default to PAL, could be refined based on actual data
+        return false; // Can't be complete if we don't know how many packets to expect
     }
 
+    // Frame is complete when we have all expected packets
     bool complete = (received >= expected);
 
+    // Debug logging for frame completion checks (throttled)
+    static uint16_t last_debug_frame = 0;
+    static uint64_t last_debug_time = 0;
+    uint64_t now = os_gettime_ns();
+
+    if (frame->frame_num != last_debug_frame && received > 0 &&
+        (last_debug_time == 0 || (now - last_debug_time) > 1000000000ULL)) { // 1 second throttle
+        C64_LOG_DEBUG("🎬 Frame completion check: frame %u has %u/%u packets (complete=%d)", frame->frame_num, received,
+                      expected, complete);
+        last_debug_frame = frame->frame_num;
+        last_debug_time = now;
+    }
+
     // Update completion flag if frame is complete
-    if (complete) {
+    if (complete && !frame->complete) {
         frame->complete = true;
+        C64_LOG_DEBUG("🎬 Frame %u marked as COMPLETE with %u/%u packets!", frame->frame_num, received, expected);
     }
 
     return complete;
@@ -365,13 +403,13 @@ void *c64_video_thread_func(void *data)
             continue;
         }
 
-        // Push packet to network buffer for queuing and later processing in render thread
+        // Push packet to network buffer for jitter correction and synchronization
         if (context->network_buffer) {
             c64_network_buffer_push_video(context->network_buffer, packet, received, now);
+        } else {
+            // If no network buffer, process packet immediately (fallback)
+            c64_process_video_packet_direct(context, packet, received, now);
         }
-
-        // Note: Frame assembly and rendering now happens in c64_render() using buffered packets
-        // This eliminates the complex immediate processing and delay queue logic
     }
 
     C64_LOG_DEBUG("Video receiver thread stopped");
@@ -381,5 +419,209 @@ void *c64_video_thread_func(void *data)
     timeEndPeriod(1);
 #endif
 
+    return NULL;
+}
+
+// Direct packet processing function (based on main branch logic)
+void c64_process_video_packet_direct(struct c64_source *context, const uint8_t *packet, size_t packet_size,
+                                     uint64_t timestamp_ns)
+{
+    if (!context || !packet || packet_size != C64_VIDEO_PACKET_SIZE) {
+        return;
+    }
+
+    // Parse packet header (streamlined - only what we need for processing)
+    uint16_t seq_num = *(uint16_t *)(packet + 0);
+    uint16_t frame_num = *(uint16_t *)(packet + 2);
+    uint16_t line_num = *(uint16_t *)(packet + 4);
+    uint8_t lines_per_packet = packet[8];
+
+    UNUSED_PARAMETER(seq_num); // Used for logging but not required for frame assembly
+
+    bool last_packet = (line_num & 0x8000) != 0;
+    line_num &= 0x7FFF;
+
+    // Process packet with frame assembly and double buffering (from main branch)
+    if (pthread_mutex_lock(&context->assembly_mutex) == 0) {
+        // Track frame capture timing for diagnostics (per-frame, not per-packet)
+        uint64_t capture_time = timestamp_ns;
+
+        // Check if this is a new frame
+        if (context->current_frame.frame_num != frame_num) {
+            // Log frame transitions to detect skips and duplicates
+            if (context->current_frame.frame_num != 0) {
+                uint16_t expected_next = context->current_frame.frame_num + 1;
+                int16_t frame_diff = (int16_t)(frame_num - expected_next);
+
+                if (frame_diff > 0) {
+                    C64_LOG_WARNING("📽️ FRAME SKIP: Expected frame %u, got %u (skipped %d frames)", expected_next,
+                                    frame_num, frame_diff);
+                } else if (frame_diff < 0) {
+                    C64_LOG_WARNING("🔄 FRAME REVERT: Expected frame %u, got %u (went back %d frames)", expected_next,
+                                    frame_num, -frame_diff);
+                }
+            }
+
+            // Count expected and captured frames only on new frame start
+            if (context->last_capture_time > 0) {
+                context->frames_expected++;
+            }
+            context->frames_captured++;
+            context->last_capture_time = capture_time;
+
+            // Complete previous frame if it exists and is reasonably complete
+            if (context->current_frame.received_packets > 0) {
+                if (c64_is_frame_complete(&context->current_frame) || c64_is_frame_timeout(&context->current_frame)) {
+                    if (c64_is_frame_complete(&context->current_frame)) {
+                        // Process frame immediately (no delay queue in network buffer mode)
+                        if (context->last_completed_frame != context->current_frame.frame_num) {
+                            if (pthread_mutex_lock(&context->frame_mutex) == 0) {
+                                c64_assemble_frame_to_buffer(context, &context->current_frame);
+                                c64_swap_frame_buffers(context);
+                                context->last_completed_frame = context->current_frame.frame_num;
+
+                                // Track diagnostics (only once per completed frame!)
+                                context->frames_completed++;
+                                context->buffer_swaps++;
+                                context->frames_delivered_to_obs++;
+                                context->total_pipeline_latency += (os_gettime_ns() - capture_time);
+                                context->video_frames_processed++;
+
+                                pthread_mutex_unlock(&context->frame_mutex);
+                            }
+                        }
+                    } else {
+                        // Frame timeout - log drop and continue
+                        C64_LOG_WARNING("⏰ FRAME TIMEOUT: Frame %u timed out with %u/%u packets (%.1f%% complete)",
+                                        context->current_frame.frame_num, context->current_frame.received_packets,
+                                        context->current_frame.expected_packets,
+                                        (context->current_frame.received_packets * 100.0f) /
+                                            context->current_frame.expected_packets);
+                        context->frame_drops++;
+                    }
+                }
+            }
+
+            // Initialize new frame
+            c64_init_frame_assembly(&context->current_frame, frame_num);
+        }
+
+        // Add packet to current frame
+        uint32_t packet_index = line_num / lines_per_packet;
+        if (packet_index < C64_MAX_PACKETS_PER_FRAME) {
+            struct frame_packet *fp = &context->current_frame.packets[packet_index];
+            if (!fp->received) {
+                fp->line_num = line_num;
+                fp->lines_per_packet = lines_per_packet;
+                fp->received = true;
+                memcpy(fp->packet_data, packet + C64_VIDEO_HEADER_SIZE, C64_VIDEO_PACKET_SIZE - C64_VIDEO_HEADER_SIZE);
+                context->current_frame.received_packets++;
+            }
+        } else {
+            C64_LOG_WARNING("❌ INVALID PACKET: Frame %u, Line %u out of range (packet_index %u >= %d) - seq %u",
+                            frame_num, line_num, packet_index, C64_MAX_PACKETS_PER_FRAME, seq_num);
+            context->packet_drops++;
+        }
+
+        // Update expected packet count and detect video format based on last packet
+        if (last_packet && context->current_frame.expected_packets == 0) {
+            context->current_frame.expected_packets = packet_index + 1;
+
+            // Detect PAL vs NTSC format from frame height
+            uint32_t frame_height = line_num + lines_per_packet;
+            if (!context->format_detected || context->detected_frame_height != frame_height) {
+                context->detected_frame_height = frame_height;
+                context->format_detected = true;
+
+                // Calculate expected FPS based on detected format
+                if (frame_height == C64_PAL_HEIGHT) {
+                    context->expected_fps = 50.125; // PAL: 50.125 Hz (actual C64 timing)
+                    C64_LOG_INFO("🎥 Detected PAL format: 384x%u @ %.3f Hz", frame_height, context->expected_fps);
+                } else if (frame_height == C64_NTSC_HEIGHT) {
+                    context->expected_fps = 59.826; // NTSC: 59.826 Hz (actual C64 timing)
+                    C64_LOG_INFO("🎥 Detected NTSC format: 384x%u @ %.3f Hz", frame_height, context->expected_fps);
+                } else {
+                    // Unknown format, estimate based on packet count
+                    context->expected_fps = (frame_height <= 250) ? 59.826 : 50.125;
+                    C64_LOG_WARNING("⚠️ Unknown video format: 384x%u, assuming %.3f Hz", frame_height,
+                                    context->expected_fps);
+                }
+
+                // Update context dimensions if they changed
+                if (context->height != frame_height) {
+                    context->height = frame_height;
+                    context->width = C64_PIXELS_PER_LINE; // Always 384
+                }
+            }
+        }
+
+        // Check if frame is complete
+        if (c64_is_frame_complete(&context->current_frame)) {
+            // Process frame immediately (no delay queue in network buffer mode)
+            if (context->last_completed_frame != context->current_frame.frame_num) {
+                if (pthread_mutex_lock(&context->frame_mutex) == 0) {
+                    c64_assemble_frame_to_buffer(context, &context->current_frame);
+                    c64_swap_frame_buffers(context);
+                    context->last_completed_frame = context->current_frame.frame_num;
+
+                    // Track diagnostics (only once per completed frame!)
+                    context->frames_completed++;
+                    context->buffer_swaps++;
+                    context->frames_delivered_to_obs++;
+                    context->total_pipeline_latency += (os_gettime_ns() - capture_time);
+                    context->video_frames_processed++;
+
+                    pthread_mutex_unlock(&context->frame_mutex);
+                }
+            }
+
+            // Reset for next frame
+            c64_init_frame_assembly(&context->current_frame, 0);
+        }
+
+        pthread_mutex_unlock(&context->assembly_mutex);
+    }
+}
+
+// Video processor thread - pulls packets from network buffer and processes them
+void *c64_video_processor_thread_func(void *data)
+{
+    struct c64_source *context = data;
+
+    C64_LOG_DEBUG("Video processor thread started");
+
+    while (context->thread_active) {
+        if (context->network_buffer) {
+            const uint8_t *video_data, *audio_data;
+            size_t video_size, audio_size;
+            uint64_t timestamp_us;
+
+            // Check for new synchronized packets
+            if (c64_network_buffer_pop(context->network_buffer, &video_data, &video_size, &audio_data, &audio_size,
+                                       &timestamp_us)) {
+
+                // Process video packet if available
+                if (video_data && video_size > 0) {
+                    c64_process_video_packet_direct(context, video_data, video_size, timestamp_us * 1000);
+                }
+
+                // Process audio packet if available (TODO: implement audio processing)
+                if (audio_data && audio_size > 0) {
+                    // Audio processing would go here
+                }
+
+                // Update frame timing
+                context->last_frame_time = os_gettime_ns();
+            } else {
+                // No packets available, brief sleep to avoid busy waiting
+                os_sleep_ms(1);
+            }
+        } else {
+            // No network buffer, sleep longer
+            os_sleep_ms(10);
+        }
+    }
+
+    C64_LOG_DEBUG("Video processor thread stopped");
     return NULL;
 }

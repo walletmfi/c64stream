@@ -83,9 +83,11 @@ struct c64_source {
     socket_t audio_socket;
     socket_t control_socket;
     pthread_t video_thread;
+    pthread_t video_processor_thread;
     pthread_t audio_thread;
     bool thread_active;
     bool video_thread_active;
+    bool video_processor_thread_active;
     bool audio_thread_active;
 
     // Synchronization

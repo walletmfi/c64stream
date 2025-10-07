@@ -115,8 +115,8 @@ static int video_rb_pop_latest(struct video_ring_buffer *rb, struct packet_slot 
     size_t tail = atomic_load_explicit(&rb->tail, memory_order_acquire);
     size_t count = (head >= tail) ? (head - tail) : (rb->max_capacity - tail + head);
 
-    if (count == 0 || count > rb->active_slots) {
-        // Nothing available within active range
+    if (count == 0) {
+        // No packets available
         return 0;
     }
 
@@ -137,8 +137,8 @@ static int audio_rb_pop_latest(struct audio_ring_buffer *rb, struct packet_slot 
     size_t tail = atomic_load_explicit(&rb->tail, memory_order_acquire);
     size_t count = (head >= tail) ? (head - tail) : (rb->max_capacity - tail + head);
 
-    if (count == 0 || count > rb->active_slots) {
-        // Nothing available within active range
+    if (count == 0) {
+        // No packets available
         return 0;
     }
 
@@ -257,6 +257,12 @@ void c64_network_buffer_push_video(struct c64_network_buffer *buf, const uint8_t
     if (!buf || !data) {
         return;
     }
+
+    static int push_count = 0;
+    if ((push_count++ % 1000) == 0) {
+        printf("[DEBUG] Network buffer push video: packet %d (len=%zu)\n", push_count, len);
+    }
+
     video_rb_push(&buf->video, data, len, timestamp_us);
 }
 
@@ -278,23 +284,39 @@ int c64_network_buffer_pop(struct c64_network_buffer *buf, const uint8_t **video
 
     struct packet_slot *v, *a;
 
-    // Try to get packets from both buffers
+    // Try to get video packet (required)
     if (!video_rb_pop_latest(&buf->video, &v)) {
+        static int no_video_count = 0;
+        if ((no_video_count++ % 1000) == 0) {
+            printf("[DEBUG] Network buffer pop: no video packets available (count: %d)\n", no_video_count);
+        }
         return 0;
     }
-    if (!audio_rb_pop_latest(&buf->audio, &a)) {
-        return 0;
+
+    // Try to get audio packet (optional - may not always be available)
+    bool has_audio = audio_rb_pop_latest(&buf->audio, &a);
+
+    static int pop_count = 0;
+    if ((pop_count++ % 100) == 0) {
+        printf("[DEBUG] Network buffer pop SUCCESS: video=yes, audio=%s (count: %d)\n", has_audio ? "yes" : "no",
+               pop_count);
     }
 
     // Return packet data
     *video_data = v->data;
     *video_size = v->size;
-    *audio_data = a->data;
-    *audio_size = a->size;
 
-    // Return the earlier timestamp for synchronization
+    if (has_audio) {
+        *audio_data = a->data;
+        *audio_size = a->size;
+    } else {
+        *audio_data = NULL;
+        *audio_size = 0;
+    }
+
+    // Return timestamp (use video timestamp if no audio)
     if (timestamp_us) {
-        *timestamp_us = v->timestamp_us < a->timestamp_us ? v->timestamp_us : a->timestamp_us;
+        *timestamp_us = has_audio && a->timestamp_us < v->timestamp_us ? a->timestamp_us : v->timestamp_us;
     }
 
     return 1;
