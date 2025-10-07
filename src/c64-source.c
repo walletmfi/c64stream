@@ -6,9 +6,16 @@
 #include <inttypes.h>
 #include <pthread.h>
 #include "c64-network.h" // Include network header first to avoid Windows header conflicts
+#include "c64-network-buffer.h"
 
 #include "c64-logging.h"
 #include "c64-source.h"
+
+// Forward declarations for helper functions
+static void c64_process_buffered_video_packet(struct c64_source *context, const uint8_t *packet_data,
+                                              size_t packet_size, uint64_t timestamp_us);
+static void c64_process_buffered_audio_packet(struct c64_source *context, const uint8_t *packet_data,
+                                              size_t packet_size, uint64_t timestamp_us);
 #include "c64-types.h"
 #include "c64-protocol.h"
 #include "c64-video.h"
@@ -782,6 +789,27 @@ void c64_render(void *data, gs_effect_t *effect)
             }
         }
     } else {
+        // Process packets from network buffer and assemble frames
+        if (context->network_buffer) {
+            const uint8_t *video_data, *audio_data;
+            size_t video_size, audio_size;
+            uint64_t timestamp_us;
+
+            // Check for new synchronized packets
+            if (c64_network_buffer_pop(context->network_buffer, &video_data, &video_size, &audio_data, &audio_size,
+                                       &timestamp_us)) {
+
+                // Process video packet and assemble frame
+                c64_process_buffered_video_packet(context, video_data, video_size, timestamp_us);
+
+                // Process audio packet and output to OBS
+                c64_process_buffered_audio_packet(context, audio_data, audio_size, timestamp_us);
+
+                // Update frame timing
+                context->last_frame_time = now;
+            }
+        }
+
         // Render actual C64S video frame from front buffer
         if (pthread_mutex_lock(&context->frame_mutex) == 0) {
             // Create texture from front buffer data
@@ -813,6 +841,123 @@ void c64_render(void *data, gs_effect_t *effect)
             pthread_mutex_unlock(&context->frame_mutex);
         }
     }
+}
+
+// Helper function to process video packets from network buffer
+static void c64_process_buffered_video_packet(struct c64_source *context, const uint8_t *packet_data,
+                                              size_t packet_size, uint64_t timestamp_us)
+{
+    UNUSED_PARAMETER(timestamp_us); // Timestamp used for synchronization in buffer system
+
+    if (!context || !packet_data || packet_size != C64_VIDEO_PACKET_SIZE) {
+        return;
+    }
+
+    // Parse video packet header
+    uint16_t frame_num = *(uint16_t *)(packet_data + 2);
+    uint16_t line_num = *(uint16_t *)(packet_data + 4);
+    uint8_t lines_per_packet = packet_data[8];
+
+    bool last_packet = (line_num & 0x8000) != 0;
+    line_num &= 0x7FFF;
+
+    // Update statistics
+    context->video_packets_received++;
+    context->video_bytes_received += packet_size;
+
+    // Simple frame assembly - assemble directly to back buffer when packet completes a frame
+    if (pthread_mutex_lock(&context->assembly_mutex) == 0) {
+        // Check if this is a new frame
+        if (context->current_frame.frame_num != frame_num) {
+            // Initialize new frame
+            c64_init_frame_assembly(&context->current_frame, frame_num);
+
+            // Detect video format from last packet
+            if (last_packet) {
+                uint32_t frame_height = line_num + lines_per_packet;
+                if (!context->format_detected || context->detected_frame_height != frame_height) {
+                    context->detected_frame_height = frame_height;
+                    context->format_detected = true;
+                    context->height = frame_height;
+                    context->width = C64_PIXELS_PER_LINE;
+
+                    if (frame_height == C64_PAL_HEIGHT) {
+                        context->expected_fps = 50.125;
+                        C64_LOG_INFO("🎥 Detected PAL format: 384x%u @ %.3f Hz", frame_height, context->expected_fps);
+                    } else if (frame_height == C64_NTSC_HEIGHT) {
+                        context->expected_fps = 59.826; // Actual C64 NTSC timing
+                        C64_LOG_INFO("🎥 Detected NTSC format: 384x%u @ %.3f Hz", frame_height, context->expected_fps);
+                    }
+                }
+            }
+        }
+
+        // Add packet to frame
+        uint32_t packet_index = line_num / lines_per_packet;
+        if (packet_index < C64_MAX_PACKETS_PER_FRAME) {
+            struct frame_packet *fp = &context->current_frame.packets[packet_index];
+            if (!fp->received) {
+                fp->line_num = line_num;
+                fp->lines_per_packet = lines_per_packet;
+                fp->received = true;
+                memcpy(fp->packet_data, packet_data + C64_VIDEO_HEADER_SIZE,
+                       C64_VIDEO_PACKET_SIZE - C64_VIDEO_HEADER_SIZE);
+                context->current_frame.received_packets++;
+
+                if (last_packet) {
+                    context->current_frame.expected_packets = packet_index + 1;
+                }
+            }
+        }
+
+        // Check if frame is complete
+        if (c64_is_frame_complete(&context->current_frame)) {
+            // Assemble frame to back buffer
+            if (pthread_mutex_lock(&context->frame_mutex) == 0) {
+                c64_assemble_frame_to_buffer(context, &context->current_frame);
+                c64_swap_frame_buffers(context);
+                context->frame_ready = true;
+                context->frames_completed++;
+                pthread_mutex_unlock(&context->frame_mutex);
+            }
+
+            // Reset for next frame
+            c64_init_frame_assembly(&context->current_frame, 0);
+        }
+
+        pthread_mutex_unlock(&context->assembly_mutex);
+    }
+}
+
+// Helper function to process audio packets from network buffer
+static void c64_process_buffered_audio_packet(struct c64_source *context, const uint8_t *packet_data,
+                                              size_t packet_size, uint64_t timestamp_us)
+{
+    if (!context || !packet_data || packet_size != C64_AUDIO_PACKET_SIZE) {
+        return;
+    }
+
+    // Update statistics
+    context->audio_packets_received++;
+    context->audio_bytes_received += packet_size;
+
+    // Parse audio packet and send to OBS
+    int16_t *audio_data = (int16_t *)(packet_data + C64_AUDIO_HEADER_SIZE);
+
+    struct obs_source_audio audio_frame = {0};
+    audio_frame.data[0] = (uint8_t *)audio_data;
+    audio_frame.frames = 192;
+    audio_frame.speakers = SPEAKERS_STEREO;
+    audio_frame.format = AUDIO_FORMAT_16BIT;
+    audio_frame.samples_per_sec = 48000;
+    audio_frame.timestamp = timestamp_us * 1000; // Convert microseconds to nanoseconds
+
+    // Record audio data if recording is enabled
+    if (context->record_video) {
+        c64_record_audio_data(context, (const uint8_t *)audio_data, 192 * 2 * 2);
+    }
+
+    obs_source_output_audio(context->source, &audio_frame);
 }
 
 uint32_t c64_get_width(void *data)

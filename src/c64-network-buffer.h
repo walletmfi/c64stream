@@ -12,10 +12,19 @@ extern "C" {
 #define C64_VIDEO_PACKET_SIZE 780
 #define C64_AUDIO_PACKET_SIZE 770
 
-#define C64_MAX_VIDEO_RATE 3400
-#define C64_MAX_AUDIO_RATE 250
+// Precise packet rates based on C64 Ultimate specification and code analysis:
+// PAL: 68 packets per 19.95ms frame = 3408 packets/sec
+// NTSC: 60 packets per 16.71ms frame = 3590 packets/sec - MAXIMUM
+#define C64_MAX_VIDEO_RATE_PAL 3408                // PAL video packets per second
+#define C64_MAX_VIDEO_RATE_NTSC 3590               // NTSC video packets per second (peak rate)
+#define C64_MAX_VIDEO_RATE C64_MAX_VIDEO_RATE_NTSC // Use NTSC as worst case
+
+// Audio: PAL 250.0 packets/sec (exact), NTSC 249.7 packets/sec
+#define C64_MAX_AUDIO_RATE 250 // PAL rate (slightly higher than NTSC)
+
 #define C64_MAX_DELAY_MS 2000
 
+// Buffer sizing: Use worst-case NTSC video rate for allocation
 #define C64_MAX_VIDEO_PACKETS ((C64_MAX_VIDEO_RATE * C64_MAX_DELAY_MS) / 1000)
 #define C64_MAX_AUDIO_PACKETS ((C64_MAX_AUDIO_RATE * C64_MAX_DELAY_MS) / 1000)
 

@@ -45,7 +45,6 @@ void *audio_thread_func(void *data)
 
         // Parse audio packet
         uint16_t seq_num = *(uint16_t *)(packet);
-        int16_t *audio_data = (int16_t *)(packet + C64_AUDIO_HEADER_SIZE);
 
         // Update audio statistics
         context->audio_packets_received++;
@@ -65,22 +64,13 @@ void *audio_thread_func(void *data)
         uint64_t audio_now = os_gettime_ns();
         c64_process_audio_statistics_batch(context, audio_now);
 
-        // Send audio to OBS (192 stereo samples = 384 16-bit values)
-        struct obs_source_audio audio_frame = {0};
-        audio_frame.data[0] = (uint8_t *)audio_data;
-        audio_frame.frames = 192;
-        audio_frame.speakers = SPEAKERS_STEREO;
-        audio_frame.format = AUDIO_FORMAT_16BIT;
-        audio_frame.samples_per_sec = 48000; // Will be adjusted for PAL/NTSC
-        audio_frame.timestamp = os_gettime_ns();
-
-        // Record audio data if recording is enabled
-        if (context->record_video) {
-            c64_record_audio_data(context, (const uint8_t *)audio_data,
-                                  192 * 2 * 2); // 192 stereo samples * 2 bytes per sample
+        // Push audio packet to network buffer for queuing and later processing in render thread
+        if (context->network_buffer) {
+            c64_network_buffer_push_audio(context->network_buffer, packet, received, audio_now);
         }
 
-        obs_source_output_audio(context->source, &audio_frame);
+        // Note: Audio output now happens in c64_render() using buffered packets
+        // This eliminates immediate processing and allows synchronized audio/video output
     }
 
     C64_LOG_DEBUG("Audio thread stopped for C64S source '%s'", obs_source_get_name(context->source));
