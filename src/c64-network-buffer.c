@@ -547,7 +547,7 @@ void c64_network_buffer_push_video(struct c64_network_buffer *buf, const uint8_t
     }
 
     static int push_count = 0;
-    if ((push_count++ % 1000) == 0) {
+    if ((push_count++ % 5000) == 0) {
         printf("[DEBUG] Network buffer push video: packet %d (len=%zu)\n", push_count, len);
     }
 
@@ -644,7 +644,7 @@ int c64_network_buffer_pop(struct c64_network_buffer *buf, const uint8_t **video
     }
 
     static int pop_count = 0;
-    if ((pop_count++ % 100) == 0) {
+    if ((pop_count++ % 1000) == 0) {
         C64_LOG_DEBUG("Network buffer pop SUCCESS: video=yes, audio=%s (count: %d)", has_audio ? "yes" : "no",
                       pop_count);
     }

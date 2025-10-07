@@ -792,10 +792,25 @@ void c64_render(void *data, gs_effect_t *effect)
         }
     } else {
         // Render actual C64S video frame from front buffer
+        // CRITICAL: Minimize mutex hold time - only copy frame data, NOT GPU operations
+        uint32_t *frame_data_copy = NULL;
+        size_t frame_data_size = context->width * context->height * sizeof(uint32_t);
+
         if (pthread_mutex_lock(&context->frame_mutex) == 0) {
-            // Create texture from front buffer data
-            gs_texture_t *texture = gs_texture_create(context->width, context->height, GS_RGBA, 1,
-                                                      (const uint8_t **)&context->frame_buffer_front, 0);
+            // Quick copy of frame data while holding mutex
+            if (context->frame_buffer_front) {
+                frame_data_copy = bmalloc(frame_data_size);
+                if (frame_data_copy) {
+                    memcpy(frame_data_copy, context->frame_buffer_front, frame_data_size);
+                }
+            }
+            pthread_mutex_unlock(&context->frame_mutex);
+        }
+
+        // GPU operations OUTSIDE mutex to prevent blocking video thread
+        if (frame_data_copy) {
+            gs_texture_t *texture =
+                gs_texture_create(context->width, context->height, GS_RGBA, 1, (const uint8_t **)&frame_data_copy, 0);
             if (texture) {
                 // Use default effect for texture rendering
                 gs_effect_t *default_effect = obs_get_base_effect(OBS_EFFECT_DEFAULT);
@@ -819,7 +834,8 @@ void c64_render(void *data, gs_effect_t *effect)
                 gs_texture_destroy(texture);
             }
 
-            pthread_mutex_unlock(&context->frame_mutex);
+            // Clean up frame data copy
+            bfree(frame_data_copy);
         }
     }
 }

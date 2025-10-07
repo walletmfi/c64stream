@@ -389,8 +389,11 @@ void c64_process_video_packet_direct(struct c64_source *context, const uint8_t *
                 if (c64_is_frame_complete(&context->current_frame) || c64_is_frame_timeout(&context->current_frame)) {
                     if (c64_is_frame_complete(&context->current_frame)) {
                         if (context->last_completed_frame != context->current_frame.frame_num) {
+                            // CRITICAL: Do frame assembly OUTSIDE mutex to reduce lock contention
+                            c64_assemble_frame_to_buffer(context, &context->current_frame);
+
+                            // Only hold mutex for the quick buffer swap
                             if (pthread_mutex_lock(&context->frame_mutex) == 0) {
-                                c64_assemble_frame_to_buffer(context, &context->current_frame);
                                 c64_swap_frame_buffers(context);
                                 context->last_completed_frame = context->current_frame.frame_num;
 
@@ -471,8 +474,11 @@ void c64_process_video_packet_direct(struct c64_source *context, const uint8_t *
 
         if (c64_is_frame_complete(&context->current_frame)) {
             if (context->last_completed_frame != context->current_frame.frame_num) {
+                // CRITICAL: Do frame assembly OUTSIDE mutex to reduce lock contention
+                c64_assemble_frame_to_buffer(context, &context->current_frame);
+
+                // Only hold mutex for the quick buffer swap
                 if (pthread_mutex_lock(&context->frame_mutex) == 0) {
-                    c64_assemble_frame_to_buffer(context, &context->current_frame);
                     c64_swap_frame_buffers(context);
                     context->last_completed_frame = context->current_frame.frame_num;
 
