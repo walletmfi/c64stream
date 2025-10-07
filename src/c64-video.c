@@ -7,6 +7,7 @@
 
 #include "c64-logging.h"
 #include "c64-video.h"
+#include "c64-audio.h"
 #include "c64-color.h"
 #include "c64-types.h"
 #include "c64-protocol.h"
@@ -514,7 +515,7 @@ void *c64_video_processor_thread_func(void *data)
                 }
 
                 if (audio_data && audio_size > 0) {
-                    c64_record_audio_data(context, audio_data, audio_size);
+                    c64_process_audio_packet(context, audio_data, audio_size, timestamp_us * 1000);
                 }
 
                 context->last_frame_time = os_gettime_ns();

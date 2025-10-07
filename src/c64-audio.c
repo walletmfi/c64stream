@@ -73,3 +73,41 @@ void *audio_thread_func(void *data)
     C64_LOG_DEBUG("Audio thread stopped for C64S source '%s'", obs_source_get_name(context->source));
     return NULL;
 }
+
+// Process audio packet and send to OBS for playback
+void c64_process_audio_packet(struct c64_source *context, const uint8_t *audio_data, size_t data_size,
+                              uint64_t timestamp_ns)
+{
+    if (!context || !audio_data || data_size < 2) {
+        return;
+    }
+
+    // Skip the 2-byte sequence number header to get to audio samples
+    const uint8_t *samples = audio_data + 2;
+    size_t samples_size = data_size - 2;
+
+    // According to C64 Ultimate spec: 192 stereo samples per packet, 16-bit signed little-endian
+    // Each stereo sample = 4 bytes (2 bytes left + 2 bytes right)
+    if (samples_size < 768) { // 192 * 4 = 768 bytes
+        C64_LOG_WARNING("Audio packet too small: %zu bytes (expected 768)", samples_size);
+        return;
+    }
+
+    // Set up OBS audio data structure
+    struct obs_source_audio audio_output = {0};
+    audio_output.frames = 192;            // 192 stereo samples per packet
+    audio_output.samples_per_sec = 48000; // Close to C64 Ultimate's ~47.98kHz
+    audio_output.format = AUDIO_FORMAT_16BIT;
+    audio_output.speakers = SPEAKERS_STEREO;
+    audio_output.timestamp = timestamp_ns;
+
+    // Point to the audio data (OBS expects planar format, but we have interleaved)
+    // For now, send interleaved data directly - OBS can handle it
+    audio_output.data[0] = (uint8_t *)samples;
+
+    // Send audio to OBS for playback
+    obs_source_output_audio(context->source, &audio_output);
+
+    // Also record to file if recording is enabled
+    c64_record_audio_data(context, audio_data, data_size);
+}

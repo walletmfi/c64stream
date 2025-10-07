@@ -49,7 +49,8 @@ bool obs_module_load(void)
                                        .video_render = c64_render,
                                        .get_properties = c64_properties,
                                        .get_width = c64_get_width,
-                                       .get_height = c64_get_height};
+                                       .get_height = c64_get_height,
+                                       .audio_render = NULL}; // Audio is pushed via obs_source_output_audio
 
     obs_register_source(&c64_info);
     C64_LOG_INFO("C64 Stream plugin loaded successfully");

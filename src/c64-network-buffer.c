@@ -1,5 +1,7 @@
 #include "c64-network-buffer.h"
 #include "c64-logging.h"
+#include <obs-module.h>
+#include <util/platform.h>
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
@@ -22,6 +24,7 @@ struct video_ring_buffer {
     size_t packet_size;         // C64_VIDEO_PACKET_SIZE
     uint16_t next_expected_seq; // Expected next sequence number
     bool seq_initialized;       // Whether we have initialized sequence tracking
+    uint64_t delay_us;          // Delay in microseconds
 };
 
 struct audio_ring_buffer {
@@ -33,6 +36,7 @@ struct audio_ring_buffer {
     size_t packet_size;         // C64_AUDIO_PACKET_SIZE
     uint16_t next_expected_seq; // Expected next sequence number
     bool seq_initialized;       // Whether we have initialized sequence tracking
+    uint64_t delay_us;          // Delay in microseconds
 };
 
 struct c64_network_buffer {
@@ -345,6 +349,10 @@ void c64_network_buffer_set_delay(struct c64_network_buffer *buf, size_t video_d
         audio_slots = buf->audio.max_capacity;
     }
 
+    // Store delay values in microseconds for time-based checking
+    buf->video.delay_us = video_delay_ms * 1000;
+    buf->audio.delay_us = audio_delay_ms * 1000;
+
     // Reset buffers with new active slot counts
     video_rb_reset(&buf->video, video_slots);
     audio_rb_reset(&buf->audio, audio_slots);
@@ -377,6 +385,20 @@ void c64_network_buffer_push_audio(struct c64_network_buffer *buf, const uint8_t
     audio_rb_push(&buf->audio, data, len, timestamp_us);
 }
 
+// Check if oldest packet in buffer has been delayed long enough
+static bool is_packet_ready_for_pop(struct packet_slot *slot, uint64_t delay_us)
+{
+    if (!slot->valid) {
+        return false;
+    }
+
+    // Get current time in microseconds (OBS uses nanoseconds, so convert)
+    uint64_t now_us = os_gettime_ns() / 1000;
+    uint64_t age_us = now_us - slot->timestamp_us;
+
+    return age_us >= delay_us;
+}
+
 int c64_network_buffer_pop(struct c64_network_buffer *buf, const uint8_t **video_data, size_t *video_size,
                            const uint8_t **audio_data, size_t *audio_size, uint64_t *timestamp_us)
 {
@@ -384,31 +406,62 @@ int c64_network_buffer_pop(struct c64_network_buffer *buf, const uint8_t **video
         return 0;
     }
 
-    struct packet_slot *v, *a;
+    // Check if we have packets available and if they've been delayed long enough
+    size_t video_head = atomic_load_explicit(&buf->video.head, memory_order_acquire);
+    size_t video_tail = atomic_load_explicit(&buf->video.tail, memory_order_acquire);
 
-    // Try to get video packet (required) - use FIFO order for proper frame assembly
-    if (!video_rb_pop_oldest(&buf->video, &v)) {
+    if (video_head == video_tail) {
+        // No video packets available
         static int no_video_count = 0;
         if ((no_video_count++ % 1000) == 0) {
-            printf("[DEBUG] Network buffer pop: no video packets available (count: %d)\n", no_video_count);
+            C64_LOG_DEBUG("Network buffer pop: no video packets available (count: %d)", no_video_count);
         }
         return 0;
     }
 
-    // Try to get audio packet (optional - may not always be available)
-    bool has_audio = audio_rb_pop_oldest(&buf->audio, &a);
+    // Check if oldest video packet has been delayed long enough
+    struct packet_slot *oldest_video = &buf->video.slots[video_tail];
+    if (!is_packet_ready_for_pop(oldest_video, buf->video.delay_us)) {
+        // Packet not ready yet - need more delay
+        static int delay_count = 0;
+        if ((delay_count++ % 500) == 0) {
+            C64_LOG_DEBUG("Network buffer pop: video packet not ready yet (delay active, count: %d)", delay_count);
+        }
+        return 0;
+    }
+
+    // Pop the video packet (it's ready)
+    struct packet_slot *v;
+    if (!video_rb_pop_oldest(&buf->video, &v)) {
+        C64_LOG_WARNING("Failed to pop video packet that was just checked as available");
+        return 0;
+    }
+
+    // Try to get audio packet (optional - and check its delay too)
+    struct packet_slot *a = NULL;
+    bool has_audio = false;
+
+    size_t audio_head = atomic_load_explicit(&buf->audio.head, memory_order_acquire);
+    size_t audio_tail = atomic_load_explicit(&buf->audio.tail, memory_order_acquire);
+
+    if (audio_head != audio_tail) {
+        struct packet_slot *oldest_audio = &buf->audio.slots[audio_tail];
+        if (is_packet_ready_for_pop(oldest_audio, buf->audio.delay_us)) {
+            has_audio = audio_rb_pop_oldest(&buf->audio, &a);
+        }
+    }
 
     static int pop_count = 0;
     if ((pop_count++ % 100) == 0) {
-        printf("[DEBUG] Network buffer pop SUCCESS: video=yes, audio=%s (count: %d)\n", has_audio ? "yes" : "no",
-               pop_count);
+        C64_LOG_DEBUG("Network buffer pop SUCCESS: video=yes, audio=%s (count: %d)", has_audio ? "yes" : "no",
+                      pop_count);
     }
 
     // Return packet data
     *video_data = v->data;
     *video_size = v->size;
 
-    if (has_audio) {
+    if (has_audio && a) {
         *audio_data = a->data;
         *audio_size = a->size;
     } else {
@@ -418,7 +471,7 @@ int c64_network_buffer_pop(struct c64_network_buffer *buf, const uint8_t **video
 
     // Return timestamp (use video timestamp if no audio)
     if (timestamp_us) {
-        *timestamp_us = has_audio && a->timestamp_us < v->timestamp_us ? a->timestamp_us : v->timestamp_us;
+        *timestamp_us = (has_audio && a && a->timestamp_us < v->timestamp_us) ? a->timestamp_us : v->timestamp_us;
     }
 
     return 1;
