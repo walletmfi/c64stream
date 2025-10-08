@@ -334,6 +334,12 @@ void *c64_video_thread_func(void *data)
     C64_LOG_DEBUG("Video thread function started with optimized scheduling");
 
     while (context->thread_active) {
+        // Check socket validity before each recv call (prevents Windows WSAENOTSOCK errors)
+        if (context->video_socket == INVALID_SOCKET_VALUE) {
+            os_sleep_ms(10); // Wait a bit before checking again
+            continue;
+        }
+
         ssize_t received = recv(context->video_socket, (char *)packet, (int)sizeof(packet), 0);
 
         if (received < 0) {
@@ -343,10 +349,18 @@ void *c64_video_thread_func(void *data)
                 Sleep(0);
                 continue;
             }
+            // On Windows, WSAENOTSOCK means socket was closed - this is normal during shutdown
+            if (error == WSAENOTSOCK && context->video_socket == INVALID_SOCKET_VALUE) {
+                break; // Socket was closed, exit gracefully
+            }
 #else
             if (error == EAGAIN || error == EWOULDBLOCK) {
                 os_sleep_ms(1);
                 continue;
+            }
+            // On POSIX, EBADF means socket was closed - this is normal during shutdown
+            if (error == EBADF && context->video_socket == INVALID_SOCKET_VALUE) {
+                break; // Socket was closed, exit gracefully
             }
 #endif
             C64_LOG_ERROR("Video socket error: %s", c64_get_socket_error_string(error));

@@ -456,7 +456,23 @@ void c64_start_streaming(struct c64_source *context)
     C64_LOG_INFO("Starting C64S streaming to C64 %s (OBS IP: %s, video:%u, audio:%u)...", context->ip_address,
                  context->obs_ip_address, context->video_port, context->audio_port);
 
-    // Always close existing sockets before creating new ones (handles reconnection case)
+    // Stop existing threads BEFORE closing sockets (prevents race conditions on Windows)
+    if (context->streaming) {
+        context->streaming = false;
+        context->thread_active = false;
+
+        // Wait for existing threads to finish BEFORE closing their sockets
+        if (context->video_thread_active && pthread_join(context->video_thread, NULL) != 0) {
+            C64_LOG_WARNING("Failed to join existing video thread during reconnection");
+        }
+        if (context->audio_thread_active && pthread_join(context->audio_thread, NULL) != 0) {
+            C64_LOG_WARNING("Failed to join existing audio thread during reconnection");
+        }
+        context->video_thread_active = false;
+        context->audio_thread_active = false;
+    }
+
+    // Now safe to close existing sockets after threads have stopped
     close_and_reset_sockets(context);
 
     // Create fresh UDP sockets (critical for reconnection after C64S restart)
@@ -472,22 +488,6 @@ void c64_start_streaming(struct c64_source *context)
     // Send start commands to C64 Ultimate
     c64_send_control_command(context, true, 0); // Start video
     c64_send_control_command(context, true, 1); // Start audio
-
-    // Stop existing threads before creating new ones (handles reconnection case)
-    if (context->streaming) {
-        context->streaming = false;
-        context->thread_active = false;
-
-        // Wait for existing threads to finish
-        if (context->video_thread_active && pthread_join(context->video_thread, NULL) != 0) {
-            C64_LOG_WARNING("Failed to join existing video thread during reconnection");
-        }
-        if (context->audio_thread_active && pthread_join(context->audio_thread, NULL) != 0) {
-            C64_LOG_WARNING("Failed to join existing audio thread during reconnection");
-        }
-        context->video_thread_active = false;
-        context->audio_thread_active = false;
-    }
 
     // Start fresh worker threads
     context->thread_active = true;
