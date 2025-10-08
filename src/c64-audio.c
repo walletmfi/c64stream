@@ -53,8 +53,21 @@ void *audio_thread_func(void *data)
         }
 
         if (received != C64_AUDIO_PACKET_SIZE) {
-            C64_LOG_WARNING("Received incomplete audio packet: " SSIZE_T_FORMAT " bytes (expected %d)",
-                            SSIZE_T_CAST(received), C64_AUDIO_PACKET_SIZE);
+            // Small packets (2-4 bytes) are normal during stream startup/buffer changes
+            // Log as debug to avoid confusing users with normal control/startup packets
+            static uint64_t last_incomplete_log_time = 0;
+            uint64_t now = os_gettime_ns();
+            if (now - last_incomplete_log_time >= 2000000000ULL) { // Throttle to every 2 seconds
+                if (received <= 4) {
+                    C64_LOG_DEBUG("Audio startup/control packets: " SSIZE_T_FORMAT
+                                  " bytes (normal during initialization)",
+                                  SSIZE_T_CAST(received));
+                } else {
+                    C64_LOG_WARNING("Received incomplete audio packet: " SSIZE_T_FORMAT " bytes (expected %d)",
+                                    SSIZE_T_CAST(received), C64_AUDIO_PACKET_SIZE);
+                }
+                last_incomplete_log_time = now;
+            }
             continue;
         }
 
