@@ -158,18 +158,16 @@ void c64_process_video_statistics_batch(struct c64_source *context, uint64_t cur
     }
     uint64_t packets_received = context->video_packets_received;
     uint64_t bytes_received = context->video_bytes_received;
-    uint32_t sequence_errors = context->video_sequence_errors;
     uint32_t frames_processed = context->video_frames_processed;
     context->video_packets_received = 0;
     context->video_bytes_received = 0;
-    context->video_sequence_errors = 0;
     context->video_frames_processed = 0;
 
     double duration_seconds = time_since_last_log / 1000000000.0;
     double packets_per_second = packets_received / duration_seconds;
     double bandwidth_mbps = (bytes_received * 8.0) / (duration_seconds * 1000000.0);
     double frames_per_second = frames_processed / duration_seconds;
-    double loss_percentage = packets_received > 0 ? (100.0 * sequence_errors) / packets_received : 0.0;
+    // No loss percentage calculation - we don't track sequence errors anymore
 
     double expected_fps = context->format_detected ? context->expected_fps : 50.0;
     double frame_delivery_rate = context->frames_delivered_to_obs / duration_seconds;
@@ -186,8 +184,8 @@ void c64_process_video_statistics_batch(struct c64_source *context, uint64_t cur
                                       ? context->total_pipeline_latency / (context->frames_delivered_to_obs * 1000000.0)
                                       : 0.0;
     if (packets_received > 0) {
-        C64_LOG_INFO("📺 VIDEO: %.1f fps | %.2f Mbps | %.0f pps | Loss: %.1f%% | Frames: %u", frames_per_second,
-                     bandwidth_mbps, packets_per_second, loss_percentage, (uint32_t)frames_processed);
+        C64_LOG_INFO("📺 VIDEO: %.1f fps | %.2f Mbps | %.0f pps | Frames: %u", frames_per_second, bandwidth_mbps,
+                     packets_per_second, (uint32_t)frames_processed);
         C64_LOG_INFO("🎯 DELIVERY: Expected %.0f fps | Captured %.1f fps | Delivered %.1f fps | Completed %.1f fps",
                      expected_fps, context->frames_captured / duration_seconds, frame_delivery_rate,
                      frame_completion_rate);
@@ -340,29 +338,10 @@ void *c64_video_thread_func(void *data)
 
         context->video_packets_received++;
         context->video_bytes_received += received;
-        uint16_t seq_num = *(uint16_t *)(packet + 0);
         uint16_t pixels_per_line = *(uint16_t *)(packet + 6);
         uint8_t lines_per_packet = packet[8];
         uint8_t bits_per_pixel = packet[9];
-        static uint16_t last_video_seq = 0;
-        static bool first_video = true;
-
-        if (!first_video && seq_num != (uint16_t)(last_video_seq + 1)) {
-            context->video_sequence_errors++;
-
-            uint16_t expected_seq = (uint16_t)(last_video_seq + 1);
-            int16_t seq_diff = (int16_t)(seq_num - expected_seq);
-
-            if (seq_diff > 0) {
-                C64_LOG_WARNING("🔴 UDP OUT-OF-SEQUENCE: Expected seq %u, got %u (skipped %d packets)", expected_seq,
-                                seq_num, seq_diff);
-            } else {
-                C64_LOG_WARNING("🔄 UDP OUT-OF-ORDER: Expected seq %u, got %u (reorder offset %d)", expected_seq,
-                                seq_num, seq_diff);
-            }
-        }
-        last_video_seq = seq_num;
-        first_video = false;
+        // Simple approach: just count packets received, no complex sequence tracking
 
         uint64_t now = os_gettime_ns();
         c64_process_video_statistics_batch(context, now);

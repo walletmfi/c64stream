@@ -61,7 +61,7 @@ obs_properties_t *c64_create_properties(void *data)
 
     // Buffer Delay (moved to Plugin Information group)
     obs_property_t *delay_prop =
-        obs_properties_add_int_slider(info_props, "buffer_delay_ms", "Buffer Delay (millis)", 0, 500, 1);
+        obs_properties_add_int_slider(info_props, "buffer_delay_ms", "Buffer Delay (millis)", 0, 100, 1);
     obs_property_set_long_description(
         delay_prop,
         "Buffer network packets for specified milliseconds to smooth UDP packet loss/jitter (default: 10ms)");

@@ -44,22 +44,11 @@ void *audio_thread_func(void *data)
         // Update timestamp for timeout detection - UDP packet received successfully
         context->last_udp_packet_time = os_gettime_ns();
 
-        // Parse audio packet
-        uint16_t seq_num = *(uint16_t *)(packet);
-
         // Update audio statistics
         context->audio_packets_received++;
         context->audio_bytes_received += received;
 
-        // Streamlined audio sequence tracking (keep for important audio sync issues)
-        static uint16_t last_audio_seq = 0;
-        static bool first_audio = true;
-
-        if (!first_audio && seq_num != (uint16_t)(last_audio_seq + 1)) {
-            C64_LOG_WARNING("🔊 AUDIO OUT-OF-SEQUENCE: Expected %u, got %u", (uint16_t)(last_audio_seq + 1), seq_num);
-        }
-        last_audio_seq = seq_num;
-        first_audio = false;
+        // Simple approach: just process packets as they arrive, no sequence warnings
 
         // Batch process audio statistics (moved out of hot path)
         uint64_t audio_now = os_gettime_ns();

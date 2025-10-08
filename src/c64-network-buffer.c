@@ -105,30 +105,8 @@ static void rb_push(struct packet_ring_buffer *rb, const uint8_t *data, size_t l
         C64_LOG_DEBUG("%s buffer: initialized with sequence %u", type_name, seq_num);
     }
 
-    // Check if this is the next expected packet in sequence
-    bool is_next_expected = (seq_num == rb->next_expected_seq);
-
-    if (!is_next_expected) {
-        // Handle out-of-order packet: check if it's from the future or past
-        // Use different thresholds based on buffer type (video has more tolerance)
-        int gap_threshold = (rb->type == BUFFER_TYPE_VIDEO) ? 100 : 50;
-        int16_t seq_diff = (int16_t)(seq_num - rb->next_expected_seq);
-
-        if (seq_diff > 0 && seq_diff < gap_threshold) {
-            // Future packet - this indicates missing packets
-            C64_LOG_WARNING("%s: Out-of-order packet seq=%u (expected %u, gap=%d)", type_name, seq_num,
-                            rb->next_expected_seq, seq_diff);
-        } else if (seq_diff < 0 && seq_diff > -gap_threshold) {
-            // Old packet - likely duplicate, drop it
-            C64_LOG_DEBUG("%s: Dropping old packet seq=%u (expected %u)", type_name, seq_num, rb->next_expected_seq);
-            return;
-        } else {
-            // Large sequence jump - likely a reset, re-initialize
-            C64_LOG_INFO("%s: Large sequence jump from %u to %u, re-initializing", type_name, rb->next_expected_seq,
-                         seq_num);
-            rb->next_expected_seq = seq_num;
-        }
-    }
+    // Extremely simple approach: allow all packets through, let the buffer handle ordering
+    // The ring buffer insertion sort will handle duplicates and ordering automatically
 
     // Find insertion point to maintain sequence order
     size_t head = atomic_load_explicit(&rb->head, memory_order_relaxed);
@@ -151,11 +129,8 @@ static void rb_push(struct packet_ring_buffer *rb, const uint8_t *data, size_t l
     size_t search_depth = 0;
     bool found_insert_pos = false;
 
-    // Fast path: if this is the next expected packet, insert at head immediately
-    if (is_next_expected) {
-        insert_pos = head;
-        found_insert_pos = true;
-    } else {
+    // Always do insertion sort to maintain sequence order
+    {
         // Limited backward search for insertion point
         size_t current = head;
         while (current != tail && search_depth < MAX_SEARCH_DEPTH) {
@@ -219,10 +194,7 @@ static void rb_push(struct packet_ring_buffer *rb, const uint8_t *data, size_t l
     rb->slots[insert_pos].sequence_num = seq_num;
     rb->slots[insert_pos].valid = true;
 
-    // Update expected sequence number if this was the expected packet
-    if (is_next_expected) {
-        rb->next_expected_seq = seq_num + 1;
-    }
+    // No complex sequence tracking needed - let the pop function handle this
 
     // Log sequence insertion details for debugging
     if (insert_pos != head) {
@@ -251,6 +223,13 @@ static int rb_pop_oldest(struct packet_ring_buffer *rb, struct packet_slot **out
     }
 
     *out = &rb->slots[tail];
+
+    // Update expected sequence to track what we've consumed
+    if (rb->slots[tail].valid && rb->seq_initialized) {
+        uint16_t popped_seq = rb->slots[tail].sequence_num;
+        rb->next_expected_seq = popped_seq + 1;
+    }
+
     atomic_store_explicit(&rb->tail, (tail + 1) % rb->max_capacity, memory_order_release);
     return 1;
 }
@@ -359,52 +338,68 @@ void c64_network_buffer_set_delay(struct c64_network_buffer *buf, size_t video_d
                  (unsigned long long)buf->video.delay_us, video_delay_ms, (unsigned long long)buf->audio.delay_us,
                  audio_delay_ms);
 
-    // If delay was reduced, discard packets older than new delay
-    uint64_t current_time = os_gettime_ns() / 1000; // Convert to microseconds
+    // If delay was reduced, discard excess packets to reach new buffer size
+    // IMPORTANT: Discard from tail (oldest in sequence order) to maintain packet ordering
 
     if (buf->video.delay_us < old_video_delay) {
-        // Discard old video packets
+        // Calculate how many packets to keep for new delay
+        size_t new_video_capacity = video_slots;
         size_t head = atomic_load_explicit(&buf->video.head, memory_order_acquire);
         size_t tail = atomic_load_explicit(&buf->video.tail, memory_order_acquire);
-        size_t discarded = 0;
 
-        while (tail != head) {
-            struct packet_slot *slot = &buf->video.slots[tail];
-            if (slot->valid && (current_time - slot->timestamp_us) > buf->video.delay_us) {
-                slot->valid = false;
+        // Count current packets in buffer
+        size_t current_packets = (head >= tail) ? (head - tail) : (buf->video.max_capacity - tail + head);
+
+        if (current_packets > new_video_capacity) {
+            size_t packets_to_discard = current_packets - new_video_capacity;
+            size_t discarded = 0;
+
+            // Discard from tail (oldest packets) to maintain sequence order
+            while (discarded < packets_to_discard && tail != head) {
+                struct packet_slot *slot = &buf->video.slots[tail];
+                if (slot->valid) {
+                    slot->valid = false;
+                    discarded++;
+                }
                 atomic_store_explicit(&buf->video.tail, (tail + 1) % buf->video.max_capacity, memory_order_release);
                 tail = (tail + 1) % buf->video.max_capacity;
-                discarded++;
-            } else {
-                break; // First packet within new delay, stop discarding
             }
-        }
 
-        if (discarded > 0) {
-            C64_LOG_INFO("Video buffer: discarded %zu old packets due to delay reduction", discarded);
+            if (discarded > 0) {
+                C64_LOG_INFO("Video buffer: discarded %zu old packets due to delay reduction (sequence-ordered)",
+                             discarded);
+            }
         }
     }
 
     if (buf->audio.delay_us < old_audio_delay) {
-        // Discard old audio packets
+        // Calculate how many packets to keep for new delay
+        size_t new_audio_capacity = audio_slots;
         size_t head = atomic_load_explicit(&buf->audio.head, memory_order_acquire);
         size_t tail = atomic_load_explicit(&buf->audio.tail, memory_order_acquire);
-        size_t discarded = 0;
 
-        while (tail != head) {
-            struct packet_slot *slot = &buf->audio.slots[tail];
-            if (slot->valid && (current_time - slot->timestamp_us) > buf->audio.delay_us) {
-                slot->valid = false;
+        // Count current packets in buffer
+        size_t current_packets = (head >= tail) ? (head - tail) : (buf->audio.max_capacity - tail + head);
+
+        if (current_packets > new_audio_capacity) {
+            size_t packets_to_discard = current_packets - new_audio_capacity;
+            size_t discarded = 0;
+
+            // Discard from tail (oldest packets) to maintain sequence order
+            while (discarded < packets_to_discard && tail != head) {
+                struct packet_slot *slot = &buf->audio.slots[tail];
+                if (slot->valid) {
+                    slot->valid = false;
+                    discarded++;
+                }
                 atomic_store_explicit(&buf->audio.tail, (tail + 1) % buf->audio.max_capacity, memory_order_release);
                 tail = (tail + 1) % buf->audio.max_capacity;
-                discarded++;
-            } else {
-                break; // First packet within new delay, stop discarding
             }
-        }
 
-        if (discarded > 0) {
-            C64_LOG_INFO("Audio buffer: discarded %zu old packets due to delay reduction", discarded);
+            if (discarded > 0) {
+                C64_LOG_INFO("Audio buffer: discarded %zu old packets due to delay reduction (sequence-ordered)",
+                             discarded);
+            }
         }
     }
 
@@ -453,10 +448,10 @@ static bool is_packet_ready_for_pop(struct packet_slot *slot, uint64_t delay_us)
     uint64_t age_us = now_us - slot->timestamp_us;
     bool ready = age_us >= delay_us;
 
-    // Debug logging for delay timing
+    // Debug logging for delay timing - log every 1000 checks to reduce spam
     static int delay_debug_count = 0;
     if ((delay_debug_count++ % 1000) == 0) {
-        C64_LOG_DEBUG("Packet delay check: age=%llu us, required=%llu us, ready=%s (seq=%u)",
+        C64_LOG_DEBUG("🕰️ DELAY CHECK #%d: age=%llu us, required=%llu us, ready=%s (seq=%u)", delay_debug_count,
                       (unsigned long long)age_us, (unsigned long long)delay_us, ready ? "YES" : "NO",
                       slot->sequence_num);
     }
@@ -471,34 +466,37 @@ int c64_network_buffer_pop(struct c64_network_buffer *buf, const uint8_t **video
         return 0;
     }
 
-    // Check if we have packets available and if they've been delayed long enough
+    // Check if we have packets available
     size_t video_head = atomic_load_explicit(&buf->video.head, memory_order_acquire);
     size_t video_tail = atomic_load_explicit(&buf->video.tail, memory_order_acquire);
 
     if (video_head == video_tail) {
         // No video packets available
         static int no_video_count = 0;
-        if ((no_video_count++ % 1000) == 0) {
-            C64_LOG_DEBUG("Network buffer pop: no video packets available (count: %d)", no_video_count);
+        if ((no_video_count++ % 100) == 0) {
+            C64_LOG_INFO("📦 BUFFER EMPTY: No video packets available (attempt #%d)", no_video_count);
         }
         return 0;
     }
 
-    // Check if oldest video packet has been delayed long enough
+    // Check if the OLDEST packet (at tail) has been delayed long enough
     struct packet_slot *oldest_video = &buf->video.slots[video_tail];
-    if (!is_packet_ready_for_pop(oldest_video, buf->video.delay_us)) {
-        // Packet not ready yet - need more delay
+    if (!oldest_video->valid || !is_packet_ready_for_pop(oldest_video, buf->video.delay_us)) {
+        // Oldest packet not ready yet - must wait to preserve FIFO ordering
         static int delay_count = 0;
-        if ((delay_count++ % 500) == 0) {
-            C64_LOG_DEBUG("Network buffer pop: video packet not ready yet (delay active, count: %d)", delay_count);
+        if ((delay_count++ % 100) == 0) {
+            uint64_t now_us = os_gettime_ns() / 1000;
+            uint64_t age_us = oldest_video->valid ? (now_us - oldest_video->timestamp_us) : 0;
+            C64_LOG_INFO("⏰ DELAY WAIT: Oldest packet age=%llu us, need=%llu us (attempt #%d)",
+                         (unsigned long long)age_us, (unsigned long long)buf->video.delay_us, delay_count);
         }
         return 0;
     }
 
-    // Pop the video packet (it's ready)
+    // Pop the ready video packet (oldest first for proper FIFO)
     struct packet_slot *v;
     if (!rb_pop_oldest(&buf->video, &v)) {
-        C64_LOG_WARNING("Failed to pop video packet that was just checked as available");
+        C64_LOG_WARNING("Failed to pop ready video packet");
         return 0;
     }
 

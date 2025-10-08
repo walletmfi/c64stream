@@ -432,26 +432,9 @@ void c64_update(void *data, obs_data_t *settings)
 
         context->buffer_delay_ms = new_buffer_delay_ms;
 
-        // Update network buffer delay (this automatically flushes the buffers)
+        // Update network buffer delay (this adjusts UDP packet buffering only)
         if (context->network_buffer) {
             c64_network_buffer_set_delay(context->network_buffer, new_buffer_delay_ms, new_buffer_delay_ms);
-        }
-
-        // Only reset monotonic timestamps for SIGNIFICANT buffer delay changes (>50ms difference)
-        // This prevents timestamp storms during gradual UI slider adjustments
-        uint32_t delay_difference = (new_buffer_delay_ms > old_buffer_delay_ms)
-                                        ? (new_buffer_delay_ms - old_buffer_delay_ms)
-                                        : (old_buffer_delay_ms - new_buffer_delay_ms);
-
-        if (delay_difference > 50) { // Only reset for changes > 50ms
-            context->timestamp_base_set = false;
-            context->stream_start_time_ns = 0;
-            context->first_frame_num = 0;
-            context->audio_packet_count = 0; // Reset audio packet counter for monotonic timestamps
-            C64_LOG_INFO("🔄 SIGNIFICANT delay change (%ums) - Reset monotonic timestamps for smooth playback",
-                         delay_difference);
-        } else {
-            C64_LOG_INFO("⏩ MINOR delay change (%ums) - Keeping existing monotonic timestamps", delay_difference);
         }
     }
 
