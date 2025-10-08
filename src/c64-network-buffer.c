@@ -349,8 +349,9 @@ void c64_network_buffer_set_delay(struct c64_network_buffer *buf, size_t video_d
     if (buf->video.delay_us < old_video_delay) {
         // Calculate how many packets to keep for new delay
         size_t new_video_capacity = video_slots;
-        size_t head = atomic_load_explicit(&buf->video.head, memory_order_acquire);
-        size_t tail = atomic_load_explicit(&buf->video.tail, memory_order_acquire);
+        pthread_mutex_lock(&buf->video.mutex);
+        size_t head = buf->video.head;
+        size_t tail = buf->video.tail;
 
         // Count current packets in buffer
         size_t current_packets = (head >= tail) ? (head - tail) : (buf->video.max_capacity - tail + head);
@@ -366,8 +367,8 @@ void c64_network_buffer_set_delay(struct c64_network_buffer *buf, size_t video_d
                     slot->valid = false;
                     discarded++;
                 }
-                atomic_store_explicit(&buf->video.tail, (tail + 1) % buf->video.max_capacity, memory_order_release);
-                tail = (tail + 1) % buf->video.max_capacity;
+                buf->video.tail = (tail + 1) % buf->video.max_capacity;
+                tail = buf->video.tail;
             }
 
             if (discarded > 0) {
@@ -375,13 +376,15 @@ void c64_network_buffer_set_delay(struct c64_network_buffer *buf, size_t video_d
                              discarded);
             }
         }
+        pthread_mutex_unlock(&buf->video.mutex);
     }
 
     if (buf->audio.delay_us < old_audio_delay) {
         // Calculate how many packets to keep for new delay
         size_t new_audio_capacity = audio_slots;
-        size_t head = atomic_load_explicit(&buf->audio.head, memory_order_acquire);
-        size_t tail = atomic_load_explicit(&buf->audio.tail, memory_order_acquire);
+        pthread_mutex_lock(&buf->audio.mutex);
+        size_t head = buf->audio.head;
+        size_t tail = buf->audio.tail;
 
         // Count current packets in buffer
         size_t current_packets = (head >= tail) ? (head - tail) : (buf->audio.max_capacity - tail + head);
@@ -397,8 +400,8 @@ void c64_network_buffer_set_delay(struct c64_network_buffer *buf, size_t video_d
                     slot->valid = false;
                     discarded++;
                 }
-                atomic_store_explicit(&buf->audio.tail, (tail + 1) % buf->audio.max_capacity, memory_order_release);
-                tail = (tail + 1) % buf->audio.max_capacity;
+                buf->audio.tail = (tail + 1) % buf->audio.max_capacity;
+                tail = buf->audio.tail;
             }
 
             if (discarded > 0) {
@@ -406,6 +409,7 @@ void c64_network_buffer_set_delay(struct c64_network_buffer *buf, size_t video_d
                              discarded);
             }
         }
+        pthread_mutex_unlock(&buf->audio.mutex);
     }
 
     C64_LOG_INFO("Network buffer delay set - Video: %zu ms (%zu slots), Audio: %zu ms (%zu slots)", video_delay_ms,
@@ -472,8 +476,10 @@ int c64_network_buffer_pop(struct c64_network_buffer *buf, const uint8_t **video
     }
 
     // Check if we have packets available
-    size_t video_head = atomic_load_explicit(&buf->video.head, memory_order_acquire);
-    size_t video_tail = atomic_load_explicit(&buf->video.tail, memory_order_acquire);
+    pthread_mutex_lock(&buf->video.mutex);
+    size_t video_head = buf->video.head;
+    size_t video_tail = buf->video.tail;
+    pthread_mutex_unlock(&buf->video.mutex);
 
     if (video_head == video_tail) {
         // No video packets available
@@ -509,8 +515,10 @@ int c64_network_buffer_pop(struct c64_network_buffer *buf, const uint8_t **video
     struct packet_slot *a = NULL;
     bool has_audio = false;
 
-    size_t audio_head = atomic_load_explicit(&buf->audio.head, memory_order_acquire);
-    size_t audio_tail = atomic_load_explicit(&buf->audio.tail, memory_order_acquire);
+    pthread_mutex_lock(&buf->audio.mutex);
+    size_t audio_head = buf->audio.head;
+    size_t audio_tail = buf->audio.tail;
+    pthread_mutex_unlock(&buf->audio.mutex);
 
     if (audio_head != audio_tail) {
         struct packet_slot *oldest_audio = &buf->audio.slots[audio_tail];
