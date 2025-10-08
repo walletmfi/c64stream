@@ -12,7 +12,9 @@ struct packet_slot {
     size_t size;
     uint64_t timestamp_us;
     uint16_t sequence_num;
-    bool valid; // Indicates if this slot contains valid data
+    uint16_t frame_num; // For video packets - frame number (0 for audio)
+    uint16_t line_num;  // For video packets - line number (0 for audio)
+    bool valid;         // Indicates if this slot contains valid data
 };
 
 typedef enum { BUFFER_TYPE_VIDEO, BUFFER_TYPE_AUDIO } buffer_type_t;
@@ -60,15 +62,35 @@ static void debug_verify_buffer_ordering(struct packet_ring_buffer *rb, const ch
 
     while (current != head) {
         if (rb->slots[current].valid) {
-            uint16_t seq = rb->slots[current].sequence_num;
             if (!first) {
-                int16_t diff = (int16_t)(seq - prev_seq);
-                if (diff <= 0) {
-                    C64_LOG_ERROR("%s: Buffer ordering violation - seq %u after %u at pos %zu", context, seq, prev_seq,
-                                  current);
+                bool ordering_violation = false;
+                if (rb->type == BUFFER_TYPE_VIDEO) {
+                    // Check frame-based ordering for video
+                    static uint16_t prev_frame = 0;
+                    static uint16_t prev_line = 0;
+                    int16_t frame_diff = (int16_t)(rb->slots[current].frame_num - prev_frame);
+                    if (frame_diff < 0 || (frame_diff == 0 && (int16_t)(rb->slots[current].line_num - prev_line) < 0)) {
+                        ordering_violation = true;
+                        C64_LOG_ERROR(
+                            "%s: Video ordering violation - frame %u line %u after frame %u line %u at pos %zu",
+                            context, rb->slots[current].frame_num, rb->slots[current].line_num, prev_frame, prev_line,
+                            current);
+                    }
+                    prev_frame = rb->slots[current].frame_num;
+                    prev_line = rb->slots[current].line_num;
+                } else {
+                    // Check sequence ordering for audio
+                    uint16_t seq = rb->slots[current].sequence_num;
+                    static uint16_t prev_seq_audio = 0;
+                    int16_t diff = (int16_t)(seq - prev_seq_audio);
+                    if (diff <= 0) {
+                        ordering_violation = true;
+                        C64_LOG_ERROR("%s: Audio ordering violation - seq %u after %u at pos %zu", context, seq,
+                                      prev_seq_audio, current);
+                    }
+                    prev_seq_audio = seq;
                 }
             }
-            prev_seq = seq;
             first = false;
         }
         current = (current + 1) % rb->max_capacity;
@@ -85,12 +107,23 @@ static void debug_verify_buffer_ordering(struct packet_ring_buffer *rb, const ch
 // Generic packet ring buffer push with sequence-based ordering (OPTIMIZED FOR LOW LATENCY)
 static void rb_push(struct packet_ring_buffer *rb, const uint8_t *data, size_t len, uint64_t ts)
 {
-    if (!rb || !data || len < 2) { // Need at least 2 bytes for sequence number
+    // Validate packet size based on type
+    size_t min_header_size = (rb->type == BUFFER_TYPE_VIDEO) ? 6 : 2; // Video needs seq+frame+line, audio needs seq
+    if (!rb || !data || len < min_header_size) {
         return;
     }
 
     // Extract sequence number from packet header (first 2 bytes, little-endian)
     uint16_t seq_num = *(uint16_t *)(data);
+
+    // For video packets, also extract frame and line numbers
+    uint16_t frame_num = 0;
+    uint16_t line_num = 0;
+    if (rb->type == BUFFER_TYPE_VIDEO && len >= 6) {
+        frame_num = *(uint16_t *)(data + 2);
+        line_num = *(uint16_t *)(data + 4);
+        line_num &= 0x7FFF; // Remove last packet bit
+    }
 
     const char *type_name = (rb->type == BUFFER_TYPE_VIDEO) ? "Video" : "Audio";
 
@@ -171,9 +204,29 @@ static void rb_push(struct packet_ring_buffer *rb, const uint8_t *data, size_t l
                 continue;
             }
 
-            // Compare sequence numbers with wraparound handling
-            int16_t seq_diff = (int16_t)(seq_num - rb->slots[prev].sequence_num);
-            if (seq_diff >= 0) {
+            // Compare packets based on buffer type
+            bool should_insert_here = false;
+            if (rb->type == BUFFER_TYPE_VIDEO) {
+                // Video packets: sort by frame number first, then line number
+                int16_t frame_diff = (int16_t)(frame_num - rb->slots[prev].frame_num);
+                if (frame_diff > 0) {
+                    should_insert_here = true;
+                } else if (frame_diff == 0) {
+                    // Same frame: sort by line number
+                    int16_t line_diff = (int16_t)(line_num - rb->slots[prev].line_num);
+                    if (line_diff >= 0) {
+                        should_insert_here = true;
+                    }
+                }
+            } else {
+                // Audio packets: use sequence number with wraparound handling
+                int16_t seq_diff = (int16_t)(seq_num - rb->slots[prev].sequence_num);
+                if (seq_diff >= 0) {
+                    should_insert_here = true;
+                }
+            }
+
+            if (should_insert_here) {
                 // Found correct insertion point
                 insert_pos = current;
                 found_insert_pos = true;
@@ -219,13 +272,20 @@ static void rb_push(struct packet_ring_buffer *rb, const uint8_t *data, size_t l
     rb->slots[insert_pos].size = rb->packet_size;
     rb->slots[insert_pos].timestamp_us = ts;
     rb->slots[insert_pos].sequence_num = seq_num;
+    rb->slots[insert_pos].frame_num = frame_num;
+    rb->slots[insert_pos].line_num = line_num;
     rb->slots[insert_pos].valid = true;
 
     // No complex sequence tracking needed - let the pop function handle this
 
-    // Log sequence insertion details for debugging
+    // Log packet insertion details for debugging
     if (insert_pos != head) {
-        C64_LOG_DEBUG("%s: Inserted seq %u at pos %zu (head was %zu)", type_name, seq_num, insert_pos, head);
+        if (rb->type == BUFFER_TYPE_VIDEO) {
+            C64_LOG_DEBUG("%s: Inserted frame %u line %u (seq %u) at pos %zu (head was %zu)", type_name, frame_num,
+                          line_num, seq_num, insert_pos, head);
+        } else {
+            C64_LOG_DEBUG("%s: Inserted seq %u at pos %zu (head was %zu)", type_name, seq_num, insert_pos, head);
+        }
     }
 
     rb->head = next_head;
