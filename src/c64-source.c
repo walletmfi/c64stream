@@ -424,10 +424,11 @@ void c64_update(void *data, obs_data_t *settings)
     context->video_port = new_video_port;
     context->audio_port = new_audio_port;
 
-    // Update buffer delay setting
+    // Update buffer delay setting with debouncing to prevent timestamp reset storms
     uint32_t new_buffer_delay_ms = (uint32_t)obs_data_get_int(settings, "buffer_delay_ms");
     if (new_buffer_delay_ms != context->buffer_delay_ms) {
-        C64_LOG_INFO("Buffer delay changed from %u to %u ms", context->buffer_delay_ms, new_buffer_delay_ms);
+        uint32_t old_buffer_delay_ms = context->buffer_delay_ms;
+        C64_LOG_INFO("Buffer delay changed from %u to %u ms", old_buffer_delay_ms, new_buffer_delay_ms);
 
         context->buffer_delay_ms = new_buffer_delay_ms;
 
@@ -436,12 +437,22 @@ void c64_update(void *data, obs_data_t *settings)
             c64_network_buffer_set_delay(context->network_buffer, new_buffer_delay_ms, new_buffer_delay_ms);
         }
 
-        // Reset timestamp base to prevent OBS async video stuttering
-        // Buffer delay changes alter frame arrival timing, so we need fresh timestamp calculation
-        context->timestamp_base_set = false;
-        context->stream_start_time_ns = 0;
-        context->first_frame_num = 0;
-        C64_LOG_INFO("🔄 Reset timestamp base due to buffer delay change - preventing OBS stuttering");
+        // Only reset monotonic timestamps for SIGNIFICANT buffer delay changes (>50ms difference)
+        // This prevents timestamp storms during gradual UI slider adjustments
+        uint32_t delay_difference = (new_buffer_delay_ms > old_buffer_delay_ms)
+                                        ? (new_buffer_delay_ms - old_buffer_delay_ms)
+                                        : (old_buffer_delay_ms - new_buffer_delay_ms);
+
+        if (delay_difference > 50) { // Only reset for changes > 50ms
+            context->timestamp_base_set = false;
+            context->stream_start_time_ns = 0;
+            context->first_frame_num = 0;
+            context->audio_packet_count = 0; // Reset audio packet counter for monotonic timestamps
+            C64_LOG_INFO("🔄 SIGNIFICANT delay change (%ums) - Reset monotonic timestamps for smooth playback",
+                         delay_difference);
+        } else {
+            C64_LOG_INFO("⏩ MINOR delay change (%ums) - Keeping existing monotonic timestamps", delay_difference);
+        }
     }
 
     // Update recording settings

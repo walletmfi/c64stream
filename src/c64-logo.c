@@ -97,7 +97,7 @@ static bool prerender_logo_frame(struct c64_source *context)
     return true;
 }
 
-// Initialize logo system - load texture and pre-render frame
+// Initialize logo system - allocate frame buffer only, defer texture loading
 bool c64_logo_init(struct c64_source *context)
 {
     if (!context) {
@@ -106,34 +106,19 @@ bool c64_logo_init(struct c64_source *context)
 
     C64_LOG_DEBUG("Initializing logo system...");
 
-    // Load logo texture
-    context->logo_texture = load_logo_texture();
+    // Defer texture loading until first use - just allocate frame buffer
+    context->logo_texture = NULL;         // Will be loaded lazily
+    context->logo_texture_loaded = false; // Track loading state
 
     // Allocate pre-rendered logo frame buffer (same format as main frame buffer)
     size_t frame_size = context->width * context->height * sizeof(uint32_t);
     context->logo_frame_buffer = bmalloc(frame_size);
     if (!context->logo_frame_buffer) {
         C64_LOG_ERROR("Failed to allocate logo frame buffer (%zu bytes)", frame_size);
-        if (context->logo_texture) {
-            gs_texture_destroy(context->logo_texture);
-            context->logo_texture = NULL;
-        }
         return false;
     }
 
-    // Pre-render the logo frame for instant availability
-    if (!prerender_logo_frame(context)) {
-        C64_LOG_WARNING("Failed to pre-render logo frame");
-        bfree(context->logo_frame_buffer);
-        context->logo_frame_buffer = NULL;
-        if (context->logo_texture) {
-            gs_texture_destroy(context->logo_texture);
-            context->logo_texture = NULL;
-        }
-        return false;
-    }
-
-    C64_LOG_INFO("✅ Logo system initialized successfully");
+    C64_LOG_INFO("✅ Logo system initialized successfully (texture will be loaded on first use)");
     return true;
 }
 
@@ -159,14 +144,31 @@ void c64_logo_cleanup(struct c64_source *context)
     C64_LOG_DEBUG("Logo system cleanup completed");
 }
 
-// Render pre-rendered logo to async video output
+// Render logo to async video output with lazy loading
 void c64_logo_render_to_frame(struct c64_source *context, uint64_t timestamp_ns)
 {
     if (!context || !context->logo_frame_buffer || !context->frame_buffer) {
         return;
     }
 
-    // Simply copy pre-rendered logo to main frame buffer (super fast!)
+    // Lazy loading: load texture and pre-render on first use
+    if (!context->logo_texture_loaded) {
+        C64_LOG_INFO("First logo render - attempting to load texture...");
+
+        // Try to load logo texture now that graphics context should be ready
+        if (!context->logo_texture) {
+            context->logo_texture = load_logo_texture();
+        }
+
+        // Pre-render the logo frame (will handle both success and fallback cases)
+        if (!prerender_logo_frame(context)) {
+            C64_LOG_WARNING("Failed to pre-render logo frame during lazy loading");
+        }
+
+        context->logo_texture_loaded = true; // Mark as loaded (success or failure)
+    }
+
+    // Copy pre-rendered logo to main frame buffer
     size_t frame_size = context->width * context->height * sizeof(uint32_t);
     memcpy(context->frame_buffer, context->logo_frame_buffer, frame_size);
 

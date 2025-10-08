@@ -22,6 +22,9 @@
 
 #include "c64-protocol.h"
 
+// Forward declarations
+static uint64_t c64_calculate_ideal_timestamp(struct c64_source *context, uint16_t frame_num);
+
 // Helper functions for frame assembly (updated to use lock-free implementation)
 void c64_init_frame_assembly(struct frame_assembly *frame, uint16_t frame_num)
 {
@@ -66,19 +69,24 @@ void c64_render_frame_direct(struct c64_source *context, struct frame_assembly *
     obs_frame.width = context->width;
     obs_frame.height = context->height;
     obs_frame.format = VIDEO_FORMAT_RGBA;
-    obs_frame.timestamp = timestamp_ns; // Use packet timestamp for A/V sync
-    obs_frame.flip = false;             // No vertical flip needed
+    // Generate monotonic timestamp based on frame sequence for butter-smooth playback
+    uint64_t monotonic_timestamp = c64_calculate_ideal_timestamp(context, frame->frame_num);
+    obs_frame.timestamp = monotonic_timestamp; // Use monotonic timestamp instead of packet timestamp
+    obs_frame.flip = false;                    // No vertical flip needed
 
     // Output frame directly to OBS - super efficient!
     obs_source_output_video(context->source, &obs_frame);
 
     // Update timing and status
-    context->last_frame_time = timestamp_ns;
+    context->last_frame_time = monotonic_timestamp;
     context->frames_delivered_to_obs++;
     context->video_frames_processed++;
 
-    C64_LOG_DEBUG("🎬 Direct async frame: %ux%u RGBA, timestamp=%" PRIu64 ", packets=%u/%u", obs_frame.width,
-                  obs_frame.height, obs_frame.timestamp, frame->received_packets, frame->expected_packets);
+    // Log monotonic timestamp vs original packet timestamp for debugging
+    C64_LOG_DEBUG("🎬 MONOTONIC video: frame=%u, monotonic_ts=%" PRIu64 ", packet_ts=%" PRIu64 ", delta=%+" PRId64
+                  ", packets=%u/%u",
+                  frame->frame_num, monotonic_timestamp, timestamp_ns, (int64_t)(monotonic_timestamp - timestamp_ns),
+                  frame->received_packets, frame->expected_packets);
 }
 
 // Simplified frame assembly with row interpolation for missing packets
@@ -404,7 +412,9 @@ static uint64_t c64_calculate_ideal_timestamp(struct c64_source *context, uint16
     }
 
     // Calculate ideal timestamp: base + (frame_offset * frame_interval)
-    uint64_t ideal_timestamp = context->stream_start_time_ns + ((uint64_t)frame_offset * context->frame_interval_ns);
+    // CRITICAL: Handle negative offsets correctly by using signed arithmetic first
+    int64_t signed_offset_ns = (int64_t)frame_offset * (int64_t)context->frame_interval_ns;
+    uint64_t ideal_timestamp = context->stream_start_time_ns + signed_offset_ns;
 
     // Debug log occasionally to verify timestamp calculation
     static uint32_t log_counter = 0;

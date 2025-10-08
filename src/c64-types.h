@@ -101,8 +101,13 @@ struct c64_source {
     uint16_t first_frame_num;      // First frame number seen (for offset calculation)
     bool timestamp_base_set;       // Flag indicating if base timestamp is established
 
+    // Monotonic audio timestamp generation
+    uint64_t audio_packet_count; // Total audio packets processed since stream start
+    uint64_t audio_interval_ns;  // Nanoseconds per audio packet (4ms for 192 samples at 48kHz)
+
     // Logo texture for no-connection display
     gs_texture_t *logo_texture; // Loaded logo texture for async video output
+    bool logo_texture_loaded;   // Flag to track if logo texture loading was attempted
 
     // Render callback based timeout detection
     uint64_t last_udp_packet_time; // Timestamp of last UDP packet
