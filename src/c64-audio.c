@@ -84,13 +84,14 @@ void *audio_thread_func(void *data)
 // Calculate monotonic audio timestamp based on sample count
 static uint64_t c64_calculate_audio_timestamp(struct c64_source *context)
 {
-    // Initialize audio timing on first packet
+    // Initialize timing base on first packet (audio or video, whichever comes first)
     if (!context->timestamp_base_set) {
-        // Audio interval: 192 samples per packet at 48kHz = 4ms = 4,000,000 ns
+        context->stream_start_time_ns = os_gettime_ns();
         context->audio_interval_ns = (192 * 1000000000ULL) / 48000; // 4,000,000 ns
         context->audio_packet_count = 0;
-        C64_LOG_INFO("📐 Audio timing initialized: %llu ns per packet (%llu samples at 48kHz)",
-                     (unsigned long long)context->audio_interval_ns, 192ULL);
+        context->timestamp_base_set = true;
+        C64_LOG_INFO("📐 Audio timing base established: %" PRIu64 " ns, %llu ns per packet (%llu samples at 48kHz)",
+                     context->stream_start_time_ns, (unsigned long long)context->audio_interval_ns, 192ULL);
     }
 
     // Calculate monotonic timestamp: base + (packet_count * packet_interval)
