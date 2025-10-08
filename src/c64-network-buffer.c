@@ -109,12 +109,42 @@ static void rb_push(struct packet_ring_buffer *rb, const uint8_t *data, size_t l
     size_t head = rb->head;
     size_t tail = rb->tail;
 
-    // Check if buffer is full
+    // Calculate buffer utilization for monitoring
+    size_t current_packets = (head >= tail) ? (head - tail) : (rb->max_capacity - tail + head);
+    size_t utilization_percent = (current_packets * 100) / rb->max_capacity;
+
+    // Check if buffer is full or critically high
     size_t next_head = (head + 1) % rb->max_capacity;
     if (next_head == tail) {
-        // Buffer full: drop oldest packet
-        rb->tail = (tail + 1) % rb->max_capacity;
-        tail = rb->tail;
+        // Buffer full: use aggressive dropping strategy to prevent continuous packet loss
+        // Drop 10% of packets (minimum 2) to create breathing room
+        size_t packets_to_drop = (current_packets / 10) + 2; // At least 2, typically 10%
+        if (packets_to_drop > current_packets / 2) {
+            packets_to_drop = current_packets / 2; // Never drop more than half
+        }
+
+        for (size_t i = 0; i < packets_to_drop && tail != head; i++) {
+            rb->tail = (tail + 1) % rb->max_capacity;
+            tail = rb->tail;
+        }
+
+        // Log critical buffer utilization once per second
+        static uint64_t last_full_log_time = 0;
+        uint64_t now = os_gettime_ns();
+        if (now - last_full_log_time >= 1000000000ULL) {
+            C64_LOG_WARNING("%s buffer full: dropped %zu packets, utilization was=%zu%% (%zu/%zu packets)", type_name,
+                            packets_to_drop, utilization_percent, current_packets, rb->max_capacity);
+            last_full_log_time = now;
+        }
+    } else if (utilization_percent >= 90) {
+        // Warn when approaching capacity (but don't spam logs)
+        static uint64_t last_warn_log_time = 0;
+        uint64_t now = os_gettime_ns();
+        if (now - last_warn_log_time >= 5000000000ULL) { // Every 5 seconds for warnings
+            C64_LOG_DEBUG("%s buffer high utilization: %zu%% (%zu/%zu packets)", type_name, utilization_percent,
+                          current_packets, rb->max_capacity);
+            last_warn_log_time = now;
+        }
     }
 
     // CRITICAL OPTIMIZATION: Limit insertion sort complexity to prevent blocking
@@ -482,10 +512,12 @@ int c64_network_buffer_pop(struct c64_network_buffer *buf, const uint8_t **video
     pthread_mutex_unlock(&buf->video.mutex);
 
     if (video_head == video_tail) {
-        // No video packets available
-        static int no_video_count = 0;
-        if ((no_video_count++ % 100) == 0) {
-            C64_LOG_INFO("📦 BUFFER EMPTY: No video packets available (attempt #%d)", no_video_count);
+        // No video packets available - throttle logging to once per second
+        static uint64_t last_empty_log_time = 0;
+        uint64_t now = os_gettime_ns();
+        if (now - last_empty_log_time >= 1000000000ULL) { // 1 second in nanoseconds
+            C64_LOG_DEBUG("📦 BUFFER EMPTY: No video packets available");
+            last_empty_log_time = now;
         }
         return 0;
     }
@@ -494,12 +526,15 @@ int c64_network_buffer_pop(struct c64_network_buffer *buf, const uint8_t **video
     struct packet_slot *oldest_video = &buf->video.slots[video_tail];
     if (!oldest_video->valid || !is_packet_ready_for_pop(oldest_video, buf->video.delay_us)) {
         // Oldest packet not ready yet - must wait to preserve FIFO ordering
-        static int delay_count = 0;
-        if ((delay_count++ % 100) == 0) {
-            uint64_t now_us = os_gettime_ns() / 1000;
+        // Throttle logging to once per second
+        static uint64_t last_delay_log_time = 0;
+        uint64_t now = os_gettime_ns();
+        if (now - last_delay_log_time >= 1000000000ULL) { // 1 second in nanoseconds
+            uint64_t now_us = now / 1000;
             uint64_t age_us = oldest_video->valid ? (now_us - oldest_video->timestamp_us) : 0;
-            C64_LOG_INFO("⏰ DELAY WAIT: Oldest packet age=%llu us, need=%llu us (attempt #%d)",
-                         (unsigned long long)age_us, (unsigned long long)buf->video.delay_us, delay_count);
+            C64_LOG_DEBUG("⏰ DELAY WAIT: Oldest packet age=%llu us, need=%llu us", (unsigned long long)age_us,
+                          (unsigned long long)buf->video.delay_us);
+            last_delay_log_time = now;
         }
         return 0;
     }

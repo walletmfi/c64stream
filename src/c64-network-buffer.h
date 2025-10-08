@@ -24,9 +24,10 @@ extern "C" {
 
 #define C64_MAX_DELAY_MS 100
 
-// Buffer sizing: Use worst-case NTSC video rate for allocation
-#define C64_MAX_VIDEO_PACKETS ((C64_MAX_VIDEO_RATE * C64_MAX_DELAY_MS) / 1000)
-#define C64_MAX_AUDIO_PACKETS ((C64_MAX_AUDIO_RATE * C64_MAX_DELAY_MS) / 1000)
+// Buffer sizing: Use worst-case NTSC video rate for allocation with 20% safety margin
+// Safety margin prevents buffer exhaustion at maximum delay due to timing variations
+#define C64_MAX_VIDEO_PACKETS ((C64_MAX_VIDEO_RATE * C64_MAX_DELAY_MS * 12) / 10000) // 20% margin
+#define C64_MAX_AUDIO_PACKETS ((C64_MAX_AUDIO_RATE * C64_MAX_DELAY_MS * 12) / 10000) // 20% margin
 
 struct c64_network_buffer;
 
