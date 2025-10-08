@@ -18,16 +18,17 @@ struct packet_slot {
 typedef enum { BUFFER_TYPE_VIDEO, BUFFER_TYPE_AUDIO } buffer_type_t;
 
 struct packet_ring_buffer {
-    struct packet_slot *slots; // Points to either video or audio slot array
-    size_t max_capacity;       // Either C64_MAX_VIDEO_PACKETS or C64_MAX_AUDIO_PACKETS
-    size_t active_slots;       // computed from delay
-    atomic_size_t head;
-    atomic_size_t tail;
+    struct packet_slot *slots;  // Points to either video or audio slot array
+    size_t max_capacity;        // Either C64_MAX_VIDEO_PACKETS or C64_MAX_AUDIO_PACKETS
+    size_t active_slots;        // computed from delay
+    size_t head;                // Protected by mutex
+    size_t tail;                // Protected by mutex
     size_t packet_size;         // Either C64_VIDEO_PACKET_SIZE or C64_AUDIO_PACKET_SIZE
     uint16_t next_expected_seq; // Expected next sequence number
     bool seq_initialized;       // Whether we have initialized sequence tracking
     uint64_t delay_us;          // Delay in microseconds
     buffer_type_t type;         // For logging and type-specific behavior
+    pthread_mutex_t mutex;      // Synchronizes access to head, tail, and slots
 };
 
 struct c64_network_buffer {
@@ -46,8 +47,9 @@ struct c64_network_buffer {
 static void debug_verify_buffer_ordering(struct packet_ring_buffer *rb, const char *context)
 {
 #ifdef DEBUG_SEQUENCE_ORDERING
-    size_t head = atomic_load_explicit(&rb->head, memory_order_acquire);
-    size_t tail = atomic_load_explicit(&rb->tail, memory_order_acquire);
+    // Note: This function assumes caller already holds the mutex
+    size_t head = rb->head;
+    size_t tail = rb->tail;
 
     if (head == tail)
         return; // Empty buffer
@@ -79,12 +81,6 @@ static void debug_verify_buffer_ordering(struct packet_ring_buffer *rb, const ch
 }
 
 // Generic ring buffer operations using macros to work with both buffer types
-#define RB_INCREMENT(rb) (((rb)->head + 1) % (rb)->max_capacity)
-#define RB_RESET(rb, active) do { \
-    atomic_store(&(rb)->head, 0); \
-    atomic_store(&(rb)->tail, 0); \
-    (rb)->active_slots = (active); \
-} while(0)
 
 // Generic packet ring buffer push with sequence-based ordering (OPTIMIZED FOR LOW LATENCY)
 static void rb_push(struct packet_ring_buffer *rb, const uint8_t *data, size_t len, uint64_t ts)
@@ -109,15 +105,16 @@ static void rb_push(struct packet_ring_buffer *rb, const uint8_t *data, size_t l
     // The ring buffer insertion sort will handle duplicates and ordering automatically
 
     // Find insertion point to maintain sequence order
-    size_t head = atomic_load_explicit(&rb->head, memory_order_relaxed);
-    size_t tail = atomic_load_explicit(&rb->tail, memory_order_acquire);
+    pthread_mutex_lock(&rb->mutex);
+    size_t head = rb->head;
+    size_t tail = rb->tail;
 
     // Check if buffer is full
     size_t next_head = (head + 1) % rb->max_capacity;
     if (next_head == tail) {
         // Buffer full: drop oldest packet
-        atomic_store_explicit(&rb->tail, (tail + 1) % rb->max_capacity, memory_order_release);
-        tail = (tail + 1) % rb->max_capacity;
+        rb->tail = (tail + 1) % rb->max_capacity;
+        tail = rb->tail;
     }
 
     // CRITICAL OPTIMIZATION: Limit insertion sort complexity to prevent blocking
@@ -201,7 +198,8 @@ static void rb_push(struct packet_ring_buffer *rb, const uint8_t *data, size_t l
         C64_LOG_DEBUG("%s: Inserted seq %u at pos %zu (head was %zu)", type_name, seq_num, insert_pos, head);
     }
 
-    atomic_store_explicit(&rb->head, next_head, memory_order_release);
+    rb->head = next_head;
+    pthread_mutex_unlock(&rb->mutex);
 
     // Verify buffer ordering in debug builds
     debug_verify_buffer_ordering(rb, type_name);
@@ -214,8 +212,9 @@ static int rb_pop_oldest(struct packet_ring_buffer *rb, struct packet_slot **out
         return 0;
     }
 
-    size_t head = atomic_load_explicit(&rb->head, memory_order_acquire);
-    size_t tail = atomic_load_explicit(&rb->tail, memory_order_acquire);
+    pthread_mutex_lock(&rb->mutex);
+    size_t head = rb->head;
+    size_t tail = rb->tail;
 
     if (head == tail) {
         // No packets available
@@ -230,7 +229,8 @@ static int rb_pop_oldest(struct packet_ring_buffer *rb, struct packet_slot **out
         rb->next_expected_seq = popped_seq + 1;
     }
 
-    atomic_store_explicit(&rb->tail, (tail + 1) % rb->max_capacity, memory_order_release);
+    rb->tail = (tail + 1) % rb->max_capacity;
+    pthread_mutex_unlock(&rb->mutex);
     return 1;
 }
 
@@ -241,13 +241,13 @@ static void rb_reset(struct packet_ring_buffer *rb, size_t active_slots)
         return;
     }
 
+    pthread_mutex_lock(&rb->mutex);
     if (active_slots > rb->max_capacity) {
         active_slots = rb->max_capacity;
     }
-
     rb->active_slots = active_slots;
-    atomic_store_explicit(&rb->head, 0, memory_order_release);
-    atomic_store_explicit(&rb->tail, 0, memory_order_release);
+    rb->head = 0;
+    rb->tail = 0;
 
     // Reset sequence tracking
     rb->next_expected_seq = 0;
@@ -257,6 +257,7 @@ static void rb_reset(struct packet_ring_buffer *rb, size_t active_slots)
     for (size_t i = 0; i < rb->max_capacity; i++) {
         rb->slots[i].valid = false;
     }
+    pthread_mutex_unlock(&rb->mutex);
 }
 
 // ----------------------------------
@@ -277,6 +278,7 @@ struct c64_network_buffer *c64_network_buffer_create(void)
     buf->video.packet_size = C64_VIDEO_PACKET_SIZE;
     buf->video.delay_us = 0; // Initialize with no delay by default
     buf->video.type = BUFFER_TYPE_VIDEO;
+    pthread_mutex_init(&buf->video.mutex, NULL);
     rb_reset(&buf->video, C64_MAX_VIDEO_PACKETS);
 
     // Initialize audio buffer (use smaller allocation for audio)
@@ -285,6 +287,7 @@ struct c64_network_buffer *c64_network_buffer_create(void)
     buf->audio.packet_size = C64_AUDIO_PACKET_SIZE;
     buf->audio.delay_us = 0; // Initialize with no delay by default
     buf->audio.type = BUFFER_TYPE_AUDIO;
+    pthread_mutex_init(&buf->audio.mutex, NULL);
     rb_reset(&buf->audio, C64_MAX_AUDIO_PACKETS);
 
     C64_LOG_INFO("Network buffer created - Video: %zu slots, Audio: %zu slots", (size_t)C64_MAX_VIDEO_PACKETS,
@@ -300,6 +303,8 @@ void c64_network_buffer_destroy(struct c64_network_buffer *buf)
     }
 
     C64_LOG_INFO("Network buffer destroyed");
+    pthread_mutex_destroy(&buf->video.mutex);
+    pthread_mutex_destroy(&buf->audio.mutex);
     free(buf);
 }
 
