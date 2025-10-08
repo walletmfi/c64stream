@@ -82,18 +82,34 @@ void c64_render_frame_direct(struct c64_source *context, struct frame_assembly *
     context->frames_delivered_to_obs++;
     context->video_frames_processed++;
 
-    // Log monotonic timestamp vs original packet timestamp for debugging
-    C64_LOG_DEBUG("🎬 MONOTONIC video: frame=%u, monotonic_ts=%" PRIu64 ", packet_ts=%" PRIu64 ", delta=%+" PRId64
-                  ", packets=%u/%u",
-                  frame->frame_num, monotonic_timestamp, timestamp_ns, (int64_t)(monotonic_timestamp - timestamp_ns),
-                  frame->received_packets, frame->expected_packets);
+    // Very rare spot checks for monotonic timestamp debugging (every 5 minutes)
+    static int timestamp_debug_count = 0;
+    static uint64_t last_timestamp_log_time = 0;
+    uint64_t now = os_gettime_ns();
+    if ((++timestamp_debug_count % 10000) == 0 ||
+        (now - last_timestamp_log_time >= 300000000000ULL)) { // Every 10k frames OR 5 minutes
+        C64_LOG_DEBUG("🎬 MONOTONIC SPOT CHECK: frame=%u, monotonic_ts=%" PRIu64 ", packet_ts=%" PRIu64
+                      ", delta=%+" PRId64 ", packets=%u/%u (count: %d)",
+                      frame->frame_num, monotonic_timestamp, timestamp_ns,
+                      (int64_t)(monotonic_timestamp - timestamp_ns), frame->received_packets, frame->expected_packets,
+                      timestamp_debug_count);
+        last_timestamp_log_time = now;
+    }
 }
 
 // Simplified frame assembly with row interpolation for missing packets
 void c64_assemble_frame_with_interpolation(struct c64_source *context, struct frame_assembly *frame)
 {
-    C64_LOG_DEBUG("🎬 Assembling frame %u with interpolation: %u/%u packets received", frame->frame_num,
-                  frame->received_packets, frame->expected_packets);
+    // Rare spot checks for frame assembly (every 5 minutes)
+    static int assembly_debug_count = 0;
+    static uint64_t last_assembly_log_time = 0;
+    uint64_t now = os_gettime_ns();
+    if ((++assembly_debug_count % 5000) == 0 ||
+        (now - last_assembly_log_time >= 300000000000ULL)) { // Every 5k frames OR 5 minutes
+        C64_LOG_DEBUG("🎬 ASSEMBLY SPOT CHECK: frame %u with %u/%u packets (count: %d)", frame->frame_num,
+                      frame->received_packets, frame->expected_packets, assembly_debug_count);
+        last_assembly_log_time = now;
+    }
 
     // Track which lines have been written
     bool *line_written = calloc(context->height, sizeof(bool));
@@ -145,7 +161,7 @@ void c64_assemble_frame_with_interpolation(struct c64_source *context, struct fr
     }
 
     free(line_written);
-    C64_LOG_DEBUG("✅ Frame %u assembly with interpolation complete", frame->frame_num);
+    // Assembly completion is already covered by the spot check above - remove this log
 }
 
 void c64_process_video_statistics_batch(struct c64_source *context, uint64_t current_time)
@@ -235,7 +251,7 @@ void c64_init_frame_assembly_lockfree(struct frame_assembly *frame, uint16_t fra
     frame->complete = false;
     frame->packets_received_mask = 0;
 
-    C64_LOG_DEBUG("🎬 Initialized frame assembly for frame %u", frame_num);
+    // Frame initialization is too frequent for debugging - removed
 }
 
 bool c64_try_add_packet_lockfree(struct frame_assembly *frame, uint16_t packet_index)
@@ -281,7 +297,16 @@ bool c64_is_frame_complete_lockfree(struct frame_assembly *frame)
 
     if (complete && !frame->complete) {
         frame->complete = true;
-        C64_LOG_DEBUG("🎬 Frame %u marked as COMPLETE with %u/%u packets!", frame->frame_num, received, expected);
+        // Very rare spot checks for frame completion (every 5 minutes)
+        static int completion_debug_count = 0;
+        static uint64_t last_completion_log_time = 0;
+        uint64_t now = os_gettime_ns();
+        if ((++completion_debug_count % 5000) == 0 ||
+            (now - last_completion_log_time >= 300000000000ULL)) { // Every 5k completions OR 5 minutes
+            C64_LOG_DEBUG("🎬 Frame COMPLETION SPOT CHECK: frame %u with %u/%u packets! (total count: %d)",
+                          frame->frame_num, received, expected, completion_debug_count);
+            last_completion_log_time = now;
+        }
     }
 
     return complete;
@@ -432,8 +457,16 @@ static void c64_render_black_screen(struct c64_source *context, uint64_t timesta
 
     obs_source_output_video(context->source, &obs_frame);
 
-    C64_LOG_DEBUG("⚫ Black screen rendered: %ux%u RGBA, timestamp=%" PRIu64, obs_frame.width, obs_frame.height,
-                  obs_frame.timestamp);
+    // Very rare spot checks for black screen rendering (every 10 minutes)
+    static int black_screen_debug_count = 0;
+    static uint64_t last_black_screen_log_time = 0;
+    uint64_t now = os_gettime_ns();
+    if ((++black_screen_debug_count % 10000) == 0 ||
+        (now - last_black_screen_log_time >= 600000000000ULL)) { // Every 10k renders OR 10 minutes
+        C64_LOG_DEBUG("⚫ BLACK SCREEN SPOT CHECK: %ux%u RGBA, timestamp=%" PRIu64 " (total count: %d)",
+                      obs_frame.width, obs_frame.height, obs_frame.timestamp, black_screen_debug_count);
+        last_black_screen_log_time = now;
+    }
 }
 
 // Direct packet processing function (based on main branch logic)

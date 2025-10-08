@@ -487,12 +487,16 @@ static bool is_packet_ready_for_pop(struct packet_slot *slot, uint64_t delay_us)
     uint64_t age_us = now_us - slot->timestamp_us;
     bool ready = age_us >= delay_us;
 
-    // Debug logging for delay timing - log every 1000 checks to reduce spam
+    // Debug logging for delay timing - very occasional spot checks only
     static int delay_debug_count = 0;
-    if ((delay_debug_count++ % 1000) == 0) {
-        C64_LOG_DEBUG("🕰️ DELAY CHECK #%d: age=%llu us, required=%llu us, ready=%s (seq=%u)", delay_debug_count,
+    static uint64_t last_delay_debug_time = 0;
+    uint64_t now = os_gettime_ns();
+    if ((++delay_debug_count % 100000) == 0 ||
+        (now - last_delay_debug_time >= 300000000000ULL)) { // Every 100k checks OR 5 minutes
+        C64_LOG_DEBUG("🕰️ DELAY SPOT CHECK #%d: age=%llu us, required=%llu us, ready=%s (seq=%u)", delay_debug_count,
                       (unsigned long long)age_us, (unsigned long long)delay_us, ready ? "YES" : "NO",
                       slot->sequence_num);
+        last_delay_debug_time = now;
     }
 
     return ready;
@@ -512,11 +516,11 @@ int c64_network_buffer_pop(struct c64_network_buffer *buf, const uint8_t **video
     pthread_mutex_unlock(&buf->video.mutex);
 
     if (video_head == video_tail) {
-        // No video packets available - throttle logging to once per second
+        // No video packets available - rare spot checks only (once per minute)
         static uint64_t last_empty_log_time = 0;
         uint64_t now = os_gettime_ns();
-        if (now - last_empty_log_time >= 1000000000ULL) { // 1 second in nanoseconds
-            C64_LOG_DEBUG("📦 BUFFER EMPTY: No video packets available");
+        if (now - last_empty_log_time >= 60000000000ULL) { // 1 minute in nanoseconds
+            C64_LOG_DEBUG("📦 BUFFER EMPTY SPOT CHECK: No video packets available");
             last_empty_log_time = now;
         }
         return 0;
@@ -526,14 +530,14 @@ int c64_network_buffer_pop(struct c64_network_buffer *buf, const uint8_t **video
     struct packet_slot *oldest_video = &buf->video.slots[video_tail];
     if (!oldest_video->valid || !is_packet_ready_for_pop(oldest_video, buf->video.delay_us)) {
         // Oldest packet not ready yet - must wait to preserve FIFO ordering
-        // Throttle logging to once per second
+        // Rare spot checks only (once per minute)
         static uint64_t last_delay_log_time = 0;
         uint64_t now = os_gettime_ns();
-        if (now - last_delay_log_time >= 1000000000ULL) { // 1 second in nanoseconds
+        if (now - last_delay_log_time >= 60000000000ULL) { // 1 minute in nanoseconds
             uint64_t now_us = now / 1000;
             uint64_t age_us = oldest_video->valid ? (now_us - oldest_video->timestamp_us) : 0;
-            C64_LOG_DEBUG("⏰ DELAY WAIT: Oldest packet age=%llu us, need=%llu us", (unsigned long long)age_us,
-                          (unsigned long long)buf->video.delay_us);
+            C64_LOG_DEBUG("⏰ DELAY WAIT SPOT CHECK: Oldest packet age=%llu us, need=%llu us",
+                          (unsigned long long)age_us, (unsigned long long)buf->video.delay_us);
             last_delay_log_time = now;
         }
         return 0;
@@ -562,10 +566,14 @@ int c64_network_buffer_pop(struct c64_network_buffer *buf, const uint8_t **video
         }
     }
 
+    // Very rare spot checks for successful buffer pops (every 10 minutes)
     static int pop_count = 0;
-    if ((pop_count++ % 1000) == 0) {
-        C64_LOG_DEBUG("Network buffer pop SUCCESS: video=yes, audio=%s (count: %d)", has_audio ? "yes" : "no",
+    static uint64_t last_pop_log_time = 0;
+    uint64_t now = os_gettime_ns();
+    if ((++pop_count % 100000) == 0 || (now - last_pop_log_time >= 600000000000ULL)) { // Every 100k pops OR 10 minutes
+        C64_LOG_DEBUG("Network buffer pop SPOT CHECK: video=yes, audio=%s (total count: %d)", has_audio ? "yes" : "no",
                       pop_count);
+        last_pop_log_time = now;
     }
 
     // Return packet data

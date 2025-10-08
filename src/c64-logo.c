@@ -9,6 +9,8 @@
 
 #include <inttypes.h>
 #include <string.h>
+#include <obs-module.h>
+#include <util/platform.h>
 #include "c64-logo.h"
 #include "c64-source.h"
 #include "c64-types.h"
@@ -184,8 +186,16 @@ void c64_logo_render_to_frame(struct c64_source *context, uint64_t timestamp_ns)
 
     obs_source_output_video(context->source, &obs_frame);
 
-    C64_LOG_DEBUG("🔷 Logo frame rendered: %ux%u RGBA, timestamp=%" PRIu64, obs_frame.width, obs_frame.height,
-                  obs_frame.timestamp);
+    // Very rare spot checks for logo rendering (every 10 minutes)
+    static int logo_debug_count = 0;
+    static uint64_t last_logo_log_time = 0;
+    uint64_t now = os_gettime_ns();
+    if ((++logo_debug_count % 10000) == 0 ||
+        (now - last_logo_log_time >= 600000000000ULL)) { // Every 10k renders OR 10 minutes
+        C64_LOG_DEBUG("🔷 LOGO SPOT CHECK: %ux%u RGBA, timestamp=%" PRIu64 " (total count: %d)", obs_frame.width,
+                      obs_frame.height, obs_frame.timestamp, logo_debug_count);
+        last_logo_log_time = now;
+    }
 }
 
 // Check if logo system is available and ready

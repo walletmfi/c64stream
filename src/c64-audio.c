@@ -126,11 +126,18 @@ void c64_process_audio_packet(struct c64_source *context, const uint8_t *audio_d
     // Send audio to OBS for playback
     obs_source_output_audio(context->source, &audio_output);
 
-    // Log monotonic timestamp vs original packet timestamp for debugging
-    C64_LOG_DEBUG("🎵 MONOTONIC audio: monotonic_ts=%" PRIu64 ", packet_ts=%" PRIu64 ", delta=%+" PRId64
-                  ", packet=%" PRIu64,
-                  monotonic_timestamp, timestamp_ns, (int64_t)(monotonic_timestamp - timestamp_ns),
-                  context->audio_packet_count);
+    // Very rare spot checks for audio timestamp debugging (every 10 minutes)
+    static int audio_timestamp_debug_count = 0;
+    static uint64_t last_audio_log_time = 0;
+    uint64_t now = os_gettime_ns();
+    if ((++audio_timestamp_debug_count % 50000) == 0 ||
+        (now - last_audio_log_time >= 600000000000ULL)) { // Every 50k packets OR 10 minutes
+        C64_LOG_DEBUG("🎵 AUDIO SPOT CHECK: monotonic_ts=%" PRIu64 ", packet_ts=%" PRIu64 ", delta=%+" PRId64
+                      ", packet=%" PRIu64 " (count: %d)",
+                      monotonic_timestamp, timestamp_ns, (int64_t)(monotonic_timestamp - timestamp_ns),
+                      context->audio_packet_count, audio_timestamp_debug_count);
+        last_audio_log_time = now;
+    }
 
     // Also record to file if recording is enabled
     c64_record_audio_data(context, audio_data, data_size);

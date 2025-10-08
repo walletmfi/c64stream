@@ -519,20 +519,36 @@ void c64_record_video_frame(struct c64_source *context, uint32_t *frame_buffer)
                 non_zero_pixels++;
         }
 
-        // Log actual C64 video data stats (debug level)
-        C64_LOG_DEBUG("Recording frame %u: %ux%u, non_zero=%u/100, fps=%.3f", context->recorded_frames, context->width,
-                      context->height, non_zero_pixels, context->expected_fps);
+        // Very rare spot checks for recording stats (every 10 minutes)
+        static int recording_debug_count = 0;
+        static uint64_t last_recording_log_time = 0;
+        uint64_t now = os_gettime_ns();
+        if ((++recording_debug_count % 10000) == 0 ||
+            (now - last_recording_log_time >= 600000000000ULL)) { // Every 10k frames OR 10 minutes
+            C64_LOG_DEBUG("RECORDING SPOT CHECK: frame %u, %ux%u, non_zero=%u/100, fps=%.3f (total count: %d)",
+                          context->recorded_frames, context->width, context->height, non_zero_pixels,
+                          context->expected_fps, recording_debug_count);
+            last_recording_log_time = now;
+        }
 
         convert_rgba_to_bgr24(frame_buffer, bgr_buffer, context->width, context->height);
 
-        // For 60Hz sessions, dump first 16 bytes of BGR frame data for debugging
+        // Very rare spot checks for BGR debug data (60Hz only, every 15 minutes)
         if ((int)(context->expected_fps + 0.5) == 60) {
-            char hexbuf[49]; // 16 bytes * 3 chars + null
-            for (int i = 0; i < 16; i++) {
-                sprintf(hexbuf + i * 3, "%02X ", bgr_buffer[i]);
+            static int bgr_debug_count = 0;
+            static uint64_t last_bgr_log_time = 0;
+            uint64_t now = os_gettime_ns();
+            if ((++bgr_debug_count % 20000) == 0 ||
+                (now - last_bgr_log_time >= 900000000000ULL)) { // Every 20k frames OR 15 minutes
+                char hexbuf[49];                                // 16 bytes * 3 chars + null
+                for (int i = 0; i < 16; i++) {
+                    sprintf(hexbuf + i * 3, "%02X ", bgr_buffer[i]);
+                }
+                hexbuf[48] = '\0';
+                C64_LOG_DEBUG("BGR SPOT CHECK: frame %u [0..15]: %s (total count: %d)", context->recorded_frames,
+                              hexbuf, bgr_debug_count);
+                last_bgr_log_time = now;
             }
-            hexbuf[48] = '\0';
-            C64_LOG_DEBUG("Frame %u BGR[0..15]: %s", context->recorded_frames, hexbuf);
         }
 
         // Write AVI frame chunk header ("00db" = stream 0, uncompressed DIB)
