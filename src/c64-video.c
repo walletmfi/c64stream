@@ -700,13 +700,25 @@ void *c64_video_processor_thread_func(void *data)
         // If no packets processed and enough time has passed, show logo at 50Hz
         if (!packet_processed) {
             uint64_t time_since_last_frame = current_time - context->last_frame_time;
-            uint64_t time_since_last_video = current_time - context->last_video_packet_time;
+            // Calculate time differences, handling potential underflow from timing precision issues
+            uint64_t time_since_last_video = 0;
+            if (current_time >= context->last_video_packet_time) {
+                time_since_last_video = current_time - context->last_video_packet_time;
+            } else {
+                // Handle underflow case where last_video_packet_time is slightly in the future
+                C64_LOG_DEBUG("Timing precision issue: last_video_packet_time slightly ahead by %" PRIu64
+                              "ns - treating as zero",
+                              context->last_video_packet_time - current_time);
+                time_since_last_video = 0;
+            }
+
             uint64_t time_since_last_logo = current_time - last_logo_frame_time;
             uint64_t time_since_last_retry = current_time - last_retry_attempt;
 
             // Sanity check to prevent timestamp overflow (should never exceed ~1 hour)
             if (time_since_last_video > 3600000000000ULL) {
-                C64_LOG_DEBUG("Detected timestamp overflow, resetting video packet time");
+                C64_LOG_DEBUG("Long-running stream: resetting video timing base after %" PRIu64 "ns (%.1f hours)",
+                              time_since_last_video, (double)time_since_last_video / 3600000000000.0);
                 context->last_video_packet_time = current_time;
                 time_since_last_video = 0;
             }
