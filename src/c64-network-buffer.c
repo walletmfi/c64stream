@@ -477,8 +477,8 @@ void c64_network_buffer_set_delay(struct c64_network_buffer *buf, size_t video_d
                         slot->line_num = 0;
                         discarded++;
                     }
-                    buf->video.tail = (tail + 1) % buf->video.max_capacity;
-                    tail = buf->video.tail;
+                    tail = (tail + 1) % buf->video.max_capacity;
+                    os_atomic_set_long(&buf->video.tail, (long)tail);
                 }
 
                 if (discarded > 0) {
@@ -562,8 +562,8 @@ void c64_network_buffer_set_delay(struct c64_network_buffer *buf, size_t video_d
                         slot->line_num = 0;
                         discarded++;
                     }
-                    buf->audio.tail = (tail + 1) % buf->audio.max_capacity;
-                    tail = buf->audio.tail;
+                    tail = (tail + 1) % buf->audio.max_capacity;
+                    os_atomic_set_long(&buf->audio.tail, (long)tail);
                 }
 
                 if (discarded > 0) {
