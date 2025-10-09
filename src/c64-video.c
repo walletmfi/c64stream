@@ -657,6 +657,7 @@ void *c64_video_processor_thread_func(void *data)
     uint64_t last_logo_frame_time = 0;
     uint64_t last_retry_attempt = 0;
     const uint64_t logo_frame_interval_ns = 20000000ULL; // 50Hz (20ms) for logo frames
+    const uint64_t retry_interval_ns = 1000000000ULL;    // 1 second retry interval
 
     C64_LOG_DEBUG("Video processor thread started");
 
@@ -682,12 +683,6 @@ void *c64_video_processor_thread_func(void *data)
 
                 context->last_frame_time = current_time;
                 packet_processed = true;
-
-                // Reset retry count on successful packet processing (connection restored)
-                if (context->retry_count > 0) {
-                    C64_LOG_INFO("Connection restored, resetting retry count (was %u)", context->retry_count);
-                    context->retry_count = 0;
-                }
             }
         }
 
@@ -710,23 +705,12 @@ void *c64_video_processor_thread_func(void *data)
                 context->last_frame_time = current_time;
             }
 
-            // Calculate dynamic retry interval using exponential backoff for ultra-fast initial response
-            uint64_t retry_interval_ns;
-            if (context->retry_count == 0) {
-                retry_interval_ns = 50000000ULL; // 50ms - ultra fast first retry
-            } else if (context->retry_count == 1) {
-                retry_interval_ns = 150000000ULL; // 150ms - second retry
-            } else if (context->retry_count == 2) {
-                retry_interval_ns = 400000000ULL; // 400ms - third retry
-            } else {
-                retry_interval_ns = 1000000000ULL; // 1s - steady state for robustness
-            }
-
-            // Retry TCP connection and recreate UDP sockets based on exponential backoff
+            // Retry TCP connection and recreate UDP sockets if no UDP packets for 1+ seconds
             if (time_since_last_udp > retry_interval_ns && time_since_last_retry >= retry_interval_ns &&
                 !context->retry_in_progress) {
-                C64_LOG_INFO("No UDP packets for %.1fms, retry #%u (interval: %.0fms)", time_since_last_udp / 1000000.0,
-                             context->retry_count + 1, retry_interval_ns / 1000000.0);
+                C64_LOG_INFO(
+                    "No UDP packets received for %.1f seconds, retrying TCP commands and recreating UDP sockets",
+                    time_since_last_udp / 1000000000.0);
 
                 context->retry_in_progress = true;
                 last_retry_attempt = current_time;
