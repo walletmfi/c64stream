@@ -60,22 +60,30 @@ static bool load_logo_pixels(struct c64_source *context)
         return false;
     }
 
-    // Copy pixel data (stb_image provides RGBA, we need ARGB for OBS)
+    // Copy pixel data (stb_image provides RGBA bytes, OBS VIDEO_FORMAT_RGBA expects RGBA format)
     uint32_t *dest = context->logo_pixels;
-    uint32_t *src = (uint32_t *)img_data;
+    uint8_t *src_bytes = img_data;
+
     for (int i = 0; i < width * height; i++) {
-        uint32_t rgba = src[i];
-        // Convert RGBA to ARGB format
-        uint32_t r = (rgba >> 0) & 0xFF;
-        uint32_t g = (rgba >> 8) & 0xFF;
-        uint32_t b = (rgba >> 16) & 0xFF;
-        uint32_t a = (rgba >> 24) & 0xFF;
-        dest[i] = (a << 24) | (r << 16) | (g << 8) | b;
+        // stb_image provides RGBA in byte order: [R, G, B, A, R, G, B, A, ...]
+        uint8_t r = src_bytes[i * 4 + 0];
+        uint8_t g = src_bytes[i * 4 + 1];
+        uint8_t b = src_bytes[i * 4 + 2];
+        uint8_t a = src_bytes[i * 4 + 3];
+
+        // VIDEO_FORMAT_RGBA might expect different byte order - try ABGR
+        dest[i] = (a << 24) | (b << 16) | (g << 8) | r;
     }
 
     stbi_image_free(img_data);
 
     C64_LOG_DEBUG("Loaded PNG pixel data: %ux%u (%zu bytes)", width, height, pixel_data_size);
+
+    // Debug: Log first few pixels to understand color channel order
+    if (width > 0 && height > 0) {
+        C64_LOG_DEBUG("First pixel: R=%02x G=%02x B=%02x A=%02x -> packed=0x%08x", src_bytes[0], src_bytes[1],
+                      src_bytes[2], src_bytes[3], context->logo_pixels[0]);
+    }
     return true;
 }
 
@@ -119,9 +127,10 @@ static bool prerender_logo_frame(struct c64_source *context)
     uint32_t width = context->width;
     uint32_t height = context->height;
 
-    // C64 authentic colors from VIC-II palette
-    const uint32_t c64_border_color = vic_colors[6]; // Dark Blue border (authentic C64 style)
-    const uint32_t c64_screen_color = vic_colors[0]; // Black screen area
+    // Custom border color #0d4b69 made 20% darker (RGB: 10, 60, 84) from GIMP
+    const uint32_t c64_border_color = (0xFF << 24) | (84 << 16) | (60 << 8) | 10; // Custom blue-gray (20% darker)
+    // Very dark version of border color for screen background (RGB: 3, 18, 25)
+    const uint32_t c64_screen_color = (0xFF << 24) | (25 << 16) | (18 << 8) | 3; // Very dark blue-gray
 
     // Create authentic C64 display layout
     // Fill entire frame with dark blue border color first
