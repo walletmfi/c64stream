@@ -2,6 +2,7 @@
 #include "c64-logging.h"
 #include <obs-module.h>
 #include <util/platform.h>
+#include <util/threading.h>
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
@@ -20,17 +21,17 @@ struct packet_slot {
 typedef enum { BUFFER_TYPE_VIDEO, BUFFER_TYPE_AUDIO } buffer_type_t;
 
 struct packet_ring_buffer {
-    struct packet_slot *slots;  // Points to either video or audio slot array
-    size_t max_capacity;        // Either C64_MAX_VIDEO_PACKETS or C64_MAX_AUDIO_PACKETS
-    size_t active_slots;        // computed from delay
-    size_t head;                // Protected by mutex
-    size_t tail;                // Protected by mutex
-    size_t packet_size;         // Either C64_VIDEO_PACKET_SIZE or C64_AUDIO_PACKET_SIZE
-    uint16_t next_expected_seq; // Expected next sequence number
-    bool seq_initialized;       // Whether we have initialized sequence tracking
-    uint64_t delay_us;          // Delay in microseconds
-    buffer_type_t type;         // For logging and type-specific behavior
-    pthread_mutex_t mutex;      // Synchronizes access to head, tail, and slots
+    struct packet_slot *slots;     // Points to either video or audio slot array
+    size_t max_capacity;           // Either C64_MAX_VIDEO_PACKETS or C64_MAX_AUDIO_PACKETS
+    size_t active_slots;           // computed from delay
+    volatile long head;            // Lock-free using atomic operations
+    volatile long tail;            // Lock-free using atomic operations
+    size_t packet_size;            // Either C64_VIDEO_PACKET_SIZE or C64_AUDIO_PACKET_SIZE
+    uint16_t next_expected_seq;    // Expected next sequence number
+    volatile bool seq_initialized; // Whether we have initialized sequence tracking (atomic)
+    uint64_t delay_us;             // Delay in microseconds
+    buffer_type_t type;            // For logging and type-specific behavior
+    pthread_mutex_t mutex;         // Keep for now, will be removed in follow-up steps
 };
 
 struct c64_network_buffer {
@@ -127,20 +128,19 @@ static void rb_push(struct packet_ring_buffer *rb, const uint8_t *data, size_t l
 
     const char *type_name = (rb->type == BUFFER_TYPE_VIDEO) ? "Video" : "Audio";
 
-    // Initialize sequence tracking on first packet
-    if (!rb->seq_initialized) {
+    // Initialize sequence tracking on first packet (atomic)
+    if (!os_atomic_load_bool(&rb->seq_initialized)) {
         rb->next_expected_seq = seq_num;
-        rb->seq_initialized = true;
+        os_atomic_set_bool(&rb->seq_initialized, true);
         C64_LOG_DEBUG("%s buffer: initialized with sequence %u", type_name, seq_num);
     }
 
     // Extremely simple approach: allow all packets through, let the buffer handle ordering
     // The ring buffer insertion sort will handle duplicates and ordering automatically
 
-    // Find insertion point to maintain sequence order
-    pthread_mutex_lock(&rb->mutex);
-    size_t head = rb->head;
-    size_t tail = rb->tail;
+    // Find insertion point to maintain sequence order (lock-free)
+    size_t head = (size_t)os_atomic_load_long(&rb->head);
+    size_t tail = (size_t)os_atomic_load_long(&rb->tail);
 
     // Calculate buffer utilization for monitoring
     size_t current_packets = (head >= tail) ? (head - tail) : (rb->max_capacity - tail + head);
@@ -157,8 +157,8 @@ static void rb_push(struct packet_ring_buffer *rb, const uint8_t *data, size_t l
         }
 
         for (size_t i = 0; i < packets_to_drop && tail != head; i++) {
-            rb->tail = (tail + 1) % rb->max_capacity;
-            tail = rb->tail;
+            tail = (tail + 1) % rb->max_capacity;
+            os_atomic_set_long(&rb->tail, (long)tail);
         }
 
         // Log buffer utilization once per second
@@ -288,23 +288,23 @@ static void rb_push(struct packet_ring_buffer *rb, const uint8_t *data, size_t l
         }
     }
 
-    rb->head = next_head;
-    pthread_mutex_unlock(&rb->mutex);
+    // Atomically update head pointer (single producer per buffer, so this is safe)
+    os_atomic_set_long(&rb->head, (long)next_head);
 
     // Verify buffer ordering in debug builds
     debug_verify_buffer_ordering(rb, type_name);
 }
 
-// Pop the oldest packet (FIFO order) - essential for proper frame assembly
+// Pop the oldest packet (FIFO order) - essential for proper frame assembly (LOCK-FREE)
 static int rb_pop_oldest(struct packet_ring_buffer *rb, struct packet_slot **out)
 {
     if (!rb || !out) {
         return 0;
     }
 
-    pthread_mutex_lock(&rb->mutex);
-    size_t head = rb->head;
-    size_t tail = rb->tail;
+    // Lock-free single consumer approach - only one thread should pop from each buffer
+    long head = os_atomic_load_long(&rb->head);
+    long tail = os_atomic_load_long(&rb->tail);
 
     if (head == tail) {
         // No packets available
@@ -314,13 +314,15 @@ static int rb_pop_oldest(struct packet_ring_buffer *rb, struct packet_slot **out
     *out = &rb->slots[tail];
 
     // Update expected sequence to track what we've consumed
-    if (rb->slots[tail].valid && rb->seq_initialized) {
+    if (rb->slots[tail].valid && os_atomic_load_bool(&rb->seq_initialized)) {
         uint16_t popped_seq = rb->slots[tail].sequence_num;
         rb->next_expected_seq = popped_seq + 1;
     }
 
-    rb->tail = (tail + 1) % rb->max_capacity;
-    pthread_mutex_unlock(&rb->mutex);
+    // Atomically advance tail (single consumer, so this is safe)
+    long new_tail = (tail + 1) % rb->max_capacity;
+    os_atomic_set_long(&rb->tail, new_tail);
+
     return 1;
 }
 
@@ -336,12 +338,14 @@ static void rb_reset(struct packet_ring_buffer *rb, size_t active_slots)
         active_slots = rb->max_capacity;
     }
     rb->active_slots = active_slots;
-    rb->head = 0;
-    rb->tail = 0;
+
+    // Atomically reset head and tail pointers (inside mutex for safety)
+    os_atomic_set_long(&rb->head, 0);
+    os_atomic_set_long(&rb->tail, 0);
 
     // Reset sequence tracking
     rb->next_expected_seq = 0;
-    rb->seq_initialized = false;
+    os_atomic_set_bool(&rb->seq_initialized, false);
 
     // Clear all slot validity
     for (size_t i = 0; i < rb->max_capacity; i++) {
@@ -663,11 +667,9 @@ int c64_network_buffer_pop(struct c64_network_buffer *buf, const uint8_t **video
         return 0;
     }
 
-    // Check if we have packets available
-    pthread_mutex_lock(&buf->video.mutex);
-    size_t video_head = buf->video.head;
-    size_t video_tail = buf->video.tail;
-    pthread_mutex_unlock(&buf->video.mutex);
+    // Lock-free check if we have video packets available
+    long video_head = os_atomic_load_long(&buf->video.head);
+    long video_tail = os_atomic_load_long(&buf->video.tail);
 
     if (video_head == video_tail) {
         // No video packets available - rare spot checks only (once per minute)
@@ -704,14 +706,12 @@ int c64_network_buffer_pop(struct c64_network_buffer *buf, const uint8_t **video
         return 0;
     }
 
-    // Try to get audio packet (optional - and check its delay too)
+    // Try to get audio packet (optional - lock-free check)
     struct packet_slot *a = NULL;
     bool has_audio = false;
 
-    pthread_mutex_lock(&buf->audio.mutex);
-    size_t audio_head = buf->audio.head;
-    size_t audio_tail = buf->audio.tail;
-    pthread_mutex_unlock(&buf->audio.mutex);
+    long audio_head = os_atomic_load_long(&buf->audio.head);
+    long audio_tail = os_atomic_load_long(&buf->audio.tail);
 
     if (audio_head != audio_tail) {
         struct packet_slot *oldest_audio = &buf->audio.slots[audio_tail];
