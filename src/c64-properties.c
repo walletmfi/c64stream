@@ -59,9 +59,9 @@ obs_properties_t *c64_create_properties(void *data)
     obs_property_t *audio_port_prop = obs_properties_add_int(network_props, "audio_port", "Audio Port", 1024, 65535, 1);
     obs_property_set_long_description(audio_port_prop, "UDP port for audio stream from C64 Ultimate");
 
-    // Buffer Delay (moved to Plugin Information group)
+    // Buffer Delay (at bottom of network group)
     obs_property_t *delay_prop =
-        obs_properties_add_int_slider(info_props, "buffer_delay_ms", "Buffer Delay (millis)", 0, 500, 1);
+        obs_properties_add_int_slider(network_props, "buffer_delay_ms", "Buffer Delay (millis)", 0, 500, 1);
     obs_property_set_long_description(
         delay_prop,
         "Buffer network packets for specified milliseconds to smooth UDP packet loss/jitter (default: 10ms)");
