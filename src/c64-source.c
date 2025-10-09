@@ -301,6 +301,10 @@ void *c64_create(obs_data_t *settings, obs_source_t *source)
     context->timestamp_base_set = false;
     context->frame_interval_ns = C64_PAL_FRAME_INTERVAL_NS; // Default to PAL, will be updated on detection
 
+    // Initialize debug logging from settings (must be done before any debug logs)
+    c64_debug_logging = obs_data_get_bool(settings, "debug_logging");
+    C64_LOG_DEBUG("Debug logging initialized: %s", c64_debug_logging ? "enabled" : "disabled");
+
     // Initialize logo system with pre-rendered frame
     if (!c64_logo_init(context)) {
         C64_LOG_WARNING("Logo system initialization failed - continuing without logo");

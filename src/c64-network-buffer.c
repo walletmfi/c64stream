@@ -616,9 +616,10 @@ void c64_network_buffer_push_video(struct c64_network_buffer *buf, const uint8_t
         return;
     }
 
+    // Debug logging for network buffer push operations (respects global debug setting)
     static int push_count = 0;
     if ((push_count++ % 5000) == 0) {
-        printf("[DEBUG] Network buffer push video: packet %d (len=%zu)\n", push_count, len);
+        C64_LOG_DEBUG("Network buffer push video: packet %d (len=%zu)", push_count, len);
     }
 
     // Convert nanoseconds to microseconds for internal storage
@@ -650,22 +651,7 @@ static bool is_packet_ready_for_pop(struct packet_slot *slot, uint64_t delay_us)
     uint64_t age_us = now_us - slot->timestamp_us;
     bool ready = age_us >= delay_us;
 
-    // Debug logging for delay timing - frequent after delay changes for investigation
-    static int delay_debug_count = 0;
-    static uint64_t last_delay_debug_time = 0;
-    uint64_t now = os_gettime_ns();
-
-    // More frequent logging for debugging delay issues
-    bool should_log = (++delay_debug_count % 10000) == 0 ||              // Every 10k checks (more frequent)
-                      (now - last_delay_debug_time >= 10000000000ULL) || // Every 10 seconds
-                      !ready;                                            // Always log when packet is NOT ready
-
-    if (should_log) {
-        C64_LOG_DEBUG("🕰️ DELAY CHECK #%d: age=%llu us, required=%llu us, ready=%s (seq=%u, ts=%llu)",
-                      delay_debug_count, (unsigned long long)age_us, (unsigned long long)delay_us, ready ? "YES" : "NO",
-                      slot->sequence_num, (unsigned long long)slot->timestamp_us);
-        last_delay_debug_time = now;
-    }
+    // Debug logging removed for production use
 
     return ready;
 }
