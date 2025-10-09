@@ -38,7 +38,8 @@
         "*.c": "c",
         "*.h": "c",
         "*.cpp": "cpp",
-        "*.hpp": "cpp"
+        "*.hpp": "cpp",
+        "fstream": "c"
     },
 
     // Language-specific settings

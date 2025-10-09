@@ -1,8 +1,8 @@
 # C64 OBS Plugin Performance Analysis & Optimization Roadmap
 
-**Analysis Date:** October 9, 2025  
-**Branch:** feature/unified-buffer  
-**Analysis Duration:** 60 seconds of active C64 streaming  
+**Analysis Date:** October 9, 2025
+**Branch:** feature/unified-buffer
+**Analysis Duration:** 60 seconds of active C64 streaming
 
 ## Executive Summary
 
@@ -51,9 +51,9 @@ I/O Characteristics:
 
 ### Critical Performance Bottlenecks (Ranked by Impact)
 
-#### 1. 🔴 **CRITICAL: Ring Buffer Insertion (`rb_push()`)** 
-**File:** `src/c64-network-buffer.c:108`  
-**Call Frequency:** 1000+ times/second  
+#### 1. 🔴 **CRITICAL: Ring Buffer Insertion (`rb_push()`)**
+**File:** `src/c64-network-buffer.c:108`
+**Call Frequency:** 1000+ times/second
 **Performance Impact:** HIGH
 
 **Issues Identified:**
@@ -69,22 +69,22 @@ static void rb_push(struct packet_ring_buffer *rb, const uint8_t *data, size_t l
 {
     // BOTTLENECK: Mutex lock on every single packet
     pthread_mutex_lock(&rb->mutex);
-    
+
     // BOTTLENECK: Linear search through up to 8 packets for insertion point
     while (current != tail && search_depth < MAX_SEARCH_DEPTH) {
         // ... insertion sort logic
     }
-    
+
     // BOTTLENECK: Memory copy of entire packet (780 bytes)
     memcpy(rb->slots[insert_pos].data, data, len);
-    
+
     pthread_mutex_unlock(&rb->mutex);
 }
 ```
 
-#### 2. 🟠 **HIGH: Video Receive Loop (`c64_video_thread_func()`)** 
-**File:** `src/c64-video.c:317`  
-**Call Frequency:** Continuous (934 recv calls/minute)  
+#### 2. 🟠 **HIGH: Video Receive Loop (`c64_video_thread_func()`)**
+**File:** `src/c64-video.c:317`
+**Call Frequency:** Continuous (934 recv calls/minute)
 **Performance Impact:** HIGH
 
 **Issues Identified:**
@@ -97,15 +97,15 @@ static void rb_push(struct packet_ring_buffer *rb, const uint8_t *data, size_t l
 ```c
 while (context->thread_active) {
     // BOTTLENECK: Blocking system call for each packet
-    ssize_t received = recv(context->video_socket, (char *)packet, 
+    ssize_t received = recv(context->video_socket, (char *)packet,
                            (int)sizeof(packet), 0);
-    
+
     // BOTTLENECK: Error handling on every packet
     if (received < 0) {
         int error = c64_get_socket_error();
         // ... error handling logic
     }
-    
+
     // BOTTLENECK: Packet validation on every packet
     if (received != C64_VIDEO_PACKET_SIZE) {
         // ... validation and logging
@@ -113,9 +113,9 @@ while (context->thread_active) {
 }
 ```
 
-#### 3. 🟡 **MEDIUM: Frame Rendering (`c64_render_frame_direct()`)** 
-**File:** `src/c64-video.c:50`  
-**Call Frequency:** ~60 times/second  
+#### 3. 🟡 **MEDIUM: Frame Rendering (`c64_render_frame_direct()`)**
+**File:** `src/c64-video.c:50`
+**Call Frequency:** ~60 times/second
 **Performance Impact:** MEDIUM
 
 **Issues Identified:**
@@ -124,9 +124,9 @@ while (context->thread_active) {
 - **Frame interpolation** for missing packets
 - **Multiple buffer copies** in the rendering pipeline
 
-#### 4. 🟡 **MEDIUM: Color Conversion Operations** 
-**File:** `src/c64-color.c`  
-**Call Frequency:** Per-pixel (2M+ operations/frame)  
+#### 4. 🟡 **MEDIUM: Color Conversion Operations**
+**File:** `src/c64-color.c`
+**Call Frequency:** Per-pixel (2M+ operations/frame)
 **Performance Impact:** MEDIUM
 
 **Issues Identified:**
@@ -145,7 +145,7 @@ while (context->thread_active) {
 
 2. **Secondary Contention: Frame Assembly Mutex**
    - **Threads Involved:** Video processor, Render callback
-   - **Frequency:** 60+ acquisitions/second  
+   - **Frequency:** 60+ acquisitions/second
    - **Impact:** Can delay frame delivery to OBS
 
 3. **Memory Allocation Contention**
@@ -189,8 +189,8 @@ C64 Device → UDP Socket → Audio Thread → Network Buffer
 ## Optimization Strategy & Roadmap
 
 ### Phase 1: Lock-Free Network Buffer (HIGHEST IMPACT)
-**Estimated Performance Gain:** 40-60% CPU reduction  
-**Implementation Effort:** Medium  
+**Estimated Performance Gain:** 40-60% CPU reduction
+**Implementation Effort:** Medium
 **Risk Level:** Low
 
 **Approach:**
@@ -208,27 +208,27 @@ struct lockfree_packet_buffer {
     struct packet_slot slots[BUFFER_SIZE] __attribute__((aligned(64))); // Cache line aligned
 };
 
-static inline bool push_packet_lockfree(struct lockfree_packet_buffer *buf, 
+static inline bool push_packet_lockfree(struct lockfree_packet_buffer *buf,
                                         const uint8_t *data, size_t len) {
     size_t current_head = atomic_load(&buf->head);
     size_t next_head = (current_head + 1) % BUFFER_SIZE;
-    
+
     if (next_head == atomic_load_explicit(&buf->tail, memory_order_acquire)) {
         return false; // Buffer full
     }
-    
+
     // Zero-copy approach: store pointer instead of copying data
     buf->slots[current_head].data_ptr = data;
     buf->slots[current_head].size = len;
-    
+
     atomic_store_explicit(&buf->head, next_head, memory_order_release);
     return true;
 }
 ```
 
 ### Phase 2: Batch Packet Processing (HIGH IMPACT)
-**Estimated Performance Gain:** 20-30% CPU reduction  
-**Implementation Effort:** Medium  
+**Estimated Performance Gain:** 20-30% CPU reduction
+**Implementation Effort:** Medium
 **Risk Level:** Low
 
 **Approach:**
@@ -250,8 +250,8 @@ for (int i = 0; i < received; i++) {
 ```
 
 ### Phase 3: Zero-Copy Frame Pipeline (MEDIUM IMPACT)
-**Estimated Performance Gain:** 15-25% CPU reduction  
-**Implementation Effort:** High  
+**Estimated Performance Gain:** 15-25% CPU reduction
+**Implementation Effort:** High
 **Risk Level:** Medium
 
 **Approach:**
@@ -260,8 +260,8 @@ for (int i = 0; i < received; i++) {
 - Use memory mapping for large frame buffers
 
 ### Phase 4: SIMD Color Conversion (LOW-MEDIUM IMPACT)
-**Estimated Performance Gain:** 10-15% CPU reduction  
-**Implementation Effort:** High  
+**Estimated Performance Gain:** 10-15% CPU reduction
+**Implementation Effort:** High
 **Risk Level:** Medium
 
 **Approach:**
@@ -275,7 +275,7 @@ for (int i = 0; i < received; i++) {
 void convert_c64_colors_avx2(const uint8_t *src, uint32_t *dst, size_t pixel_count) {
     const __m256i *src_vec = (const __m256i *)src;
     __m256i *dst_vec = (__m256i *)dst;
-    
+
     for (size_t i = 0; i < pixel_count / 8; i++) {
         __m256i pixels = _mm256_loadu_si256(&src_vec[i]);
         __m256i converted = _mm256_shuffle_epi8(pixels, color_lut_vec);
@@ -301,7 +301,7 @@ void convert_c64_colors_avx2(const uint8_t *src, uint32_t *dst, size_t pixel_cou
    - Packet arrival to frame delivery timing
    - Target: <10ms end-to-end latency
 
-2. **Throughput Measurement** 
+2. **Throughput Measurement**
    - Maximum sustainable packet rate
    - Target: 2000+ packets/second without drops
 
@@ -342,7 +342,7 @@ valgrind --tool=massif ./obs # Memory profiling
 
 ### Deployment Strategy
 1. **Phase 1:** Implement behind feature flags
-2. **Phase 2:** A/B testing with subset of users  
+2. **Phase 2:** A/B testing with subset of users
 3. **Phase 3:** Gradual rollout with monitoring
 4. **Phase 4:** Full deployment after validation
 
@@ -350,7 +350,7 @@ valgrind --tool=massif ./obs # Memory profiling
 
 ### Key Performance Indicators (KPIs)
 - **Latency:** Packet-to-frame delivery time
-- **Throughput:** Sustainable packet processing rate  
+- **Throughput:** Sustainable packet processing rate
 - **CPU Usage:** Plugin overhead percentage
 - **Memory Usage:** Peak and average memory consumption
 - **Packet Loss:** Dropped packet rate under load
