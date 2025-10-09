@@ -14,6 +14,7 @@
 #include "c64-types.h"
 #include "c64-protocol.h"
 #include "c64-record.h"
+#include "c64-source.h"
 
 #ifdef _WIN32
 #include <timeapi.h>
@@ -654,7 +655,9 @@ void *c64_video_processor_thread_func(void *data)
 {
     struct c64_source *context = data;
     uint64_t last_logo_frame_time = 0;
+    uint64_t last_retry_attempt = 0;
     const uint64_t logo_frame_interval_ns = 20000000ULL; // 50Hz (20ms) for logo frames
+    const uint64_t retry_interval_ns = 1000000000ULL;    // 1 second retry interval
 
     C64_LOG_DEBUG("Video processor thread started");
 
@@ -686,7 +689,9 @@ void *c64_video_processor_thread_func(void *data)
         // If no packets processed and enough time has passed, show logo at 50Hz
         if (!packet_processed) {
             uint64_t time_since_last_frame = current_time - context->last_frame_time;
+            uint64_t time_since_last_udp = current_time - context->last_udp_packet_time;
             uint64_t time_since_last_logo = current_time - last_logo_frame_time;
+            uint64_t time_since_last_retry = current_time - last_retry_attempt;
 
             // Show logo if no frames for 100ms AND we haven't shown logo recently
             if (time_since_last_frame > 100000000ULL && time_since_last_logo >= logo_frame_interval_ns) {
@@ -699,6 +704,21 @@ void *c64_video_processor_thread_func(void *data)
                 last_logo_frame_time = current_time;
                 context->last_frame_time = current_time;
             }
+
+            // Retry TCP connection and recreate UDP sockets if no UDP packets for 1+ seconds
+            if (time_since_last_udp > retry_interval_ns && time_since_last_retry >= retry_interval_ns &&
+                !context->retry_in_progress) {
+                C64_LOG_INFO(
+                    "No UDP packets received for %.1f seconds, retrying TCP commands and recreating UDP sockets",
+                    time_since_last_udp / 1000000000.0);
+
+                context->retry_in_progress = true;
+                last_retry_attempt = current_time;
+
+                // Queue async retry task to avoid blocking this thread
+                obs_queue_task(OBS_TASK_UI, c64_async_retry_task, context, false);
+            }
+
             os_sleep_ms(1);
         }
     }

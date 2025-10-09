@@ -17,5 +17,6 @@ void c64_defaults(obs_data_t *settings);
 // Streaming control functions
 void c64_start_streaming(struct c64_source *context);
 void c64_stop_streaming(struct c64_source *context);
+void c64_async_retry_task(void *data);
 
 #endif // C64_SOURCE_H

@@ -44,17 +44,37 @@ void c64_async_retry_task(void *data)
     bool tcp_success = false;
 
     if (!context->streaming) {
-
+        // Initial streaming start - full setup with fresh UDP sockets
         c64_start_streaming(context);
         tcp_success = true; // c64_start_streaming handles TCP commands internally
     } else {
-        // Already streaming - test connectivity and send start commands (like 0.4.3)
-        // Use quick connectivity test (250ms timeout) instead of blocking TCP socket creation
+        // Already streaming - recreate UDP sockets and send start commands
+        // This handles cases where C64 restarts and needs fresh socket connections
+
+        // Test connectivity first to avoid unnecessary socket recreation
         if (c64_test_connectivity(context->ip_address, C64_CONTROL_PORT)) {
-            c64_send_control_command(context, true, 0); // Video
-            c64_send_control_command(context, true, 1); // Audio
-            tcp_success = true;
-            context->consecutive_failures = 0; // Reset failure counter on success
+            C64_LOG_DEBUG("Recreating UDP sockets for reconnection...");
+
+            // Close existing UDP sockets
+            close_and_reset_sockets(context);
+
+            // Create fresh UDP sockets (critical for reconnection after C64 restart)
+            context->video_socket = c64_create_udp_socket(context->video_port);
+            context->audio_socket = c64_create_udp_socket(context->audio_port);
+
+            if (context->video_socket == INVALID_SOCKET_VALUE || context->audio_socket == INVALID_SOCKET_VALUE) {
+                C64_LOG_ERROR("Failed to recreate UDP sockets during retry");
+                close_and_reset_sockets(context);
+                tcp_success = false;
+                context->consecutive_failures++;
+            } else {
+                // Send start commands to C64 Ultimate with new sockets
+                c64_send_control_command(context, true, 0); // Video
+                c64_send_control_command(context, true, 1); // Audio
+                tcp_success = true;
+                context->consecutive_failures = 0; // Reset failure counter on success
+                C64_LOG_INFO("UDP sockets recreated and start commands sent successfully");
+            }
         } else {
             tcp_success = false;
             context->consecutive_failures++;
