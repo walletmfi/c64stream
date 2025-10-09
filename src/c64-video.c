@@ -663,6 +663,9 @@ void *c64_video_processor_thread_func(void *data)
 
     C64_LOG_DEBUG("Video processor thread started");
 
+    // Initialize last_frame_time to 0 so logo shows immediately on startup
+    context->last_frame_time = 0;
+
     while (context->thread_active) {
         uint64_t current_time = os_gettime_ns();
         bool packet_processed = false;
@@ -708,8 +711,8 @@ void *c64_video_processor_thread_func(void *data)
                 time_since_last_video = 0;
             }
 
-            // Show logo if no frames for 100ms AND we haven't shown logo recently
-            if (time_since_last_frame > 100000000ULL && time_since_last_logo >= logo_frame_interval_ns) {
+            // Show logo if no frames for 1 second AND we haven't shown logo recently
+            if (time_since_last_frame > 1000000000ULL && time_since_last_logo >= logo_frame_interval_ns) {
                 if (c64_logo_is_available(context)) {
                     c64_logo_render_to_frame(context, current_time);
                 } else {

@@ -55,6 +55,19 @@ The C64 Ultimate device provides two primary data streams over its Ethernet port
 | 14   | Light Blue  | #887ECB  | (136, 126, 203)  |
 | 15   | Light Grey  | #ADADAD  | (173, 173, 173)  |
 
+### Authentic C64 Display Border Dimensions
+
+Color transition analysis of authentic C64 bootscreen data reveals exact VIC-II border dimensions:
+
+**Border Colors**
+- Outer Border: Light Blue (`#6D6AEF` / VIC color 14)
+- Inner Screen: Blue (`#2C29B1` / VIC color 6)
+
+**NTSC (384×240)**: L32|R32|T20|B20 → **320×200 screen**
+**PAL (384×272)**: L32|R32|T35|B37 → **320×200 screen**
+
+Both formats maintain identical 320×200 inner screen dimensions with symmetric horizontal borders.
+
 ## Audio Stream (ID 1)
 
 ### Stream Format

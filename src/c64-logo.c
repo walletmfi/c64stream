@@ -16,6 +16,7 @@
 #include "c64-types.h"
 #include "c64-logging.h"
 #include "c64-protocol.h"
+#include "c64-color.h"
 
 // Load the C64S logo texture from module data directory
 static gs_texture_t *load_logo_texture(void)
@@ -57,49 +58,84 @@ static bool prerender_logo_frame(struct c64_source *context)
     uint32_t width = context->width;
     uint32_t height = context->height;
 
-    // C64 color scheme
-    const uint32_t bg_color = 0xFF000080; // Dark blue background (RGBA)
-    const uint32_t border_color =
-        0xFF4040FF; // C64 blue border (RGBA)    // If logo texture is available, render it centered on dark background
-    if (context->logo_texture) {
-        uint32_t logo_width = gs_texture_get_width(context->logo_texture);
-        uint32_t logo_height = gs_texture_get_height(context->logo_texture);
+    // C64 authentic colors from VIC-II palette
+    const uint32_t c64_border_color = vic_colors[6]; // Dark Blue border (authentic C64 style)
+    const uint32_t c64_screen_color = vic_colors[0]; // Black screen area
 
-        // Fill background first
-        for (uint32_t i = 0; i < width * height; i++) {
-            buffer[i] = bg_color;
+    // Create authentic C64 display layout
+    // Fill entire frame with dark blue border color first
+    for (uint32_t i = 0; i < width * height; i++) {
+        buffer[i] = c64_border_color;
+    }
+
+    // Precise C64 border dimensions from bootscreen analysis
+    uint32_t border_left, border_right, border_top, border_bottom;
+
+    if (height == C64_NTSC_HEIGHT) {
+        // NTSC (384×240): L32|R32|T20|B20 → 320×200 screen
+        border_left = 32;
+        border_right = 32;
+        border_top = 20;
+        border_bottom = 20;
+    } else {
+        // PAL (384×272): L32|R32|T35|B37 → 320×200 screen (assume PAL if unknown)
+        border_left = 32;
+        border_right = 32;
+        border_top = 35;
+        border_bottom = 37;
+    }
+
+    uint32_t screen_x = border_left;
+    uint32_t screen_y = border_top;
+    uint32_t screen_width = width - border_left - border_right;
+    uint32_t screen_height = height - border_top - border_bottom;
+
+    // Fill screen area with dark blue
+    for (uint32_t y = screen_y; y < screen_y + screen_height && y < height; y++) {
+        for (uint32_t x = screen_x; x < screen_x + screen_width && x < width; x++) {
+            buffer[y * width + x] = c64_screen_color;
         }
+    }
 
-        // Create centered logo area placeholder (actual logo texture reading needs graphics context)
-        uint32_t logo_x = (width > logo_width) ? (width - logo_width) / 2 : 0;
-        uint32_t logo_y = (height > logo_height) ? (height - logo_height) / 2 : 0;
-        uint32_t logo_w = (logo_width < width) ? logo_width : width;
-        uint32_t logo_h = (logo_height < height) ? logo_height : height;
+    // If logo texture is available, render it scaled to 70% of screen width
+    if (context->logo_texture) {
+        uint32_t original_logo_width = gs_texture_get_width(context->logo_texture);
+        uint32_t original_logo_height = gs_texture_get_height(context->logo_texture);
 
-        const uint32_t logo_bg = 0xFF202040; // Darker blue for logo area
+        // Scale logo to 70% of the black screen area width (320 pixels = screen_width)
+        uint32_t target_logo_width = (screen_width * 70) / 100; // 70% of 320 = 224 pixels
+        uint32_t target_logo_height =
+            (original_logo_height * target_logo_width) / original_logo_width; // Maintain aspect ratio
 
-        // Draw logo placeholder area with border
+        // Calculate logo position (centered in black screen area)
+        uint32_t logo_x = screen_x + (screen_width - target_logo_width) / 2;
+        uint32_t logo_y = screen_y + (screen_height - target_logo_height) / 2;
+
+        // Use target dimensions for rendering
+        uint32_t logo_w = target_logo_width;
+        uint32_t logo_h = target_logo_height;
+
+        // Since we can't directly read texture pixels without graphics context,
+        // create a subtle logo placeholder that indicates where the logo will be
+        const uint32_t logo_placeholder = 0xFF404040; // Subtle gray
+
         for (uint32_t y = logo_y; y < logo_y + logo_h && y < height; y++) {
             for (uint32_t x = logo_x; x < logo_x + logo_w && x < width; x++) {
-                if (x == logo_x || x == logo_x + logo_w - 1 || y == logo_y || y == logo_y + logo_h - 1) {
-                    buffer[y * width + x] = border_color; // Border
-                } else {
-                    buffer[y * width + x] = logo_bg; // Logo area
-                }
+                // Create a simple centered rectangle as logo placeholder
+                buffer[y * width + x] = logo_placeholder;
             }
         }
 
-        C64_LOG_INFO("🔷 Pre-rendered logo frame: %ux%u logo at (%u,%u) in %ux%u frame", logo_w, logo_h, logo_x, logo_y,
-                     width, height);
+        C64_LOG_INFO(
+            "🔷 Pre-rendered C64 display with logo placeholder: %ux%u (70%% of screen) at (%u,%u) in %ux%u frame",
+            logo_w, logo_h, logo_x, logo_y, width, height);
     } else {
-        // Fallback: black screen if no logo texture (user requested no red/white pattern)
-        memset(buffer, 0, width * height * sizeof(uint32_t));
-        C64_LOG_INFO("🔷 Pre-rendered black screen fallback: %ux%u frame", width, height);
+        C64_LOG_INFO("🔷 Pre-rendered authentic C64 display: %ux%u frame with borders", width, height);
     }
     return true;
 }
 
-// Initialize logo system - allocate frame buffer only, defer texture loading
+// Initialize logo system - load texture and pre-render frame buffer
 bool c64_logo_init(struct c64_source *context)
 {
     if (!context) {
@@ -107,10 +143,6 @@ bool c64_logo_init(struct c64_source *context)
     }
 
     C64_LOG_DEBUG("Initializing logo system...");
-
-    // Defer texture loading until first use - just allocate frame buffer
-    context->logo_texture = NULL;         // Will be loaded lazily
-    context->logo_texture_loaded = false; // Track loading state
 
     // Allocate pre-rendered logo frame buffer (same format as main frame buffer)
     size_t frame_size = context->width * context->height * sizeof(uint32_t);
@@ -120,7 +152,17 @@ bool c64_logo_init(struct c64_source *context)
         return false;
     }
 
-    C64_LOG_INFO("✅ Logo system initialized successfully (texture will be loaded on first use)");
+    // Load logo texture immediately during initialization
+    context->logo_texture = load_logo_texture();
+    context->logo_texture_loaded = true;
+
+    // Pre-render the logo frame for instant display
+    if (!prerender_logo_frame(context)) {
+        C64_LOG_WARNING("Failed to pre-render logo frame during initialization");
+    }
+
+    C64_LOG_INFO("✅ Logo system initialized successfully (%zu bytes, texture %s)", frame_size,
+                 context->logo_texture ? "loaded" : "fallback");
     return true;
 }
 
@@ -146,31 +188,14 @@ void c64_logo_cleanup(struct c64_source *context)
     C64_LOG_DEBUG("Logo system cleanup completed");
 }
 
-// Render logo to async video output with lazy loading
+// Render logo to async video output (uses pre-rendered buffer)
 void c64_logo_render_to_frame(struct c64_source *context, uint64_t timestamp_ns)
 {
     if (!context || !context->logo_frame_buffer || !context->frame_buffer) {
         return;
     }
 
-    // Lazy loading: load texture and pre-render on first use
-    if (!context->logo_texture_loaded) {
-        C64_LOG_INFO("First logo render - attempting to load texture...");
-
-        // Try to load logo texture now that graphics context should be ready
-        if (!context->logo_texture) {
-            context->logo_texture = load_logo_texture();
-        }
-
-        // Pre-render the logo frame (will handle both success and fallback cases)
-        if (!prerender_logo_frame(context)) {
-            C64_LOG_WARNING("Failed to pre-render logo frame during lazy loading");
-        }
-
-        context->logo_texture_loaded = true; // Mark as loaded (success or failure)
-    }
-
-    // Copy pre-rendered logo to main frame buffer
+    // Copy pre-rendered logo to main frame buffer (very fast)
     size_t frame_size = context->width * context->height * sizeof(uint32_t);
     memcpy(context->frame_buffer, context->logo_frame_buffer, frame_size);
 
