@@ -14,6 +14,7 @@ BUILD_CONFIG="RelWithDebInfo"
 CLEAN_BUILD=false
 RUN_TESTS=false
 INSTALL_DEPS=false
+INSTALL_PLUGIN=false
 VERBOSE=false
 
 # Colors for output
@@ -55,12 +56,14 @@ OPTIONS:
     --clean             Clean build directory before building
     --tests             Run tests after building
     --install-deps      Install build dependencies
+    --install           Install plugin to OBS after building
     --verbose           Enable verbose output
     --help              Show this help message
 
 EXAMPLES:
     $0 linux                                    # Build for Linux with RelWithDebInfo
     $0 linux --config Release --tests          # Build Release for Linux and run tests
+    $0 linux --install                         # Build and install to OBS
     $0 windows --clean --install-deps          # Clean build for Windows, install deps
     $0 macos --verbose                          # Build for macOS with verbose output
 
@@ -271,6 +274,83 @@ run_tests() {
     fi
 }
 
+install_plugin() {
+    local platform=$1
+    local build_dir
+
+    case $platform in
+        linux) build_dir="build_x86_64" ;;
+        macos) build_dir="build_macos" ;;
+        windows)
+            if [[ "$OSTYPE" == "linux-gnu"* ]]; then
+                build_dir="build_mingw"
+            else
+                build_dir="build_x64"
+            fi
+            ;;
+    esac
+
+    log_info "Installing plugin to OBS..."
+
+    # Define installation directory
+    local install_dir="$HOME/.config/obs-studio/plugins/c64stream"
+
+    # Create directory structure
+    mkdir -p "$install_dir/bin/64bit"
+    mkdir -p "$install_dir/data"
+
+    # Copy binary based on platform
+    case $platform in
+        linux)
+            if [[ -f "$build_dir/c64stream.so" ]]; then
+                cp "$build_dir/c64stream.so" "$install_dir/bin/64bit/"
+                log_success "Copied c64stream.so to $install_dir/bin/64bit/"
+            else
+                log_error "Plugin binary not found: $build_dir/c64stream.so"
+                return 1
+            fi
+            ;;
+        macos)
+            if [[ -f "$build_dir/c64stream.so" ]]; then
+                cp "$build_dir/c64stream.so" "$install_dir/bin/64bit/"
+                log_success "Copied c64stream.so to $install_dir/bin/64bit/"
+            else
+                log_error "Plugin binary not found: $build_dir/c64stream.so"
+                return 1
+            fi
+            ;;
+        windows)
+            if [[ -f "$build_dir/c64stream.dll" ]]; then
+                cp "$build_dir/c64stream.dll" "$install_dir/bin/64bit/"
+                log_success "Copied c64stream.dll to $install_dir/bin/64bit/"
+            elif [[ -f "$build_dir/RelWithDebInfo/c64stream.dll" ]]; then
+                cp "$build_dir/RelWithDebInfo/c64stream.dll" "$install_dir/bin/64bit/"
+                log_success "Copied c64stream.dll to $install_dir/bin/64bit/"
+            else
+                log_error "Plugin binary not found: $build_dir/c64stream.dll or $build_dir/RelWithDebInfo/c64stream.dll"
+                return 1
+            fi
+            ;;
+    esac
+
+    # Copy data files
+    if [[ -d "data" ]]; then
+        cp -r data/* "$install_dir/data/"
+        log_success "Copied data files to $install_dir/data/"
+    else
+        log_warning "Data directory not found, skipping data files"
+    fi
+
+    log_success "Plugin installation completed!"
+    log_info "Plugin installed to: $install_dir"
+    
+    # Show the installed structure
+    if command -v find >/dev/null 2>&1; then
+        log_info "Installed files:"
+        find "$install_dir" -type f | head -20
+    fi
+}
+
 main() {
     # Parse arguments
     if [[ $# -eq 0 ]]; then
@@ -321,6 +401,10 @@ main() {
                 INSTALL_DEPS=true
                 shift
                 ;;
+            --install)
+                INSTALL_PLUGIN=true
+                shift
+                ;;
             --verbose)
                 VERBOSE=true
                 shift
@@ -362,6 +446,10 @@ main() {
 
     if [[ "$RUN_TESTS" == "true" ]]; then
         run_tests "$PLATFORM"
+    fi
+
+    if [[ "$INSTALL_PLUGIN" == "true" ]]; then
+        install_plugin "$PLATFORM"
     fi
 
     log_success "Local build workflow completed!"

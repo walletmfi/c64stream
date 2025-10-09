@@ -29,7 +29,7 @@ static void close_and_reset_sockets(struct c64_source *context);
 
 // Async retry task - runs in OBS thread pool (NOT render thread)
 // Based on working 0.4.3 approach but simplified
-static void c64_async_retry_task(void *data)
+void c64_async_retry_task(void *data)
 {
     struct c64_source *context = (struct c64_source *)data;
 
@@ -67,7 +67,8 @@ static void c64_async_retry_task(void *data)
         C64_LOG_DEBUG("TCP connection failed (%u consecutive failures)", context->consecutive_failures);
     }
 
-    // Clear retry state - allows future retries
+    // Always clear retry state to allow future retries
+    // The video thread will enforce timing between retry attempts
     context->retry_in_progress = false;
 }
 
