@@ -68,6 +68,11 @@ void c64_async_retry_task(void *data)
                 tcp_success = false;
                 context->consecutive_failures++;
             } else {
+#ifdef _WIN32
+                // Windows: Additional delay to ensure sockets are fully bound and ready
+                // before sending start commands to C64 (prevents race condition)
+                os_sleep_ms(100);
+#endif
                 // Send start commands to C64 Ultimate with new sockets
                 c64_send_control_command(context, true, 0); // Video
                 c64_send_control_command(context, true, 1); // Audio
@@ -96,10 +101,18 @@ void c64_async_retry_task(void *data)
 static void close_and_reset_sockets(struct c64_source *context)
 {
     if (context->video_socket != INVALID_SOCKET_VALUE) {
+#ifdef _WIN32
+        // Windows: Proper socket shutdown sequence for UDP reconnection
+        shutdown(context->video_socket, SHUT_RDWR);
+#endif
         close(context->video_socket);
         context->video_socket = INVALID_SOCKET_VALUE;
     }
     if (context->audio_socket != INVALID_SOCKET_VALUE) {
+#ifdef _WIN32
+        // Windows: Proper socket shutdown sequence for UDP reconnection
+        shutdown(context->audio_socket, SHUT_RDWR);
+#endif
         close(context->audio_socket);
         context->audio_socket = INVALID_SOCKET_VALUE;
     }
@@ -511,6 +524,12 @@ void c64_start_streaming(struct c64_source *context)
         close_and_reset_sockets(context);
         return;
     }
+
+#ifdef _WIN32
+    // Windows: Additional delay to ensure sockets are fully bound and ready
+    // before sending start commands to C64 (prevents race condition)
+    os_sleep_ms(100);
+#endif
 
     // Send start commands to C64 Ultimate
     c64_send_control_command(context, true, 0); // Start video

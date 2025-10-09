@@ -138,17 +138,27 @@ static bool prerender_logo_frame(struct c64_source *context)
         buffer[i] = c64_border_color;
     }
 
-    // Precise C64 border dimensions from bootscreen analysis
+    // Precise C64 border dimensions from C64 Ultimate specifications
     uint32_t border_left, border_right, border_top, border_bottom;
 
-    if (height == C64_NTSC_HEIGHT) {
-        // NTSC (384×240): L32|R32|T20|B20 → 320×200 screen
+    // Determine video standard: use detected format if available, otherwise assume PAL
+    uint32_t video_standard_height;
+    if (context->format_detected && context->detected_frame_height > 0) {
+        // Use the last detected video standard
+        video_standard_height = context->detected_frame_height;
+    } else {
+        // Default to PAL on first startup (before any connection is established)
+        video_standard_height = C64_PAL_HEIGHT;
+    }
+
+    if (video_standard_height == C64_NTSC_HEIGHT) {
+        // NTSC (384×240): T20, B20, L32, R32 → 320×200 screen
         border_left = 32;
         border_right = 32;
         border_top = 20;
         border_bottom = 20;
     } else {
-        // PAL (384×272): L32|R32|T35|B37 → 320×200 screen (assume PAL if unknown)
+        // PAL (384×272): T35, B37, L32, R32 → 320×200 screen (default for unknown)
         border_left = 32;
         border_right = 32;
         border_top = 35;
@@ -213,10 +223,13 @@ static bool prerender_logo_frame(struct c64_source *context)
             }
         }
 
-        C64_LOG_INFO("🔷 Pre-rendered C64 display with PNG logo: %ux%u (70%% of screen) at (%u,%u) in %ux%u frame",
-                     logo_w, logo_h, logo_x, logo_y, width, height);
+        const char *standard_name = (video_standard_height == C64_NTSC_HEIGHT) ? "NTSC" : "PAL";
+        C64_LOG_INFO("🔷 Pre-rendered C64 display with PNG logo: %ux%u (70%% of screen) at (%u,%u) in %ux%u %s frame",
+                     logo_w, logo_h, logo_x, logo_y, width, height, standard_name);
     } else {
-        C64_LOG_INFO("🔷 Pre-rendered authentic C64 display: %ux%u frame with borders", width, height);
+        const char *standard_name = (video_standard_height == C64_NTSC_HEIGHT) ? "NTSC" : "PAL";
+        C64_LOG_INFO("🔷 Pre-rendered authentic C64 display: %ux%u %s frame with borders", width, height,
+                     standard_name);
     }
     return true;
 }
