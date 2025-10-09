@@ -116,16 +116,13 @@ static gs_texture_t *load_logo_texture(void)
     return logo_texture;
 }
 
-// Pre-render the logo into a frame buffer for instant async video output
-static bool prerender_logo_frame(struct c64_source *context)
+// Pre-render logo into a specific frame buffer with given dimensions and format
+static bool prerender_logo_frame_format(struct c64_source *context, uint32_t *buffer, uint32_t width, uint32_t height,
+                                        bool is_pal)
 {
-    if (!context->logo_frame_buffer) {
+    if (!buffer) {
         return false;
     }
-
-    uint32_t *buffer = context->logo_frame_buffer;
-    uint32_t width = context->width;
-    uint32_t height = context->height;
 
     // Custom border color #0d4b69 made 20% darker (RGB: 10, 60, 84) from GIMP
     const uint32_t c64_border_color = (0xFF << 24) | (84 << 16) | (60 << 8) | 10; // Custom blue-gray (20% darker)
@@ -138,31 +135,20 @@ static bool prerender_logo_frame(struct c64_source *context)
         buffer[i] = c64_border_color;
     }
 
-    // Precise C64 border dimensions from C64 Ultimate specifications
+    // Set border dimensions based on format
     uint32_t border_left, border_right, border_top, border_bottom;
-
-    // Determine video standard: use detected format if available, otherwise assume PAL
-    uint32_t video_standard_height;
-    if (context->format_detected && context->detected_frame_height > 0) {
-        // Use the last detected video standard
-        video_standard_height = context->detected_frame_height;
+    if (is_pal) {
+        // PAL (384×272): T35, B37, L32, R32 → 320×200 screen
+        border_left = 32;
+        border_right = 32;
+        border_top = 35;
+        border_bottom = 37;
     } else {
-        // Default to PAL on first startup (before any connection is established)
-        video_standard_height = C64_PAL_HEIGHT;
-    }
-
-    if (video_standard_height == C64_NTSC_HEIGHT) {
         // NTSC (384×240): T20, B20, L32, R32 → 320×200 screen
         border_left = 32;
         border_right = 32;
         border_top = 20;
         border_bottom = 20;
-    } else {
-        // PAL (384×272): T35, B37, L32, R32 → 320×200 screen (default for unknown)
-        border_left = 32;
-        border_right = 32;
-        border_top = 35;
-        border_bottom = 37;
     }
 
     uint32_t screen_x = border_left;
@@ -223,15 +209,35 @@ static bool prerender_logo_frame(struct c64_source *context)
             }
         }
 
-        const char *standard_name = (video_standard_height == C64_NTSC_HEIGHT) ? "NTSC" : "PAL";
+        const char *standard_name = is_pal ? "PAL" : "NTSC";
         C64_LOG_INFO("🔷 Pre-rendered C64 display with PNG logo: %ux%u (70%% of screen) at (%u,%u) in %ux%u %s frame",
                      logo_w, logo_h, logo_x, logo_y, width, height, standard_name);
     } else {
-        const char *standard_name = (video_standard_height == C64_NTSC_HEIGHT) ? "NTSC" : "PAL";
+        const char *standard_name = is_pal ? "PAL" : "NTSC";
         C64_LOG_INFO("🔷 Pre-rendered authentic C64 display: %ux%u %s frame with borders", width, height,
                      standard_name);
     }
     return true;
+}
+
+// Pre-render both PAL and NTSC logo frames
+static bool prerender_logo_frames(struct c64_source *context)
+{
+    bool pal_success = false, ntsc_success = false;
+
+    // Pre-render PAL version (384x272)
+    if (context->logo_frame_buffer_pal) {
+        pal_success =
+            prerender_logo_frame_format(context, context->logo_frame_buffer_pal, C64_PAL_WIDTH, C64_PAL_HEIGHT, true);
+    }
+
+    // Pre-render NTSC version (384x240)
+    if (context->logo_frame_buffer_ntsc) {
+        ntsc_success = prerender_logo_frame_format(context, context->logo_frame_buffer_ntsc, C64_NTSC_WIDTH,
+                                                   C64_NTSC_HEIGHT, false);
+    }
+
+    return pal_success && ntsc_success;
 }
 
 // Initialize logo system - load texture and pre-render frame buffer
@@ -243,13 +249,26 @@ bool c64_logo_init(struct c64_source *context)
 
     C64_LOG_DEBUG("Initializing logo system...");
 
-    // Allocate pre-rendered logo frame buffer (same format as main frame buffer)
-    size_t frame_size = context->width * context->height * sizeof(uint32_t);
-    context->logo_frame_buffer = bmalloc(frame_size);
-    if (!context->logo_frame_buffer) {
-        C64_LOG_ERROR("Failed to allocate logo frame buffer (%zu bytes)", frame_size);
+    // Allocate separate PAL and NTSC logo frame buffers
+    size_t pal_frame_size = C64_PAL_WIDTH * C64_PAL_HEIGHT * sizeof(uint32_t);
+    size_t ntsc_frame_size = C64_NTSC_WIDTH * C64_NTSC_HEIGHT * sizeof(uint32_t);
+
+    context->logo_frame_buffer_pal = bmalloc(pal_frame_size);
+    if (!context->logo_frame_buffer_pal) {
+        C64_LOG_ERROR("Failed to allocate PAL logo frame buffer (%zu bytes)", pal_frame_size);
         return false;
     }
+
+    context->logo_frame_buffer_ntsc = bmalloc(ntsc_frame_size);
+    if (!context->logo_frame_buffer_ntsc) {
+        C64_LOG_ERROR("Failed to allocate NTSC logo frame buffer (%zu bytes)", ntsc_frame_size);
+        bfree(context->logo_frame_buffer_pal);
+        context->logo_frame_buffer_pal = NULL;
+        return false;
+    }
+
+    // Initialize format preference to PAL (default on boot)
+    context->last_connected_format_was_pal = true;
 
     // Load PNG pixel data using stb_image (primary method)
     if (!load_logo_pixels(context)) {
@@ -260,13 +279,15 @@ bool c64_logo_init(struct c64_source *context)
     context->logo_texture = load_logo_texture();
     context->logo_texture_loaded = true;
 
-    // Pre-render the logo frame for instant display
-    if (!prerender_logo_frame(context)) {
-        C64_LOG_WARNING("Failed to pre-render logo frame during initialization");
+    // Pre-render both PAL and NTSC logo frames for instant display
+    if (!prerender_logo_frames(context)) {
+        C64_LOG_WARNING("Failed to pre-render logo frames during initialization");
     }
 
-    C64_LOG_INFO("✅ Logo system initialized successfully (%zu bytes, PNG pixels: %s, texture: %s)", frame_size,
-                 context->logo_pixels ? "loaded" : "fallback", context->logo_texture ? "loaded" : "fallback");
+    C64_LOG_INFO(
+        "✅ Logo system initialized successfully (PAL: %zu bytes, NTSC: %zu bytes, PNG pixels: %s, texture: %s)",
+        pal_frame_size, ntsc_frame_size, context->logo_pixels ? "loaded" : "fallback",
+        context->logo_texture ? "loaded" : "fallback");
     return true;
 }
 
@@ -291,9 +312,14 @@ void c64_logo_cleanup(struct c64_source *context)
         context->logo_height = 0;
     }
 
-    if (context->logo_frame_buffer) {
-        bfree(context->logo_frame_buffer);
-        context->logo_frame_buffer = NULL;
+    if (context->logo_frame_buffer_pal) {
+        bfree(context->logo_frame_buffer_pal);
+        context->logo_frame_buffer_pal = NULL;
+    }
+
+    if (context->logo_frame_buffer_ntsc) {
+        bfree(context->logo_frame_buffer_ntsc);
+        context->logo_frame_buffer_ntsc = NULL;
     }
 
     C64_LOG_DEBUG("Logo system cleanup completed");
@@ -302,13 +328,26 @@ void c64_logo_cleanup(struct c64_source *context)
 // Render logo to async video output (uses pre-rendered buffer)
 void c64_logo_render_to_frame(struct c64_source *context, uint64_t timestamp_ns)
 {
-    if (!context || !context->logo_frame_buffer || !context->frame_buffer) {
+    if (!context || !context->frame_buffer) {
         return;
+    }
+
+    // Select appropriate logo buffer based on last connected format
+    uint32_t *logo_buffer = NULL;
+    if (context->last_connected_format_was_pal && context->logo_frame_buffer_pal) {
+        logo_buffer = context->logo_frame_buffer_pal;
+    } else if (!context->last_connected_format_was_pal && context->logo_frame_buffer_ntsc) {
+        logo_buffer = context->logo_frame_buffer_ntsc;
+    } else if (context->logo_frame_buffer_pal) {
+        // Default to PAL if no previous connection or preferred format unavailable
+        logo_buffer = context->logo_frame_buffer_pal;
+    } else {
+        return; // No logo buffers available
     }
 
     // Copy pre-rendered logo to main frame buffer (very fast)
     size_t frame_size = context->width * context->height * sizeof(uint32_t);
-    memcpy(context->frame_buffer, context->logo_frame_buffer, frame_size);
+    memcpy(context->frame_buffer, logo_buffer, frame_size);
 
     // Output logo frame via async video
     struct obs_source_frame obs_frame = {0};
@@ -337,5 +376,14 @@ void c64_logo_render_to_frame(struct c64_source *context, uint64_t timestamp_ns)
 // Check if logo system is available and ready
 bool c64_logo_is_available(struct c64_source *context)
 {
-    return context && context->logo_frame_buffer != NULL;
+    return context && (context->logo_frame_buffer_pal != NULL || context->logo_frame_buffer_ntsc != NULL);
+}
+
+// Set format preference (PAL or NTSC) for logo display
+void c64_logo_set_format_preference(struct c64_source *context, bool prefer_pal)
+{
+    if (context) {
+        context->last_connected_format_was_pal = prefer_pal;
+        C64_LOG_DEBUG("Logo format preference updated: %s", prefer_pal ? "PAL" : "NTSC");
+    }
 }

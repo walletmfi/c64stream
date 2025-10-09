@@ -15,4 +15,7 @@ void c64_logo_cleanup(struct c64_source *context);
 void c64_logo_render_to_frame(struct c64_source *context, uint64_t timestamp_ns);
 bool c64_logo_is_available(struct c64_source *context);
 
+// Format preference functions
+void c64_logo_set_format_preference(struct c64_source *context, bool prefer_pal);
+
 #endif // C64_LOGO_H
