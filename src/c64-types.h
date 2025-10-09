@@ -109,6 +109,11 @@ struct c64_source {
     gs_texture_t *logo_texture; // Loaded logo texture for async video output
     bool logo_texture_loaded;   // Flag to track if logo texture loading was attempted
 
+    // Logo PNG pixel data cache (loaded once with stb_image)
+    uint32_t *logo_pixels; // Cached PNG pixel data (RGBA format)
+    uint32_t logo_width;   // PNG image width
+    uint32_t logo_height;  // PNG image height
+
     // Render callback based timeout detection
     uint64_t last_udp_packet_time;   // Timestamp of last UDP packet (DEPRECATED - use separate fields)
     uint64_t last_video_packet_time; // Timestamp of last video UDP packet

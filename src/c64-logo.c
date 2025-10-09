@@ -11,6 +11,11 @@
 #include <string.h>
 #include <obs-module.h>
 #include <util/platform.h>
+
+// STB Image library for PNG loading
+#define STB_IMAGE_IMPLEMENTATION
+#include "stb_image.h"
+
 #include "c64-logo.h"
 #include "c64-source.h"
 #include "c64-types.h"
@@ -18,13 +23,69 @@
 #include "c64-protocol.h"
 #include "c64-color.h"
 
+// Load PNG pixel data using stb_image
+static bool load_logo_pixels(struct c64_source *context)
+{
+    C64_LOG_DEBUG("Loading PNG pixel data with stb_image...");
+
+    // Use obs_module_file() to get the path to the scaled logo in the data directory
+    char *logo_path = obs_module_file("images/c64stream-logo-scaled.png");
+    if (!logo_path) {
+        C64_LOG_WARNING("Failed to locate PNG file in module data directory");
+        return false;
+    }
+
+    C64_LOG_DEBUG("PNG path resolved to: %s", logo_path);
+
+    // Load PNG data with stb_image (force RGBA format)
+    int width, height, channels;
+    unsigned char *img_data = stbi_load(logo_path, &width, &height, &channels, 4); // Force 4 channels (RGBA)
+
+    bfree(logo_path);
+
+    if (!img_data) {
+        C64_LOG_WARNING("Failed to load PNG with stb_image: %s", stbi_failure_reason());
+        return false;
+    }
+
+    // Cache the pixel data
+    context->logo_width = (uint32_t)width;
+    context->logo_height = (uint32_t)height;
+
+    size_t pixel_data_size = width * height * sizeof(uint32_t);
+    context->logo_pixels = bmalloc(pixel_data_size);
+    if (!context->logo_pixels) {
+        C64_LOG_ERROR("Failed to allocate memory for PNG pixel cache (%zu bytes)", pixel_data_size);
+        stbi_image_free(img_data);
+        return false;
+    }
+
+    // Copy pixel data (stb_image provides RGBA, we need ARGB for OBS)
+    uint32_t *dest = context->logo_pixels;
+    uint32_t *src = (uint32_t *)img_data;
+    for (int i = 0; i < width * height; i++) {
+        uint32_t rgba = src[i];
+        // Convert RGBA to ARGB format
+        uint32_t r = (rgba >> 0) & 0xFF;
+        uint32_t g = (rgba >> 8) & 0xFF;
+        uint32_t b = (rgba >> 16) & 0xFF;
+        uint32_t a = (rgba >> 24) & 0xFF;
+        dest[i] = (a << 24) | (r << 16) | (g << 8) | b;
+    }
+
+    stbi_image_free(img_data);
+
+    C64_LOG_DEBUG("Loaded PNG pixel data: %ux%u (%zu bytes)", width, height, pixel_data_size);
+    return true;
+}
+
 // Load the C64S logo texture from module data directory
 static gs_texture_t *load_logo_texture(void)
 {
     C64_LOG_DEBUG("Attempting to load logo texture...");
 
-    // Use obs_module_file() to get the path to the logo in the data directory
-    char *logo_path = obs_module_file("images/c64stream-logo.png");
+    // Use obs_module_file() to get the path to the scaled logo in the data directory
+    char *logo_path = obs_module_file("images/c64stream-logo-scaled.png");
     if (!logo_path) {
         C64_LOG_WARNING("Failed to locate logo file in module data directory");
         return NULL;
@@ -97,38 +158,54 @@ static bool prerender_logo_frame(struct c64_source *context)
         }
     }
 
-    // If logo texture is available, render it scaled to 70% of screen width
-    if (context->logo_texture) {
-        uint32_t original_logo_width = gs_texture_get_width(context->logo_texture);
-        uint32_t original_logo_height = gs_texture_get_height(context->logo_texture);
-
-        // Scale logo to 70% of the black screen area width (320 pixels = screen_width)
-        uint32_t target_logo_width = (screen_width * 70) / 100; // 70% of 320 = 224 pixels
-        uint32_t target_logo_height =
-            (original_logo_height * target_logo_width) / original_logo_width; // Maintain aspect ratio
+    // If PNG pixel data is available, render it directly
+    if (context->logo_pixels && context->logo_width > 0 && context->logo_height > 0) {
+        uint32_t logo_w = context->logo_width;  // Should be 224px
+        uint32_t logo_h = context->logo_height; // Should be 149px
 
         // Calculate logo position (centered in black screen area)
-        uint32_t logo_x = screen_x + (screen_width - target_logo_width) / 2;
-        uint32_t logo_y = screen_y + (screen_height - target_logo_height) / 2;
+        uint32_t logo_x = screen_x + (screen_width - logo_w) / 2;
+        uint32_t logo_y = screen_y + (screen_height - logo_h) / 2;
 
-        // Use target dimensions for rendering
-        uint32_t logo_w = target_logo_width;
-        uint32_t logo_h = target_logo_height;
+        // Render PNG pixel data with alpha blending
+        uint32_t *logo_pixels = context->logo_pixels;
 
-        // Since we can't directly read texture pixels without graphics context,
-        // create a subtle logo placeholder that indicates where the logo will be
-        const uint32_t logo_placeholder = 0xFF404040; // Subtle gray
+        for (uint32_t y = 0; y < logo_h && (logo_y + y) < height; y++) {
+            for (uint32_t x = 0; x < logo_w && (logo_x + x) < width; x++) {
+                uint32_t logo_pixel = logo_pixels[y * logo_w + x];
+                uint32_t alpha = (logo_pixel >> 24) & 0xFF;
 
-        for (uint32_t y = logo_y; y < logo_y + logo_h && y < height; y++) {
-            for (uint32_t x = logo_x; x < logo_x + logo_w && x < width; x++) {
-                // Create a simple centered rectangle as logo placeholder
-                buffer[y * width + x] = logo_placeholder;
+                // Only draw non-transparent pixels
+                if (alpha > 0) {
+                    uint32_t frame_idx = (logo_y + y) * width + (logo_x + x);
+
+                    if (alpha == 255) {
+                        // Fully opaque - direct copy
+                        buffer[frame_idx] = logo_pixel;
+                    } else {
+                        // Alpha blending with background (black screen color)
+                        uint32_t bg = buffer[frame_idx]; // Current background color
+                        uint32_t bg_r = (bg >> 16) & 0xFF;
+                        uint32_t bg_g = (bg >> 8) & 0xFF;
+                        uint32_t bg_b = bg & 0xFF;
+
+                        uint32_t logo_r = (logo_pixel >> 16) & 0xFF;
+                        uint32_t logo_g = (logo_pixel >> 8) & 0xFF;
+                        uint32_t logo_b = logo_pixel & 0xFF;
+
+                        // Alpha blend: result = logo * alpha + bg * (1 - alpha)
+                        uint32_t r = (logo_r * alpha + bg_r * (255 - alpha)) / 255;
+                        uint32_t g = (logo_g * alpha + bg_g * (255 - alpha)) / 255;
+                        uint32_t b = (logo_b * alpha + bg_b * (255 - alpha)) / 255;
+
+                        buffer[frame_idx] = (0xFF << 24) | (r << 16) | (g << 8) | b;
+                    }
+                }
             }
         }
 
-        C64_LOG_INFO(
-            "🔷 Pre-rendered C64 display with logo placeholder: %ux%u (70%% of screen) at (%u,%u) in %ux%u frame",
-            logo_w, logo_h, logo_x, logo_y, width, height);
+        C64_LOG_INFO("🔷 Pre-rendered C64 display with PNG logo: %ux%u (70%% of screen) at (%u,%u) in %ux%u frame",
+                     logo_w, logo_h, logo_x, logo_y, width, height);
     } else {
         C64_LOG_INFO("🔷 Pre-rendered authentic C64 display: %ux%u frame with borders", width, height);
     }
@@ -152,7 +229,12 @@ bool c64_logo_init(struct c64_source *context)
         return false;
     }
 
-    // Load logo texture immediately during initialization
+    // Load PNG pixel data using stb_image (primary method)
+    if (!load_logo_pixels(context)) {
+        C64_LOG_WARNING("Failed to load PNG pixel data, will use fallback");
+    }
+
+    // Load logo texture (secondary, for compatibility)
     context->logo_texture = load_logo_texture();
     context->logo_texture_loaded = true;
 
@@ -161,8 +243,8 @@ bool c64_logo_init(struct c64_source *context)
         C64_LOG_WARNING("Failed to pre-render logo frame during initialization");
     }
 
-    C64_LOG_INFO("✅ Logo system initialized successfully (%zu bytes, texture %s)", frame_size,
-                 context->logo_texture ? "loaded" : "fallback");
+    C64_LOG_INFO("✅ Logo system initialized successfully (%zu bytes, PNG pixels: %s, texture: %s)", frame_size,
+                 context->logo_pixels ? "loaded" : "fallback", context->logo_texture ? "loaded" : "fallback");
     return true;
 }
 
@@ -178,6 +260,13 @@ void c64_logo_cleanup(struct c64_source *context)
     if (context->logo_texture) {
         gs_texture_destroy(context->logo_texture);
         context->logo_texture = NULL;
+    }
+
+    if (context->logo_pixels) {
+        bfree(context->logo_pixels);
+        context->logo_pixels = NULL;
+        context->logo_width = 0;
+        context->logo_height = 0;
     }
 
     if (context->logo_frame_buffer) {
