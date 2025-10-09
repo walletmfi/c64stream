@@ -84,10 +84,10 @@ struct c64_source {
     pthread_t video_thread;
     pthread_t video_processor_thread;
     pthread_t audio_thread;
-    bool thread_active;
-    bool video_thread_active;
-    bool video_processor_thread_active;
-    bool audio_thread_active;
+    volatile bool thread_active;                 // Atomic thread control flags (lock-free)
+    volatile bool video_thread_active;           // Atomic thread control flags (lock-free)
+    volatile bool video_processor_thread_active; // Atomic thread control flags (lock-free)
+    volatile bool audio_thread_active;           // Atomic thread control flags (lock-free)
 
     // Synchronization (frame_mutex no longer needed for async video output)
     pthread_mutex_t assembly_mutex;
@@ -129,14 +129,14 @@ struct c64_source {
     // Auto-start control
     bool auto_start_attempted;
 
-    // Statistics counters (accessed from single threads, no atomics needed)
-    uint64_t video_packets_received; // Total video packets received
-    uint64_t video_bytes_received;   // Total video bytes received
-    uint32_t video_sequence_errors;  // Sequence number errors (out-of-order, drops)
-    uint32_t video_frames_processed; // Total video frames processed
-    uint64_t audio_packets_received; // Total audio packets received
-    uint64_t audio_bytes_received;   // Total audio bytes received
-    uint64_t last_stats_log_time;    // Last time statistics were logged (non-atomic)
+    // Statistics counters (atomic for lock-free hot path updates)
+    volatile long video_packets_received; // Total video packets received (atomic)
+    volatile long video_bytes_received;   // Total video bytes received (atomic)
+    volatile long video_sequence_errors;  // Sequence number errors (atomic)
+    volatile long video_frames_processed; // Total video frames processed (atomic)
+    volatile long audio_packets_received; // Total audio packets received (atomic)
+    volatile long audio_bytes_received;   // Total audio bytes received (atomic)
+    uint64_t last_stats_log_time;         // Last time statistics were logged (non-atomic)
 
     // Frame saving for analysis (logo handled by async video - no manual logo needed)
     bool save_frames;

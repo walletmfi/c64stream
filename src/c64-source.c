@@ -284,19 +284,19 @@ void *c64_create(obs_data_t *settings, obs_source_t *source)
     context->video_socket = INVALID_SOCKET_VALUE;
     context->audio_socket = INVALID_SOCKET_VALUE;
     context->control_socket = INVALID_SOCKET_VALUE;
-    context->thread_active = false;
-    context->video_thread_active = false;
-    context->video_processor_thread_active = false;
-    context->audio_thread_active = false;
+    os_atomic_set_bool(&context->thread_active, false);
+    os_atomic_set_bool(&context->video_thread_active, false);
+    os_atomic_set_bool(&context->video_processor_thread_active, false);
+    os_atomic_set_bool(&context->audio_thread_active, false);
     context->auto_start_attempted = false;
 
     // Initialize statistics counters
-    context->video_packets_received = 0;
-    context->video_bytes_received = 0;
-    context->video_sequence_errors = 0;
-    context->video_frames_processed = 0;
-    context->audio_packets_received = 0;
-    context->audio_bytes_received = 0;
+    os_atomic_set_long(&context->video_packets_received, 0);
+    os_atomic_set_long(&context->video_bytes_received, 0);
+    os_atomic_set_long(&context->video_sequence_errors, 0);
+    os_atomic_set_long(&context->video_frames_processed, 0);
+    os_atomic_set_long(&context->audio_packets_received, 0);
+    os_atomic_set_long(&context->audio_bytes_received, 0);
     context->last_stats_log_time = os_gettime_ns();
 
     // Initialize render callback timeout system
@@ -346,20 +346,20 @@ void c64_destroy(void *data)
     if (context->streaming) {
         C64_LOG_DEBUG("Stopping active streaming during destruction");
         context->streaming = false;
-        context->thread_active = false;
+        os_atomic_set_bool(&context->thread_active, false);
 
         close_and_reset_sockets(context);
-        if (context->video_thread_active) {
+        if (os_atomic_load_bool(&context->video_thread_active)) {
             pthread_join(context->video_thread, NULL);
-            context->video_thread_active = false;
+            os_atomic_set_bool(&context->video_thread_active, false);
         }
-        if (context->video_processor_thread_active) {
+        if (os_atomic_load_bool(&context->video_processor_thread_active)) {
             pthread_join(context->video_processor_thread, NULL);
-            context->video_processor_thread_active = false;
+            os_atomic_set_bool(&context->video_processor_thread_active, false);
         }
-        if (context->audio_thread_active) {
+        if (os_atomic_load_bool(&context->audio_thread_active)) {
             pthread_join(context->audio_thread, NULL);
-            context->audio_thread_active = false;
+            os_atomic_set_bool(&context->audio_thread_active, false);
         }
     }
 
@@ -499,17 +499,17 @@ void c64_start_streaming(struct c64_source *context)
     // Stop existing threads BEFORE closing sockets (prevents race conditions on Windows)
     if (context->streaming) {
         context->streaming = false;
-        context->thread_active = false;
+        os_atomic_set_bool(&context->thread_active, false);
 
         // Wait for existing threads to finish BEFORE closing their sockets
-        if (context->video_thread_active && pthread_join(context->video_thread, NULL) != 0) {
+        if (os_atomic_load_bool(&context->video_thread_active) && pthread_join(context->video_thread, NULL) != 0) {
             C64_LOG_WARNING("Failed to join existing video thread during reconnection");
         }
-        if (context->audio_thread_active && pthread_join(context->audio_thread, NULL) != 0) {
+        if (os_atomic_load_bool(&context->audio_thread_active) && pthread_join(context->audio_thread, NULL) != 0) {
             C64_LOG_WARNING("Failed to join existing audio thread during reconnection");
         }
-        context->video_thread_active = false;
-        context->audio_thread_active = false;
+        os_atomic_set_bool(&context->video_thread_active, false);
+        os_atomic_set_bool(&context->audio_thread_active, false);
     }
 
     // Now safe to close existing sockets after threads have stopped
@@ -536,48 +536,48 @@ void c64_start_streaming(struct c64_source *context)
     c64_send_control_command(context, true, 1); // Start audio
 
     // Start fresh worker threads
-    context->thread_active = true;
+    os_atomic_set_bool(&context->thread_active, true);
     context->streaming = true;
 
     if (pthread_create(&context->video_thread, NULL, c64_video_thread_func, context) != 0) {
         C64_LOG_ERROR("Failed to create video receiver thread");
         context->streaming = false;
-        context->thread_active = false;
+        os_atomic_set_bool(&context->thread_active, false);
         close_and_reset_sockets(context);
         return;
     }
-    context->video_thread_active = true;
+    os_atomic_set_bool(&context->video_thread_active, true);
 
     // Start video processor thread (processes packets from network buffer)
     if (pthread_create(&context->video_processor_thread, NULL, c64_video_processor_thread_func, context) != 0) {
         C64_LOG_ERROR("Failed to create video processor thread");
         context->streaming = false;
-        context->thread_active = false;
-        if (context->video_thread_active) {
+        os_atomic_set_bool(&context->thread_active, false);
+        if (os_atomic_load_bool(&context->video_thread_active)) {
             pthread_join(context->video_thread, NULL);
-            context->video_thread_active = false;
+            os_atomic_set_bool(&context->video_thread_active, false);
         }
         close_and_reset_sockets(context);
         return;
     }
-    context->video_processor_thread_active = true;
+    os_atomic_set_bool(&context->video_processor_thread_active, true);
 
     if (pthread_create(&context->audio_thread, NULL, audio_thread_func, context) != 0) {
         C64_LOG_ERROR("Failed to create audio receiver thread");
         context->streaming = false;
-        context->thread_active = false;
-        if (context->video_thread_active) {
+        os_atomic_set_bool(&context->thread_active, false);
+        if (os_atomic_load_bool(&context->video_thread_active)) {
             pthread_join(context->video_thread, NULL);
-            context->video_thread_active = false;
+            os_atomic_set_bool(&context->video_thread_active, false);
         }
-        if (context->video_processor_thread_active) {
+        if (os_atomic_load_bool(&context->video_processor_thread_active)) {
             pthread_join(context->video_processor_thread, NULL);
-            context->video_processor_thread_active = false;
+            os_atomic_set_bool(&context->video_processor_thread_active, false);
         }
         close_and_reset_sockets(context);
         return;
     }
-    context->audio_thread_active = true;
+    os_atomic_set_bool(&context->audio_thread_active, true);
 
     C64_LOG_INFO("C64S streaming started successfully");
 }
@@ -592,23 +592,24 @@ void c64_stop_streaming(struct c64_source *context)
     C64_LOG_INFO("Stopping C64S streaming...");
 
     context->streaming = false;
-    context->thread_active = false;
+    os_atomic_set_bool(&context->thread_active, false);
 
     close_and_reset_sockets(context);
-    if (context->video_thread_active && pthread_join(context->video_thread, NULL) != 0) {
+    if (os_atomic_load_bool(&context->video_thread_active) && pthread_join(context->video_thread, NULL) != 0) {
         C64_LOG_WARNING("Failed to join video thread");
     }
-    context->video_thread_active = false;
+    os_atomic_set_bool(&context->video_thread_active, false);
 
-    if (context->video_processor_thread_active && pthread_join(context->video_processor_thread, NULL) != 0) {
+    if (os_atomic_load_bool(&context->video_processor_thread_active) &&
+        pthread_join(context->video_processor_thread, NULL) != 0) {
         C64_LOG_WARNING("Failed to join video processor thread");
     }
-    context->video_processor_thread_active = false;
+    os_atomic_set_bool(&context->video_processor_thread_active, false);
 
-    if (context->audio_thread_active && pthread_join(context->audio_thread, NULL) != 0) {
+    if (os_atomic_load_bool(&context->audio_thread_active) && pthread_join(context->audio_thread, NULL) != 0) {
         C64_LOG_WARNING("Failed to join audio thread");
     }
-    context->audio_thread_active = false;
+    os_atomic_set_bool(&context->audio_thread_active, false);
 
     // Clear frame buffer (async video will stop automatically)
     if (context->frame_buffer) {

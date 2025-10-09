@@ -1,7 +1,8 @@
 #include <obs-module.h>
 #include <util/platform.h>
-#include <inttypes.h>    // For PRIu64, PRId64 format specifiers
-#include "c64-network.h" // Include network header first to avoid Windows header conflicts
+#include <util/threading.h> // For atomic operations
+#include <inttypes.h>       // For PRIu64, PRId64 format specifiers
+#include "c64-network.h"    // Include network header first to avoid Windows header conflicts
 
 #include "c64-logging.h"
 #include "c64-audio.h"
@@ -18,7 +19,7 @@ void *audio_thread_func(void *data)
 
     C64_LOG_DEBUG("Audio receiver thread started on port %u", context->audio_port);
 
-    while (context->thread_active) {
+    while (os_atomic_load_bool(&context->thread_active)) {
         // Check socket validity before each recv call (prevents Windows WSAENOTSOCK errors)
         if (context->audio_socket == INVALID_SOCKET_VALUE) {
             os_sleep_ms(10); // Wait a bit before checking again
@@ -77,8 +78,9 @@ void *audio_thread_func(void *data)
         context->last_audio_packet_time = packet_time;
 
         // Update audio statistics
-        context->audio_packets_received++;
-        context->audio_bytes_received += received;
+        os_atomic_set_long(&context->audio_packets_received, os_atomic_load_long(&context->audio_packets_received) + 1);
+        os_atomic_set_long(&context->audio_bytes_received,
+                           os_atomic_load_long(&context->audio_bytes_received) + (long)received);
 
         // Simple approach: just process packets as they arrive, no sequence warnings
 

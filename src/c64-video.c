@@ -1,5 +1,6 @@
 #include <obs-module.h>
 #include <util/platform.h>
+#include <util/threading.h> // For atomic operations
 #include <string.h>
 #include <inttypes.h>
 #include <pthread.h>
@@ -81,7 +82,7 @@ void c64_render_frame_direct(struct c64_source *context, struct frame_assembly *
     // Update timing and status
     context->last_frame_time = monotonic_timestamp;
     context->frames_delivered_to_obs++;
-    context->video_frames_processed++;
+    os_atomic_set_long(&context->video_frames_processed, os_atomic_load_long(&context->video_frames_processed) + 1);
 
     // Periodic timestamp debugging (every 5 minutes)
     static int timestamp_debug_count = 0;
@@ -173,12 +174,12 @@ void c64_process_video_statistics_batch(struct c64_source *context, uint64_t cur
     if (time_since_last_log < STATS_INTERVAL_NS) {
         return;
     }
-    uint64_t packets_received = context->video_packets_received;
-    uint64_t bytes_received = context->video_bytes_received;
-    uint32_t frames_processed = context->video_frames_processed;
-    context->video_packets_received = 0;
-    context->video_bytes_received = 0;
-    context->video_frames_processed = 0;
+    uint64_t packets_received = (uint64_t)os_atomic_load_long(&context->video_packets_received);
+    uint64_t bytes_received = (uint64_t)os_atomic_load_long(&context->video_bytes_received);
+    uint32_t frames_processed = (uint32_t)os_atomic_load_long(&context->video_frames_processed);
+    os_atomic_set_long(&context->video_packets_received, 0);
+    os_atomic_set_long(&context->video_bytes_received, 0);
+    os_atomic_set_long(&context->video_frames_processed, 0);
 
     double duration_seconds = time_since_last_log / 1000000000.0;
     double packets_per_second = packets_received / duration_seconds;
@@ -227,10 +228,10 @@ void c64_process_audio_statistics_batch(struct c64_source *context, uint64_t cur
     if (time_since_last_log < STATS_INTERVAL_NS) {
         return;
     }
-    uint64_t packets_received = context->audio_packets_received;
-    uint64_t bytes_received = context->audio_bytes_received;
-    context->audio_packets_received = 0;
-    context->audio_bytes_received = 0;
+    uint64_t packets_received = (uint64_t)os_atomic_load_long(&context->audio_packets_received);
+    uint64_t bytes_received = (uint64_t)os_atomic_load_long(&context->audio_bytes_received);
+    os_atomic_set_long(&context->audio_packets_received, 0);
+    os_atomic_set_long(&context->audio_bytes_received, 0);
 
     if (packets_received > 0) {
         double duration_seconds = time_since_last_log / 1000000000.0;
@@ -334,7 +335,7 @@ void *c64_video_thread_func(void *data)
 
     C64_LOG_DEBUG("Video thread function started with optimized scheduling");
 
-    while (context->thread_active) {
+    while (os_atomic_load_bool(&context->thread_active)) {
         // Check socket validity before each recv call (prevents Windows WSAENOTSOCK errors)
         if (context->video_socket == INVALID_SOCKET_VALUE) {
             os_sleep_ms(10); // Wait a bit before checking again
@@ -391,8 +392,9 @@ void *c64_video_thread_func(void *data)
         context->last_udp_packet_time = packet_time; // DEPRECATED - kept for compatibility
         context->last_video_packet_time = packet_time;
 
-        context->video_packets_received++;
-        context->video_bytes_received += received;
+        os_atomic_set_long(&context->video_packets_received, os_atomic_load_long(&context->video_packets_received) + 1);
+        os_atomic_set_long(&context->video_bytes_received,
+                           os_atomic_load_long(&context->video_bytes_received) + (long)received);
         uint16_t pixels_per_line = *(uint16_t *)(packet + 6);
         uint8_t lines_per_packet = packet[8];
         uint8_t bits_per_pixel = packet[9];
@@ -666,7 +668,7 @@ void *c64_video_processor_thread_func(void *data)
     // Initialize last_frame_time to 0 so logo shows immediately on startup
     context->last_frame_time = 0;
 
-    while (context->thread_active) {
+    while (os_atomic_load_bool(&context->thread_active)) {
         uint64_t current_time = os_gettime_ns();
         bool packet_processed = false;
 
