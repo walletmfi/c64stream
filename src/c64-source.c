@@ -58,7 +58,7 @@ void c64_async_retry_task(void *data)
             // Close existing UDP sockets
             close_and_reset_sockets(context);
 
-            // Create fresh UDP sockets (critical for reconnection after C64 restart)
+            // Create fresh UDP sockets (required for reconnection after C64 restart)
             context->video_socket = c64_create_udp_socket(context->video_port);
             context->audio_socket = c64_create_udp_socket(context->audio_port);
 
@@ -498,7 +498,7 @@ void c64_start_streaming(struct c64_source *context)
     // Now safe to close existing sockets after threads have stopped
     close_and_reset_sockets(context);
 
-    // Create fresh UDP sockets (critical for reconnection after C64S restart)
+    // Create fresh UDP sockets (required for reconnection after C64 restart)
     context->video_socket = c64_create_udp_socket(context->video_port);
     context->audio_socket = c64_create_udp_socket(context->audio_port);
 

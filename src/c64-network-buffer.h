@@ -22,7 +22,7 @@ extern "C" {
 // Audio: PAL 250.0 packets/sec (exact), NTSC 249.7 packets/sec
 #define C64_MAX_AUDIO_RATE 250 // PAL rate (slightly higher than NTSC)
 
-#define C64_MAX_DELAY_MS 100
+#define C64_MAX_DELAY_MS 500
 
 // Buffer sizing: Use worst-case NTSC video rate for allocation with 20% safety margin
 // Safety margin prevents buffer exhaustion at maximum delay due to timing variations

@@ -61,7 +61,7 @@ obs_properties_t *c64_create_properties(void *data)
 
     // Buffer Delay (moved to Plugin Information group)
     obs_property_t *delay_prop =
-        obs_properties_add_int_slider(info_props, "buffer_delay_ms", "Buffer Delay (millis)", 0, 100, 1);
+        obs_properties_add_int_slider(info_props, "buffer_delay_ms", "Buffer Delay (millis)", 0, 500, 1);
     obs_property_set_long_description(
         delay_prop,
         "Buffer network packets for specified milliseconds to smooth UDP packet loss/jitter (default: 10ms)");
@@ -110,7 +110,7 @@ void c64_set_property_defaults(obs_data_t *settings)
     char documents_path[256];
 
     if (c64_get_user_documents_path(documents_path, sizeof(documents_path))) {
-        // Successfully got user's Documents folder
+        // Use user's Documents folder
 #ifdef _WIN32
         snprintf(platform_path, sizeof(platform_path), "%s\\obs-studio\\c64stream\\recordings", documents_path);
 #else

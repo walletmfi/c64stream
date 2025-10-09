@@ -75,7 +75,7 @@ void c64_render_frame_direct(struct c64_source *context, struct frame_assembly *
     obs_frame.timestamp = monotonic_timestamp; // Use monotonic timestamp instead of packet timestamp
     obs_frame.flip = false;                    // No vertical flip needed
 
-    // Output frame directly to OBS - super efficient!
+    // Output frame directly to OBS
     obs_source_output_video(context->source, &obs_frame);
 
     // Update timing and status
@@ -83,7 +83,7 @@ void c64_render_frame_direct(struct c64_source *context, struct frame_assembly *
     context->frames_delivered_to_obs++;
     context->video_frames_processed++;
 
-    // Very rare spot checks for monotonic timestamp debugging (every 5 minutes)
+    // Periodic timestamp debugging (every 5 minutes)
     static int timestamp_debug_count = 0;
     static uint64_t last_timestamp_log_time = 0;
     uint64_t now = os_gettime_ns();
@@ -101,7 +101,7 @@ void c64_render_frame_direct(struct c64_source *context, struct frame_assembly *
 // Simplified frame assembly with row interpolation for missing packets
 void c64_assemble_frame_with_interpolation(struct c64_source *context, struct frame_assembly *frame)
 {
-    // Rare spot checks for frame assembly (every 5 minutes)
+    // Periodic frame assembly monitoring (every 5 minutes)
     static int assembly_debug_count = 0;
     static uint64_t last_assembly_log_time = 0;
     uint64_t now = os_gettime_ns();
@@ -298,7 +298,7 @@ bool c64_is_frame_complete_lockfree(struct frame_assembly *frame)
 
     if (complete && !frame->complete) {
         frame->complete = true;
-        // Very rare spot checks for frame completion (every 5 minutes)
+        // Periodic frame completion monitoring (every 5 minutes)
         static int completion_debug_count = 0;
         static uint64_t last_completion_log_time = 0;
         uint64_t now = os_gettime_ns();
@@ -450,7 +450,7 @@ static uint64_t c64_calculate_ideal_timestamp(struct c64_source *context, uint16
     }
 
     // Calculate ideal timestamp: base + (frame_offset * frame_interval)
-    // CRITICAL: Handle negative offsets correctly by using signed arithmetic first
+    // Handle negative offsets correctly by using signed arithmetic first
     int64_t signed_offset_ns = (int64_t)frame_offset * (int64_t)context->frame_interval_ns;
     uint64_t ideal_timestamp = context->stream_start_time_ns + signed_offset_ns;
 
@@ -491,7 +491,7 @@ static void c64_render_black_screen(struct c64_source *context, uint64_t timesta
 
     obs_source_output_video(context->source, &obs_frame);
 
-    // Very rare spot checks for black screen rendering (every 10 minutes)
+    // Periodic black screen monitoring (every 10 minutes)
     static int black_screen_debug_count = 0;
     static uint64_t last_black_screen_log_time = 0;
     uint64_t now = os_gettime_ns();
@@ -503,7 +503,7 @@ static void c64_render_black_screen(struct c64_source *context, uint64_t timesta
     }
 }
 
-// Direct packet processing function (based on main branch logic)
+// Direct packet processing function
 void c64_process_video_packet_direct(struct c64_source *context, const uint8_t *packet, size_t packet_size,
                                      uint64_t timestamp_ns)
 {
@@ -520,7 +520,7 @@ void c64_process_video_packet_direct(struct c64_source *context, const uint8_t *
     bool last_packet = (line_num & 0x8000) != 0;
     line_num &= 0x7FFF;
 
-    // Process packet with frame assembly and double buffering (from main branch)
+    // Process packet with frame assembly and double buffering
     if (pthread_mutex_lock(&context->assembly_mutex) == 0) {
         // Track frame capture timing for diagnostics (per-frame, not per-packet)
         uint64_t capture_time = timestamp_ns;
@@ -536,8 +536,8 @@ void c64_process_video_packet_direct(struct c64_source *context, const uint8_t *
                     C64_LOG_WARNING("📽️ FRAME SKIP: Expected frame %u, got %u (skipped %d frames)", expected_next,
                                     frame_num, frame_diff);
                 } else if (frame_diff < 0) {
-                    C64_LOG_WARNING("🔄 FRAME REVERT: Expected frame %u, got %u (went back %d frames)", expected_next,
-                                    frame_num, -frame_diff);
+                    C64_LOG_WARNING("Frame sequence regression: Expected frame %u, got %u (offset %d frames)",
+                                    expected_next, frame_num, -frame_diff);
                 }
             }
 
@@ -678,7 +678,7 @@ void *c64_video_processor_thread_func(void *data)
                 if (video_data && video_size > 0) {
                     c64_process_video_packet_direct(context, video_data, video_size, timestamp_us * 1000);
 
-                    // Reset retry count on successful video packet processing (video stream restored)
+                    // Reset retry count on successful video packet processing
                     if (context->retry_count > 0) {
                         C64_LOG_INFO("Video stream restored, resetting retry count (was %u)", context->retry_count);
                         context->retry_count = 0;
@@ -703,7 +703,7 @@ void *c64_video_processor_thread_func(void *data)
 
             // Sanity check to prevent timestamp overflow (should never exceed ~1 hour)
             if (time_since_last_video > 3600000000000ULL) {
-                C64_LOG_WARNING("Detected timestamp overflow, resetting video packet time");
+                C64_LOG_DEBUG("Detected timestamp overflow, resetting video packet time");
                 context->last_video_packet_time = current_time;
                 time_since_last_video = 0;
             }

@@ -146,10 +146,10 @@ static void rb_push(struct packet_ring_buffer *rb, const uint8_t *data, size_t l
     size_t current_packets = (head >= tail) ? (head - tail) : (rb->max_capacity - tail + head);
     size_t utilization_percent = (current_packets * 100) / rb->max_capacity;
 
-    // Check if buffer is full or critically high
+    // Check if buffer is full or at high utilization
     size_t next_head = (head + 1) % rb->max_capacity;
     if (next_head == tail) {
-        // Buffer full: use aggressive dropping strategy to prevent continuous packet loss
+        // Buffer full: use dropping strategy to prevent continuous packet loss
         // Drop 10% of packets (minimum 2) to create breathing room
         size_t packets_to_drop = (current_packets / 10) + 2; // At least 2, typically 10%
         if (packets_to_drop > current_packets / 2) {
@@ -161,7 +161,7 @@ static void rb_push(struct packet_ring_buffer *rb, const uint8_t *data, size_t l
             tail = rb->tail;
         }
 
-        // Log critical buffer utilization once per second
+        // Log buffer utilization once per second
         static uint64_t last_full_log_time = 0;
         uint64_t now = os_gettime_ns();
         if (now - last_full_log_time >= 1000000000ULL) {
@@ -180,7 +180,7 @@ static void rb_push(struct packet_ring_buffer *rb, const uint8_t *data, size_t l
         }
     }
 
-    // CRITICAL OPTIMIZATION: Limit insertion sort complexity to prevent blocking
+    // Limit insertion sort complexity to prevent blocking
     size_t insert_pos = head;
 
     // For real-time performance, only do limited insertion sorting
@@ -433,73 +433,176 @@ void c64_network_buffer_set_delay(struct c64_network_buffer *buf, size_t video_d
                  (unsigned long long)buf->video.delay_us, video_delay_ms, (unsigned long long)buf->audio.delay_us,
                  audio_delay_ms);
 
-    // If delay was reduced, discard excess packets to reach new buffer size
+    // If delay was reduced, discard excess packets and adjust timestamps for immediate availability
     // IMPORTANT: Discard from tail (oldest in sequence order) to maintain packet ordering
 
     if (buf->video.delay_us < old_video_delay) {
-        // Calculate how many packets to keep for new delay
-        size_t new_video_capacity = video_slots;
-        pthread_mutex_lock(&buf->video.mutex);
-        size_t head = buf->video.head;
-        size_t tail = buf->video.tail;
+        // Only flush entire buffer for extreme delay reductions (to zero or very small delays)
+        // This prevents black screens while still allowing cleanup when needed
+        if (buf->video.delay_us == 0 && old_video_delay > 50000) { // Only flush when going to zero from >50ms
+            C64_LOG_INFO("Extreme video delay reduction to zero (%llu->0 us), flushing buffer for immediate playback",
+                         (unsigned long long)old_video_delay);
+            pthread_mutex_lock(&buf->video.mutex);
+            rb_reset(&buf->video, video_slots);
+            pthread_mutex_unlock(&buf->video.mutex);
+        } else {
+            // Calculate how many packets to keep for new delay
+            size_t new_video_capacity = video_slots;
+            pthread_mutex_lock(&buf->video.mutex);
+            size_t head = buf->video.head;
+            size_t tail = buf->video.tail;
 
-        // Count current packets in buffer
-        size_t current_packets = (head >= tail) ? (head - tail) : (buf->video.max_capacity - tail + head);
+            // Count current packets in buffer
+            size_t current_packets = (head >= tail) ? (head - tail) : (buf->video.max_capacity - tail + head);
 
-        if (current_packets > new_video_capacity) {
-            size_t packets_to_discard = current_packets - new_video_capacity;
-            size_t discarded = 0;
+            if (current_packets > new_video_capacity) {
+                size_t packets_to_discard = current_packets - new_video_capacity;
+                size_t discarded = 0;
 
-            // Discard from tail (oldest packets) to maintain sequence order
-            while (discarded < packets_to_discard && tail != head) {
-                struct packet_slot *slot = &buf->video.slots[tail];
-                if (slot->valid) {
-                    slot->valid = false;
-                    discarded++;
+                // Discard from tail (oldest packets) to maintain sequence order
+                while (discarded < packets_to_discard && tail != head) {
+                    struct packet_slot *slot = &buf->video.slots[tail];
+                    if (slot->valid) {
+                        // Physically clear the slot data to ensure no stale data remains
+                        slot->valid = false;
+                        memset(slot->data, 0, sizeof(slot->data));
+                        slot->size = 0;
+                        slot->timestamp_us = 0;
+                        slot->sequence_num = 0;
+                        slot->frame_num = 0;
+                        slot->line_num = 0;
+                        discarded++;
+                    }
+                    buf->video.tail = (tail + 1) % buf->video.max_capacity;
+                    tail = buf->video.tail;
                 }
-                buf->video.tail = (tail + 1) % buf->video.max_capacity;
-                tail = buf->video.tail;
+
+                if (discarded > 0) {
+                    C64_LOG_INFO("Video buffer: discarded %zu old packets due to delay reduction (sequence-ordered)",
+                                 discarded);
+                }
             }
 
-            if (discarded > 0) {
-                C64_LOG_INFO("Video buffer: discarded %zu old packets due to delay reduction (sequence-ordered)",
-                             discarded);
+            pthread_mutex_unlock(&buf->video.mutex);
+
+            // Make all remaining packets immediately ready for reduced delay
+            // This ensures instant effect when delay is reduced, regardless of their original timestamps
+            pthread_mutex_lock(&buf->video.mutex);
+            uint64_t now_us = os_gettime_ns() / 1000;
+            size_t adjusted = 0;
+
+            // Calculate target timestamp that makes packets ready NOW for the new delay
+            uint64_t ready_timestamp = now_us - buf->video.delay_us - 1000; // 1ms safety margin
+
+            // Adjust all slots in the buffer, not just occupied ones
+            // This handles race conditions where packets might be in intermediate states
+            for (size_t i = 0; i < buf->video.max_capacity; i++) {
+                struct packet_slot *slot = &buf->video.slots[i];
+                if (slot->valid) {
+                    uint64_t old_timestamp = slot->timestamp_us;
+                    slot->timestamp_us = ready_timestamp;
+                    adjusted++;
+
+                    // Log first few adjustments for debugging
+                    if (adjusted <= 3) {
+                        C64_LOG_INFO("Video packet %zu: adjusted timestamp %llu -> %llu us (seq=%u)", adjusted,
+                                     (unsigned long long)old_timestamp, (unsigned long long)ready_timestamp,
+                                     slot->sequence_num);
+                    }
+                }
             }
+
+            if (adjusted > 0) {
+                C64_LOG_INFO("Video buffer: made %zu packets immediately ready for new delay (%llu us)", adjusted,
+                             (unsigned long long)buf->video.delay_us);
+            }
+
+            pthread_mutex_unlock(&buf->video.mutex);
         }
-        pthread_mutex_unlock(&buf->video.mutex);
     }
 
     if (buf->audio.delay_us < old_audio_delay) {
-        // Calculate how many packets to keep for new delay
-        size_t new_audio_capacity = audio_slots;
-        pthread_mutex_lock(&buf->audio.mutex);
-        size_t head = buf->audio.head;
-        size_t tail = buf->audio.tail;
+        // Only flush entire buffer for extreme delay reductions (to zero or very small delays)
+        // This prevents audio dropouts while still allowing cleanup when needed
+        if (buf->audio.delay_us == 0 && old_audio_delay > 50000) { // Only flush when going to zero from >50ms
+            C64_LOG_INFO("Extreme audio delay reduction to zero (%llu->0 us), flushing buffer for immediate playback",
+                         (unsigned long long)old_audio_delay);
+            pthread_mutex_lock(&buf->audio.mutex);
+            rb_reset(&buf->audio, audio_slots);
+            pthread_mutex_unlock(&buf->audio.mutex);
+        } else {
+            // Calculate how many packets to keep for new delay
+            size_t new_audio_capacity = audio_slots;
+            pthread_mutex_lock(&buf->audio.mutex);
+            size_t head = buf->audio.head;
+            size_t tail = buf->audio.tail;
 
-        // Count current packets in buffer
-        size_t current_packets = (head >= tail) ? (head - tail) : (buf->audio.max_capacity - tail + head);
+            // Count current packets in buffer
+            size_t current_packets = (head >= tail) ? (head - tail) : (buf->audio.max_capacity - tail + head);
 
-        if (current_packets > new_audio_capacity) {
-            size_t packets_to_discard = current_packets - new_audio_capacity;
-            size_t discarded = 0;
+            if (current_packets > new_audio_capacity) {
+                size_t packets_to_discard = current_packets - new_audio_capacity;
+                size_t discarded = 0;
 
-            // Discard from tail (oldest packets) to maintain sequence order
-            while (discarded < packets_to_discard && tail != head) {
-                struct packet_slot *slot = &buf->audio.slots[tail];
-                if (slot->valid) {
-                    slot->valid = false;
-                    discarded++;
+                // Discard from tail (oldest packets) to maintain sequence order
+                while (discarded < packets_to_discard && tail != head) {
+                    struct packet_slot *slot = &buf->audio.slots[tail];
+                    if (slot->valid) {
+                        // Physically clear the slot data to ensure no stale data remains
+                        slot->valid = false;
+                        memset(slot->data, 0, sizeof(slot->data));
+                        slot->size = 0;
+                        slot->timestamp_us = 0;
+                        slot->sequence_num = 0;
+                        slot->frame_num = 0;
+                        slot->line_num = 0;
+                        discarded++;
+                    }
+                    buf->audio.tail = (tail + 1) % buf->audio.max_capacity;
+                    tail = buf->audio.tail;
                 }
-                buf->audio.tail = (tail + 1) % buf->audio.max_capacity;
-                tail = buf->audio.tail;
+
+                if (discarded > 0) {
+                    C64_LOG_INFO("Audio buffer: discarded %zu old packets due to delay reduction (sequence-ordered)",
+                                 discarded);
+                }
             }
 
-            if (discarded > 0) {
-                C64_LOG_INFO("Audio buffer: discarded %zu old packets due to delay reduction (sequence-ordered)",
-                             discarded);
+            pthread_mutex_unlock(&buf->audio.mutex);
+
+            // Make all remaining packets immediately ready for reduced delay
+            // This ensures instant effect when delay is reduced, regardless of their original timestamps
+            pthread_mutex_lock(&buf->audio.mutex);
+            uint64_t now_us = os_gettime_ns() / 1000;
+            size_t adjusted = 0;
+
+            // Calculate target timestamp that makes packets ready NOW for the new delay
+            uint64_t ready_timestamp = now_us - buf->audio.delay_us - 1000; // 1ms safety margin
+
+            // Adjust all slots in the buffer, not just occupied ones
+            // This handles race conditions where packets might be in intermediate states
+            for (size_t i = 0; i < buf->audio.max_capacity; i++) {
+                struct packet_slot *slot = &buf->audio.slots[i];
+                if (slot->valid) {
+                    uint64_t old_timestamp = slot->timestamp_us;
+                    slot->timestamp_us = ready_timestamp;
+                    adjusted++;
+
+                    // Log first few adjustments for debugging
+                    if (adjusted <= 3) {
+                        C64_LOG_INFO("Audio packet %zu: adjusted timestamp %llu -> %llu us (seq=%u)", adjusted,
+                                     (unsigned long long)old_timestamp, (unsigned long long)ready_timestamp,
+                                     slot->sequence_num);
+                    }
+                }
             }
+            if (adjusted > 0) {
+                C64_LOG_INFO("Audio buffer: made %zu packets immediately ready for new delay (%llu us)", adjusted,
+                             (unsigned long long)buf->audio.delay_us);
+            }
+
+            pthread_mutex_unlock(&buf->audio.mutex);
         }
-        pthread_mutex_unlock(&buf->audio.mutex);
     }
 
     C64_LOG_INFO("Network buffer delay set - Video: %zu ms (%zu slots), Audio: %zu ms (%zu slots)", video_delay_ms,
@@ -547,15 +650,20 @@ static bool is_packet_ready_for_pop(struct packet_slot *slot, uint64_t delay_us)
     uint64_t age_us = now_us - slot->timestamp_us;
     bool ready = age_us >= delay_us;
 
-    // Debug logging for delay timing - very occasional spot checks only
+    // Debug logging for delay timing - frequent after delay changes for investigation
     static int delay_debug_count = 0;
     static uint64_t last_delay_debug_time = 0;
     uint64_t now = os_gettime_ns();
-    if ((++delay_debug_count % 100000) == 0 ||
-        (now - last_delay_debug_time >= 300000000000ULL)) { // Every 100k checks OR 5 minutes
-        C64_LOG_DEBUG("🕰️ DELAY SPOT CHECK #%d: age=%llu us, required=%llu us, ready=%s (seq=%u)", delay_debug_count,
-                      (unsigned long long)age_us, (unsigned long long)delay_us, ready ? "YES" : "NO",
-                      slot->sequence_num);
+
+    // More frequent logging for debugging delay issues
+    bool should_log = (++delay_debug_count % 10000) == 0 ||              // Every 10k checks (more frequent)
+                      (now - last_delay_debug_time >= 10000000000ULL) || // Every 10 seconds
+                      !ready;                                            // Always log when packet is NOT ready
+
+    if (should_log) {
+        C64_LOG_DEBUG("🕰️ DELAY CHECK #%d: age=%llu us, required=%llu us, ready=%s (seq=%u, ts=%llu)",
+                      delay_debug_count, (unsigned long long)age_us, (unsigned long long)delay_us, ready ? "YES" : "NO",
+                      slot->sequence_num, (unsigned long long)slot->timestamp_us);
         last_delay_debug_time = now;
     }
 
@@ -626,7 +734,7 @@ int c64_network_buffer_pop(struct c64_network_buffer *buf, const uint8_t **video
         }
     }
 
-    // Very rare spot checks for successful buffer pops (every 10 minutes)
+    // Periodic buffer pop monitoring (every 10 minutes)
     static int pop_count = 0;
     static uint64_t last_pop_log_time = 0;
     uint64_t now = os_gettime_ns();
