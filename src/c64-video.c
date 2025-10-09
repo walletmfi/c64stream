@@ -706,9 +706,13 @@ void *c64_video_processor_thread_func(void *data)
                 time_since_last_video = current_time - context->last_video_packet_time;
             } else {
                 // Handle underflow case where last_video_packet_time is slightly in the future
-                C64_LOG_DEBUG("Timing precision issue: last_video_packet_time slightly ahead by %" PRIu64
-                              "ns - treating as zero",
-                              context->last_video_packet_time - current_time);
+                uint64_t timing_diff = context->last_video_packet_time - current_time;
+                // Only log if the timing difference is very significant (>10ms), indicating a real timing problem
+                if (timing_diff > 10000000) { // 10 milliseconds - anything less is normal precision variance
+                    C64_LOG_DEBUG("Significant timing issue: last_video_packet_time ahead by %" PRIu64
+                                  "ns (%.1fms) - investigating",
+                                  timing_diff, (double)timing_diff / 1000000.0);
+                }
                 time_since_last_video = 0;
             }
 
