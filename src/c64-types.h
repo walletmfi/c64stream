@@ -110,10 +110,12 @@ struct c64_source {
     bool logo_texture_loaded;   // Flag to track if logo texture loading was attempted
 
     // Render callback based timeout detection
-    uint64_t last_udp_packet_time; // Timestamp of last UDP packet
-    bool retry_in_progress;        // Flag to prevent redundant retry attempts
-    uint32_t retry_count;          // Number of retry attempts
-    uint32_t consecutive_failures; // Consecutive TCP failures for backoff
+    uint64_t last_udp_packet_time;   // Timestamp of last UDP packet (DEPRECATED - use separate fields)
+    uint64_t last_video_packet_time; // Timestamp of last video UDP packet
+    uint64_t last_audio_packet_time; // Timestamp of last audio UDP packet
+    bool retry_in_progress;          // Flag to prevent redundant retry attempts
+    uint32_t retry_count;            // Number of retry attempts
+    uint32_t consecutive_failures;   // Consecutive TCP failures for backoff
 
     // Network buffer for packet jitter correction
     struct c64_network_buffer *network_buffer; // Unified network buffer for video and audio packets

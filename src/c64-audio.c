@@ -72,7 +72,9 @@ void *audio_thread_func(void *data)
         }
 
         // Update timestamp for timeout detection - UDP packet received successfully
-        context->last_udp_packet_time = os_gettime_ns();
+        uint64_t packet_time = os_gettime_ns();
+        context->last_udp_packet_time = packet_time; // DEPRECATED - kept for compatibility
+        context->last_audio_packet_time = packet_time;
 
         // Update audio statistics
         context->audio_packets_received++;

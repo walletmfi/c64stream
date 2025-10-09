@@ -288,7 +288,9 @@ void *c64_create(obs_data_t *settings, obs_source_t *source)
 
     // Initialize render callback timeout system
     uint64_t now = os_gettime_ns();
-    context->last_udp_packet_time = now;
+    context->last_udp_packet_time = now; // DEPRECATED - kept for compatibility
+    context->last_video_packet_time = now;
+    context->last_audio_packet_time = now;
     context->retry_in_progress = false;
     context->retry_count = 0;
     context->consecutive_failures = 0;

@@ -387,7 +387,9 @@ void *c64_video_thread_func(void *data)
             continue;
         }
 
-        context->last_udp_packet_time = os_gettime_ns();
+        uint64_t packet_time = os_gettime_ns();
+        context->last_udp_packet_time = packet_time; // DEPRECATED - kept for compatibility
+        context->last_video_packet_time = packet_time;
 
         context->video_packets_received++;
         context->video_bytes_received += received;
@@ -675,6 +677,12 @@ void *c64_video_processor_thread_func(void *data)
 
                 if (video_data && video_size > 0) {
                     c64_process_video_packet_direct(context, video_data, video_size, timestamp_us * 1000);
+
+                    // Reset retry count on successful video packet processing (video stream restored)
+                    if (context->retry_count > 0) {
+                        C64_LOG_INFO("Video stream restored, resetting retry count (was %u)", context->retry_count);
+                        context->retry_count = 0;
+                    }
                 }
 
                 if (audio_data && audio_size > 0) {
@@ -689,9 +697,16 @@ void *c64_video_processor_thread_func(void *data)
         // If no packets processed and enough time has passed, show logo at 50Hz
         if (!packet_processed) {
             uint64_t time_since_last_frame = current_time - context->last_frame_time;
-            uint64_t time_since_last_udp = current_time - context->last_udp_packet_time;
+            uint64_t time_since_last_video = current_time - context->last_video_packet_time;
             uint64_t time_since_last_logo = current_time - last_logo_frame_time;
             uint64_t time_since_last_retry = current_time - last_retry_attempt;
+
+            // Sanity check to prevent timestamp overflow (should never exceed ~1 hour)
+            if (time_since_last_video > 3600000000000ULL) {
+                C64_LOG_WARNING("Detected timestamp overflow, resetting video packet time");
+                context->last_video_packet_time = current_time;
+                time_since_last_video = 0;
+            }
 
             // Show logo if no frames for 100ms AND we haven't shown logo recently
             if (time_since_last_frame > 100000000ULL && time_since_last_logo >= logo_frame_interval_ns) {
@@ -705,12 +720,13 @@ void *c64_video_processor_thread_func(void *data)
                 context->last_frame_time = current_time;
             }
 
-            // Retry TCP connection and recreate UDP sockets if no UDP packets for 1+ seconds
-            if (time_since_last_udp > retry_interval_ns && time_since_last_retry >= retry_interval_ns &&
+            // Retry TCP connection and recreate UDP sockets if no VIDEO packets for 1+ seconds
+            if (time_since_last_video > retry_interval_ns && time_since_last_retry >= retry_interval_ns &&
                 !context->retry_in_progress) {
+                uint64_t time_since_last_audio = current_time - context->last_audio_packet_time;
                 C64_LOG_INFO(
-                    "No UDP packets received for %.1f seconds, retrying TCP commands and recreating UDP sockets",
-                    time_since_last_udp / 1000000000.0);
+                    "No video packets for %.1fs (audio: %.1fs), retrying TCP commands and recreating UDP sockets",
+                    time_since_last_video / 1000000000.0, time_since_last_audio / 1000000000.0);
 
                 context->retry_in_progress = true;
                 last_retry_attempt = current_time;
