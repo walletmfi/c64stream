@@ -195,6 +195,6 @@ void c64_process_audio_packet(struct c64_source *context, const uint8_t *audio_d
         last_audio_log_time = now;
     }
 
-    // Also record to file if recording is enabled
-    c64_record_audio_data(context, audio_data, data_size);
+    // Also record to file if recording is enabled (use processed samples, not raw packet)
+    c64_record_audio_data(context, samples, samples_size);
 }

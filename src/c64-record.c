@@ -604,6 +604,7 @@ void c64_record_audio_data(struct c64_source *context, const uint8_t *audio_data
     size_t wav_written = fwrite(audio_data, 1, data_size, context->audio_file);
 
     if (wav_written == data_size) {
+        // Calculate samples correctly: data_size is in bytes, each stereo sample is 4 bytes (16-bit L + 16-bit R)
         context->recorded_audio_samples += (uint32_t)(data_size / 4);
     } else {
         C64_LOG_WARNING("Failed to write audio data to WAV recording");
@@ -631,7 +632,8 @@ void c64_stop_video_recording(struct c64_source *context)
     }
     if (context->audio_file) {
         // Update WAV header with final file size
-        finalize_wav_header(context->audio_file, context->recorded_audio_samples * 2); // samples * 2 bytes
+        // recorded_audio_samples counts stereo samples, each stereo sample = 4 bytes (16-bit L + 16-bit R)
+        finalize_wav_header(context->audio_file, context->recorded_audio_samples * 4);
         fclose(context->audio_file);
         context->audio_file = NULL;
     }
