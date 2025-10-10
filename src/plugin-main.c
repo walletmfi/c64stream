@@ -37,7 +37,7 @@ bool obs_module_load(void)
 
     struct obs_source_info c64_info = {.id = "c64_source",
                                        .type = OBS_SOURCE_TYPE_INPUT,
-                                       .output_flags = OBS_SOURCE_ASYNC_VIDEO | OBS_SOURCE_AUDIO,
+                                       .output_flags = OBS_SOURCE_ASYNC_VIDEO | OBS_SOURCE_AUDIO | OBS_SOURCE_CUSTOM_DRAW,
                                        .get_name = c64_get_name,
                                        .create = c64_create,
                                        .destroy = c64_destroy,
@@ -45,6 +45,7 @@ bool obs_module_load(void)
                                        .get_defaults = c64_defaults,
                                        .get_properties = c64_properties,
                                        .video_render = c64_video_render,
+                                       .video_tick = c64_video_tick,
                                        .get_width = c64_get_width,
                                        .get_height = c64_get_height,
                                        .audio_render = NULL}; // Audio pushed via obs_source_output_audio

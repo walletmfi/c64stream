@@ -644,20 +644,56 @@ void c64_stop_streaming(struct c64_source *context)
     C64_LOG_INFO("C64S streaming stopped");
 }
 
-// Video render callback for CRT effects (GPU rendering)
-void c64_video_render(void *data, gs_effect_t *effect)
+// Video tick callback - updates texture from async frame buffer when CRT effects are enabled
+void c64_video_tick(void *data, float seconds)
 {
-    UNUSED_PARAMETER(effect);
+    UNUSED_PARAMETER(seconds);
     struct c64_source *context = data;
     if (!context)
         return;
 
-    // If CRT effects are disabled, do nothing (use default async video rendering)
+    // Always update texture from frame buffer for consistent rendering
+    // Update render texture if needed (create or recreate on size change)
+    if (!context->render_texture || gs_texture_get_width(context->render_texture) != context->width ||
+        gs_texture_get_height(context->render_texture) != context->height) {
+        obs_enter_graphics();
+        if (context->render_texture) {
+            gs_texture_destroy(context->render_texture);
+        }
+        context->render_texture =
+            gs_texture_create(context->width, context->height, GS_RGBA, 1, (const uint8_t **)&context->frame_buffer, 0);
+        obs_leave_graphics();
+        if (!context->render_texture) {
+            C64_LOG_ERROR("Failed to create render texture");
+        }
+    } else {
+        // Update texture with latest frame data
+        obs_enter_graphics();
+        gs_texture_set_image(context->render_texture, context->frame_buffer, context->width * 4, false);
+        obs_leave_graphics();
+    }
+}
+
+// Video render callback for CRT effects (GPU rendering)
+void c64_video_render(void *data, gs_effect_t *effect)
+{
+    struct c64_source *context = data;
+    if (!context || !context->render_texture)
+        return;
+
+    // If CRT effects are disabled, use default rendering or simple texture draw
     if (!context->crt_enable) {
+        // Draw texture without effects using provided effect
+        if (effect) {
+            gs_effect_set_texture(gs_effect_get_param_by_name(effect, "image"), context->render_texture);
+            while (gs_effect_loop(effect, "Draw")) {
+                gs_draw_sprite(context->render_texture, 0, context->width, context->height);
+            }
+        }
         return;
     }
 
-    // Load shader effect if not already loaded
+    // Load CRT shader effect if not already loaded
     if (!context->crt_effect) {
         char *effect_path = obs_module_file("effects/crt_effect.effect");
         if (effect_path) {
@@ -665,6 +701,13 @@ void c64_video_render(void *data, gs_effect_t *effect)
             bfree(effect_path);
             if (!context->crt_effect) {
                 C64_LOG_ERROR("Failed to load CRT effect shader");
+                // Fall back to default rendering
+                if (effect) {
+                    gs_effect_set_texture(gs_effect_get_param_by_name(effect, "image"), context->render_texture);
+                    while (gs_effect_loop(effect, "Draw")) {
+                        gs_draw_sprite(context->render_texture, 0, context->width, context->height);
+                    }
+                }
                 return;
             }
         } else {
@@ -673,24 +716,7 @@ void c64_video_render(void *data, gs_effect_t *effect)
         }
     }
 
-    // Update render texture if needed (create or recreate on size change)
-    if (!context->render_texture || gs_texture_get_width(context->render_texture) != context->width ||
-        gs_texture_get_height(context->render_texture) != context->height) {
-        if (context->render_texture) {
-            gs_texture_destroy(context->render_texture);
-        }
-        context->render_texture =
-            gs_texture_create(context->width, context->height, GS_RGBA, 1, (const uint8_t **)&context->frame_buffer, 0);
-        if (!context->render_texture) {
-            C64_LOG_ERROR("Failed to create render texture");
-            return;
-        }
-    } else {
-        // Update texture with latest frame data
-        gs_texture_set_image(context->render_texture, context->frame_buffer, context->width * 4, false);
-    }
-
-    // Set shader parameters
+    // Set CRT shader parameters
     gs_effect_set_texture(gs_effect_get_param_by_name(context->crt_effect, "image"), context->render_texture);
     gs_effect_set_bool(gs_effect_get_param_by_name(context->crt_effect, "scanlines_enable"), context->scanlines_enable);
     gs_effect_set_float(gs_effect_get_param_by_name(context->crt_effect, "scanlines_opacity"),

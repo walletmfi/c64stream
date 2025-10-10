@@ -122,19 +122,22 @@ void c64_render_frame_direct(struct c64_source *context, struct frame_assembly *
     }
 
     // Direct async video output - no buffer swapping needed
-    struct obs_source_frame obs_frame = {0};
+    // When CRT effects are enabled, skip async output and let video_render handle it
+    if (!context->crt_enable) {
+        struct obs_source_frame obs_frame = {0};
 
-    // Set up frame data - RGBA format (4 bytes per pixel)
-    obs_frame.data[0] = (uint8_t *)context->frame_buffer;
-    obs_frame.linesize[0] = context->width * 4; // 4 bytes per pixel (RGBA)
-    obs_frame.width = context->width;
-    obs_frame.height = context->height;
-    obs_frame.format = VIDEO_FORMAT_RGBA;
-    obs_frame.timestamp = monotonic_timestamp; // Use monotonic timestamp instead of packet timestamp
-    obs_frame.flip = false;                    // No vertical flip needed
+        // Set up frame data - RGBA format (4 bytes per pixel)
+        obs_frame.data[0] = (uint8_t *)context->frame_buffer;
+        obs_frame.linesize[0] = context->width * 4; // 4 bytes per pixel (RGBA)
+        obs_frame.width = context->width;
+        obs_frame.height = context->height;
+        obs_frame.format = VIDEO_FORMAT_RGBA;
+        obs_frame.timestamp = monotonic_timestamp; // Use monotonic timestamp instead of packet timestamp
+        obs_frame.flip = false;                    // No vertical flip needed
 
-    // Output frame directly to OBS
-    obs_source_output_video(context->source, &obs_frame);
+        // Output frame directly to OBS
+        obs_source_output_video(context->source, &obs_frame);
+    }
 
     // Update timing and status
     context->last_frame_time = monotonic_timestamp;
@@ -497,17 +500,19 @@ static void c64_render_black_screen(struct c64_source *context, uint64_t timesta
     // Black screen: 0x00000000 (fully transparent black in RGBA)
     memset(buffer, 0, width * height * sizeof(uint32_t));
 
-    // Output black frame via async video
-    struct obs_source_frame obs_frame = {0};
-    obs_frame.data[0] = (uint8_t *)context->frame_buffer;
-    obs_frame.linesize[0] = context->width * 4; // 4 bytes per pixel (RGBA)
-    obs_frame.width = context->width;
-    obs_frame.height = context->height;
-    obs_frame.format = VIDEO_FORMAT_RGBA;
-    obs_frame.timestamp = timestamp_ns;
-    obs_frame.flip = false;
+    // Output black frame via async video (only when CRT effects are disabled)
+    if (!context->crt_enable) {
+        struct obs_source_frame obs_frame = {0};
+        obs_frame.data[0] = (uint8_t *)context->frame_buffer;
+        obs_frame.linesize[0] = context->width * 4; // 4 bytes per pixel (RGBA)
+        obs_frame.width = context->width;
+        obs_frame.height = context->height;
+        obs_frame.format = VIDEO_FORMAT_RGBA;
+        obs_frame.timestamp = timestamp_ns;
+        obs_frame.flip = false;
 
-    obs_source_output_video(context->source, &obs_frame);
+        obs_source_output_video(context->source, &obs_frame);
+    }
 
     // Periodic black screen monitoring (every 10 minutes)
     static int black_screen_debug_count = 0;
