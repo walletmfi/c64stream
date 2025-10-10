@@ -1,3 +1,10 @@
+/*
+C64 Stream - An OBS Studio source plugin for Commodore 64 video and audio streaming
+Copyright (C) 2025 Christian Gleissner
+
+Licensed under the GNU General Public License v2.0 or later.
+See <https://www.gnu.org/licenses/> for details.
+*/
 #include <obs-module.h>
 #include <util/platform.h>
 #include <stdio.h>
@@ -6,6 +13,7 @@
 #include "c64-record.h"
 #include "c64-record-frames.h"
 #include "c64-record-obs.h"
+#include "c64-file.h"
 #include "c64-types.h"
 
 void c64_frames_save_as_bmp(struct c64_source *context, uint32_t *frame_buffer)
@@ -29,7 +37,7 @@ void c64_frames_save_as_bmp(struct c64_source *context, uint32_t *frame_buffer)
     char frames_folder[900];
     snprintf(frames_folder, sizeof(frames_folder), "%s/frames", context->session_folder);
 
-    if (!c64_shared_create_directory_recursive(frames_folder)) {
+    if (!c64_create_directory_recursive(frames_folder)) {
         C64_LOG_WARNING("Failed to create frames subfolder: %s", frames_folder);
         return;
     }
@@ -113,7 +121,6 @@ void c64_frames_save_as_bmp(struct c64_source *context, uint32_t *frame_buffer)
     fwrite(header, 1, 54, file);
 
     // Write image data (BMP stores bottom-to-top, convert RGBA to BGR)
-    // CRITICAL: Use pre-allocated buffer to eliminate malloc/free in hot path
     if (context->bmp_row_buffer) {
         uint8_t *row_buffer = context->bmp_row_buffer;
         for (int y = height - 1; y >= 0; y--) { // Bottom-to-top

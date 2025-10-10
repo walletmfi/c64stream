@@ -1,12 +1,10 @@
-/**
- * @file c64-logo.c
- * @brief C64 Ultimate logo rendering for async video output
- *
- * This module handles loading and pre-rendering the C64 Ultimate logo
- * for display during no-connection states. The logo is pre-rendered
- * during plugin initialization to eliminate any delays during runtime.
- */
+/*
+C64 Stream - An OBS Studio source plugin for Commodore 64 video and audio streaming
+Copyright (C) 2025 Christian Gleissner
 
+Licensed under the GNU General Public License v2.0 or later.
+See <https://www.gnu.org/licenses/> for details.
+*/
 #include <inttypes.h>
 #include <string.h>
 #include <obs-module.h>
@@ -60,30 +58,21 @@ static bool load_logo_pixels(struct c64_source *context)
         return false;
     }
 
-    // Copy pixel data (stb_image provides RGBA bytes, OBS VIDEO_FORMAT_RGBA expects RGBA format)
+    // Copy RGBA pixel data
     uint32_t *dest = context->logo_pixels;
     uint8_t *src_bytes = img_data;
 
     for (int i = 0; i < width * height; i++) {
-        // stb_image provides RGBA in byte order: [R, G, B, A, R, G, B, A, ...]
         uint8_t r = src_bytes[i * 4 + 0];
         uint8_t g = src_bytes[i * 4 + 1];
         uint8_t b = src_bytes[i * 4 + 2];
         uint8_t a = src_bytes[i * 4 + 3];
-
-        // VIDEO_FORMAT_RGBA might expect different byte order - try ABGR
         dest[i] = (a << 24) | (b << 16) | (g << 8) | r;
     }
 
     stbi_image_free(img_data);
 
     C64_LOG_DEBUG("Loaded PNG pixel data: %ux%u (%zu bytes)", width, height, pixel_data_size);
-
-    // Debug: Log first few pixels to understand color channel order
-    if (width > 0 && height > 0) {
-        C64_LOG_DEBUG("First pixel: R=%02x G=%02x B=%02x A=%02x -> packed=0x%08x", src_bytes[0], src_bytes[1],
-                      src_bytes[2], src_bytes[3], context->logo_pixels[0]);
-    }
     return true;
 }
 
@@ -124,13 +113,10 @@ static bool prerender_logo_frame_format(struct c64_source *context, uint32_t *bu
         return false;
     }
 
-    // Custom border color #0d4b69 made 20% darker (RGB: 10, 60, 84) from GIMP
-    const uint32_t c64_border_color = (0xFF << 24) | (84 << 16) | (60 << 8) | 10; // Custom blue-gray (20% darker)
-    // Very dark version of border color for screen background (RGB: 3, 18, 25)
-    const uint32_t c64_screen_color = (0xFF << 24) | (25 << 16) | (18 << 8) | 3; // Very dark blue-gray
+    const uint32_t c64_border_color = (0xFF << 24) | (84 << 16) | (60 << 8) | 10;
+    const uint32_t c64_screen_color = (0xFF << 24) | (25 << 16) | (18 << 8) | 3;
 
     // Create authentic C64 display layout
-    // Fill entire frame with dark blue border color first
     for (uint32_t i = 0; i < width * height; i++) {
         buffer[i] = c64_border_color;
     }
@@ -156,7 +142,7 @@ static bool prerender_logo_frame_format(struct c64_source *context, uint32_t *bu
     uint32_t screen_width = width - border_left - border_right;
     uint32_t screen_height = height - border_top - border_bottom;
 
-    // Fill screen area with dark blue
+    // Fill screen area
     for (uint32_t y = screen_y; y < screen_y + screen_height && y < height; y++) {
         for (uint32_t x = screen_x; x < screen_x + screen_width && x < width; x++) {
             buffer[y * width + x] = c64_screen_color;
@@ -188,7 +174,7 @@ static bool prerender_logo_frame_format(struct c64_source *context, uint32_t *bu
                         // Fully opaque - direct copy
                         buffer[frame_idx] = logo_pixel;
                     } else {
-                        // Alpha blending with background (black screen color)
+                        // Alpha blending
                         uint32_t bg = buffer[frame_idx]; // Current background color
                         uint32_t bg_r = (bg >> 16) & 0xFF;
                         uint32_t bg_g = (bg >> 8) & 0xFF;

@@ -1,3 +1,10 @@
+/*
+C64 Stream - An OBS Studio source plugin for Commodore 64 video and audio streaming
+Copyright (C) 2025 Christian Gleissner
+
+Licensed under the GNU General Public License v2.0 or later.
+See <https://www.gnu.org/licenses/> for details.
+*/
 #include "c64-network-buffer.h"
 #include "c64-logging.h"
 #include <obs-module.h>
@@ -31,7 +38,7 @@ struct packet_ring_buffer {
     volatile bool seq_initialized; // Whether we have initialized sequence tracking (atomic)
     uint64_t delay_us;             // Delay in microseconds
     buffer_type_t type;            // For logging and type-specific behavior
-    pthread_mutex_t mutex;         // Keep for now, will be removed in follow-up steps
+    pthread_mutex_t mutex;         // Guards buffer access
 };
 
 struct c64_network_buffer {
@@ -105,7 +112,7 @@ static void debug_verify_buffer_ordering(struct packet_ring_buffer *rb, const ch
 
 // Generic ring buffer operations using macros to work with both buffer types
 
-// Generic packet ring buffer push with sequence-based ordering (OPTIMIZED FOR LOW LATENCY)
+// Generic packet ring buffer push with sequence-based ordering
 static void rb_push(struct packet_ring_buffer *rb, const uint8_t *data, size_t len, uint64_t ts)
 {
     // Validate packet size based on type
@@ -135,7 +142,6 @@ static void rb_push(struct packet_ring_buffer *rb, const uint8_t *data, size_t l
         C64_LOG_DEBUG("%s buffer: initialized with sequence %u", type_name, seq_num);
     }
 
-    // Extremely simple approach: allow all packets through, let the buffer handle ordering
     // The ring buffer insertion sort will handle duplicates and ordering automatically
 
     // Find insertion point to maintain sequence order (lock-free)

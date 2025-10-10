@@ -1,3 +1,10 @@
+/*
+C64 Stream - An OBS Studio source plugin for Commodore 64 video and audio streaming
+Copyright (C) 2025 Christian Gleissner
+
+Licensed under the GNU General Public License v2.0 or later.
+See <https://www.gnu.org/licenses/> for details.
+*/
 #include "c64-properties.h"
 #include "c64-types.h"
 #include "c64-version.h"
@@ -5,6 +12,7 @@
 #include "c64-protocol.h"
 #include "c64-video.h"
 #include "c64-logging.h" // For Windows snprintf compatibility
+#include "c64-file.h"
 #include <obs-module.h>
 
 obs_properties_t *c64_create_properties(void *data)
@@ -12,12 +20,12 @@ obs_properties_t *c64_create_properties(void *data)
     UNUSED_PARAMETER(data);
     obs_properties_t *props = obs_properties_create();
 
-    // Plugin Information Group (at the top)
+    // Plugin Information Group
     obs_property_t *info_group =
         obs_properties_add_group(props, "info_group", "Plugin Information", OBS_GROUP_NORMAL, obs_properties_create());
     obs_properties_t *info_props = obs_property_group_content(info_group);
 
-    // Version information (read-only) - remove redundant "Plugin Version" text
+    // Version information (read-only
     obs_property_t *version_prop = obs_properties_add_text(info_props, "version_info", "Version", OBS_TEXT_INFO);
     obs_property_set_long_description(version_prop, c64_get_build_info());
     obs_property_text_set_info_type(version_prop, OBS_TEXT_INFO_NORMAL);
@@ -31,7 +39,7 @@ obs_properties_t *c64_create_properties(void *data)
                                                              OBS_GROUP_NORMAL, obs_properties_create());
     obs_properties_t *network_props = obs_property_group_content(network_group);
 
-    // DNS Server IP (first property in network group)
+    // DNS Server IP
     obs_property_t *dns_prop =
         obs_properties_add_text(network_props, "dns_server_ip", obs_module_text("DNSServerIP"), OBS_TEXT_DEFAULT);
     obs_property_set_long_description(dns_prop, obs_module_text("DNSServerIP.Description"));
@@ -43,7 +51,7 @@ obs_properties_t *c64_create_properties(void *data)
         host_prop,
         "Hostname or IP address of C64 Ultimate device (default: c64u). Use 0.0.0.0 to skip control commands.");
 
-    // OBS IP Address (editable)
+    // OBS IP Address
     obs_property_t *obs_ip_prop =
         obs_properties_add_text(network_props, "obs_ip_address", "OBS Server IP", OBS_TEXT_DEFAULT);
     obs_property_set_long_description(obs_ip_prop, "IP address of this OBS server (where C64 Ultimate sends streams)");
@@ -52,21 +60,21 @@ obs_properties_t *c64_create_properties(void *data)
     obs_property_t *auto_ip_prop = obs_properties_add_bool(network_props, "auto_detect_ip", "Auto-detect OBS IP");
     obs_property_set_long_description(auto_ip_prop, "Automatically detect and use OBS server IP in streaming commands");
 
-    // UDP Ports within the same network group
+    // UDP Ports
     obs_property_t *video_port_prop = obs_properties_add_int(network_props, "video_port", "Video Port", 1024, 65535, 1);
     obs_property_set_long_description(video_port_prop, "UDP port for video stream from C64 Ultimate");
 
     obs_property_t *audio_port_prop = obs_properties_add_int(network_props, "audio_port", "Audio Port", 1024, 65535, 1);
     obs_property_set_long_description(audio_port_prop, "UDP port for audio stream from C64 Ultimate");
 
-    // Buffer Delay (at bottom of network group)
+    // Buffer Delay
     obs_property_t *delay_prop =
         obs_properties_add_int_slider(network_props, "buffer_delay_ms", "Buffer Delay (millis)", 0, 500, 1);
     obs_property_set_long_description(
         delay_prop,
         "Buffer network packets for specified milliseconds to smooth UDP packet loss/jitter (default: 10ms)");
 
-    // Recording Group (compact layout)
+    // Recording Group
     obs_property_t *recording_group =
         obs_properties_add_group(props, "recording_group", "Recording", OBS_GROUP_NORMAL, obs_properties_create());
     obs_properties_t *recording_props = obs_property_group_content(recording_group);
@@ -80,7 +88,7 @@ obs_properties_t *c64_create_properties(void *data)
     obs_property_set_long_description(
         record_video_prop, "Record uncompressed AVI video + WAV audio + CSV timing (for debugging - high disk usage)");
 
-    // Save Folder (applies to both frame saving and video recording) - now properly in Recording group
+    // Save Folder
     obs_property_t *save_folder_prop =
         obs_properties_add_path(recording_props, "save_folder", "Output Folder", OBS_PATH_DIRECTORY, NULL, NULL);
     obs_property_set_long_description(
@@ -92,7 +100,7 @@ obs_properties_t *c64_create_properties(void *data)
 
 void c64_set_property_defaults(obs_data_t *settings)
 {
-    // C64S defaults initialization
+    // Defaults initialization
 
     obs_data_set_default_bool(settings, "debug_logging", true);
     obs_data_set_default_bool(settings, "auto_detect_ip", true);

@@ -1,3 +1,10 @@
+/*
+C64 Stream - An OBS Studio source plugin for Commodore 64 video and audio streaming
+Copyright (C) 2025 Christian Gleissner
+
+Licensed under the GNU General Public License v2.0 or later.
+See <https://www.gnu.org/licenses/> for details.
+*/
 #ifndef C64_NETWORK_H
 #define C64_NETWORK_H
 
@@ -71,9 +78,6 @@ bool c64_detect_local_ip(char *ip_buffer, size_t buffer_size);
 bool c64_resolve_hostname(const char *hostname, char *ip_buffer, size_t buffer_size);
 bool c64_resolve_hostname_with_dns(const char *hostname, const char *custom_dns_server, char *ip_buffer,
                                    size_t buffer_size);
-
-// Platform-specific utilities
-bool c64_get_user_documents_path(char *path_buffer, size_t buffer_size);
 
 // Socket operations
 socket_t c64_create_udp_socket(uint32_t port);

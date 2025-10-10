@@ -1,3 +1,10 @@
+/*
+C64 Stream - An OBS Studio source plugin for Commodore 64 video and audio streaming
+Copyright (C) 2025 Christian Gleissner
+
+Licensed under the GNU General Public License v2.0 or later.
+See <https://www.gnu.org/licenses/> for details.
+*/
 #ifndef C64_TYPES_H
 #define C64_TYPES_H
 
@@ -155,8 +162,8 @@ struct c64_source {
     uint64_t recording_start_time;
     uint64_t csv_timing_base_ns;      // Nanosecond timestamp when first CSV entry is written
     uint64_t network_timing_base_ns;  // Nanosecond timestamp when first network entry is written
-    uint32_t recorded_frames;
-    uint32_t recorded_audio_samples;
+    volatile long recorded_frames;
+    volatile long recorded_audio_samples;
     pthread_mutex_t recording_mutex;
 
     // Pre-allocated recording buffers (eliminates malloc/free in hot paths)

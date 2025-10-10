@@ -1,8 +1,10 @@
-/**
- * Recording system coordinator for C64 Ultimate streaming
- * Manages recording sessions, delegates to specialized modules for different formats
- */
+/*
+C64 Stream - An OBS Studio source plugin for Commodore 64 video and audio streaming
+Copyright (C) 2025 Christian Gleissner
 
+Licensed under the GNU General Public License v2.0 or later.
+See <https://www.gnu.org/licenses/> for details.
+*/
 #ifndef C64_RECORD_H
 #define C64_RECORD_H
 
@@ -18,9 +20,6 @@ struct c64_source;
 #include "c64-record-video.h"
 #include "c64-record-audio.h"
 #include "c64-record-frames.h"
-
-// Shared utility functions
-bool c64_shared_create_directory_recursive(const char *path);
 
 // Session management functions
 void c64_session_ensure_exists(struct c64_source *context);

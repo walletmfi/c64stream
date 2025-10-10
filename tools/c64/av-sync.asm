@@ -1,6 +1,6 @@
-; av-sync.asm - C64 Audio/Video Sync Test
-; Press SPACE to flash border/background and play a tone
-; Assemble with: 64tass av-sync.asm -o av-sync.prg
+; C64 Audio/Video Sync Test
+; Press SPACE to flash border/background
+; and play a short tone at the precise time of the flash
 
 *=$0801
 basic_stub:

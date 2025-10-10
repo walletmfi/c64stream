@@ -1,15 +1,21 @@
+/*
+C64 Stream - An OBS Studio source plugin for Commodore 64 video and audio streaming
+Copyright (C) 2025 Christian Gleissner
+
+Licensed under the GNU General Public License v2.0 or later.
+See <https://www.gnu.org/licenses/> for details.
+*/
 #include <obs-module.h>
 #include <util/platform.h>
 #include <util/threading.h> // For atomic operations
 #include <inttypes.h>       // For PRIu64, PRId64 format specifiers
 #include "c64-network.h"    // Include network header first to avoid Windows header conflicts
-
 #include "c64-logging.h"
 #include "c64-audio.h"
 #include "c64-types.h"
 #include "c64-protocol.h"
-#include "c64-video.h"  // For batch statistics processing
-#include "c64-record.h" // For recording functions
+#include "c64-video.h"
+#include "c64-record.h"
 #include "c64-record-network.h"
 
 // Audio thread function
@@ -43,8 +49,9 @@ void *audio_thread_func(void *data)
             }
             // On Windows, WSAESHUTDOWN means socket was shutdown - this is normal during reconnection
             if (error == WSAESHUTDOWN) {
-                C64_LOG_DEBUG("Audio socket shutdown (WSAESHUTDOWN) - exiting receiver thread for reconnection");
-                break; // Socket was shutdown, exit gracefully
+                C64_LOG_DEBUG("Audio socket shutdown (WSAESHUTDOWN) - waiting for reconnection");
+                os_sleep_ms(100); // Wait for reconnection to complete
+                continue;         // Continue waiting instead of exiting thread
             }
 #else
             if (error == EAGAIN || error == EWOULDBLOCK) {
@@ -63,7 +70,6 @@ void *audio_thread_func(void *data)
 
         if (received != C64_AUDIO_PACKET_SIZE) {
             // Small packets (2-4 bytes) are normal during stream startup/buffer changes
-            // Log as debug to avoid confusing users with normal control/startup packets
             static uint64_t last_incomplete_log_time = 0;
             uint64_t now = os_gettime_ns();
             if (now - last_incomplete_log_time >= 2000000000ULL) { // Throttle to every 2 seconds
@@ -93,9 +99,7 @@ void *audio_thread_func(void *data)
         // Log network packet at UDP reception (conditional - no parsing overhead if disabled)
         c64_log_audio_packet_if_enabled(context, packet, received, packet_time);
 
-        // Simple approach: just process packets as they arrive, no sequence warnings
-
-        // Batch process audio statistics (moved out of hot path)
+        // Batch process audio statistics
         uint64_t audio_now = os_gettime_ns();
         c64_process_audio_statistics_batch(context, audio_now);
 

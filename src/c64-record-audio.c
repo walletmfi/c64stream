@@ -1,5 +1,13 @@
+/*
+C64 Stream - An OBS Studio source plugin for Commodore 64 video and audio streaming
+Copyright (C) 2025 Christian Gleissner
+
+Licensed under the GNU General Public License v2.0 or later.
+See <https://www.gnu.org/licenses/> for details.
+*/
 #include <obs-module.h>
 #include <util/platform.h>
+#include <util/threading.h>
 #include <stdio.h>
 #include <pthread.h>
 #include "c64-logging.h"
@@ -15,7 +23,7 @@ void c64_audio_write_wav_header(FILE *file, uint32_t sample_rate, uint16_t chann
 
     // WAV header (44 bytes) - we'll update sizes later
     fwrite("RIFF", 1, 4, file); // ChunkID
-    uint32_t chunk_size = 36;   // ChunkSize (to be updated later)
+    uint32_t chunk_size = 36;   // ChunkSize
     fwrite(&chunk_size, 4, 1, file);
     fwrite("WAVE", 1, 4, file);   // Format
     fwrite("fmt ", 1, 4, file);   // Subchunk1ID
@@ -29,7 +37,7 @@ void c64_audio_write_wav_header(FILE *file, uint32_t sample_rate, uint16_t chann
     fwrite(&block_align, 2, 1, file);     // BlockAlign
     fwrite(&bits_per_sample, 2, 1, file); // BitsPerSample
     fwrite("data", 1, 4, file);           // Subchunk2ID
-    uint32_t subchunk2_size = 0;          // Subchunk2Size (to be updated later)
+    uint32_t subchunk2_size = 0;          // Subchunk2Size
     fwrite(&subchunk2_size, 4, 1, file);
 }
 
@@ -63,14 +71,19 @@ void c64_audio_record_data(struct c64_source *context, const uint8_t *audio_data
 
     if (wav_written == data_size) {
         // Calculate samples correctly: data_size is in bytes, each stereo sample is 4 bytes (16-bit L + 16-bit R)
-        uint32_t new_samples = (uint32_t)(data_size / 4);
-        context->recorded_audio_samples += new_samples;
+        long new_samples = (long)(data_size / 4);
+        // Add samples atomically - need to manually implement atomic add since OBS doesn't have it
+        long old_samples, new_total_samples;
+        do {
+            old_samples = os_atomic_load_long(&context->recorded_audio_samples);
+            new_total_samples = old_samples + new_samples;
+        } while (!os_atomic_compare_swap_long(&context->recorded_audio_samples, old_samples, new_total_samples));
 
         // Log audio timing information to CSV
         uint64_t actual_timestamp_ms = os_gettime_ns() / 1000000;
         // For audio, calculated timestamp is based on sample rate progression (4ms intervals for C64 Ultimate)
-        uint64_t calculated_timestamp_ms = context->recording_start_time + (context->recorded_audio_samples * 1000) /
-                                                                               12000; // 48kHz stereo = 12k samples/sec
+        uint64_t calculated_timestamp_ms =
+            context->recording_start_time + (new_total_samples * 1000) / 12000; // 48kHz stereo = 12k samples/sec
         c64_obs_log_audio_event(context, calculated_timestamp_ms, actual_timestamp_ms, data_size);
     } else {
         C64_LOG_WARNING("Failed to write audio data to WAV recording");

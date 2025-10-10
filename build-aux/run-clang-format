@@ -12,7 +12,7 @@ autoload -Uz is-at-least
 # Simple version check and format
 main() {
   local formatter=""
-  
+
   # Find clang-format
   if [[ -x /home/linuxbrew/.linuxbrew/bin/clang-format ]]; then
     formatter="/home/linuxbrew/.linuxbrew/bin/clang-format"
@@ -43,7 +43,7 @@ main() {
   # Parse arguments
   local check_mode=false
   local fail_condition="never"
-  
+
   while [[ $# -gt 0 ]]; do
     case $1 in
       --version)
@@ -75,13 +75,13 @@ main() {
         ;;
     esac
   done
-  
+
   if [[ "$check_mode" == "true" ]]; then
     local files=($@)
     if [[ ${#files} -eq 0 ]]; then
       files=(src/**/*.(c|cpp|h|hpp|m|mm)(.N) tests/**/*.(c|cpp|h|hpp|m|mm)(.N))
     fi
-    
+
     local num_failures=0
     for file in $files; do
       if [[ -f $file ]]; then
@@ -91,7 +91,7 @@ main() {
         fi
       fi
     done
-    
+
     if [[ $num_failures -eq 0 ]]; then
       echo "✅ All source files are correctly formatted" >&2
     else
@@ -111,14 +111,14 @@ main() {
     if [[ ${#files} -eq 0 ]]; then
       files=(src/**/*.(c|cpp|h|hpp|m|mm)(.N) tests/**/*.(c|cpp|h|hpp|m|mm)(.N))
     fi
-    
+
     for file in $files; do
       if [[ -f $file ]]; then
         echo "Formatting $file" >&2
         $formatter -style=file -fallback-style=none -i "$file"
       fi
     done
-    
+
     echo "✅ Formatted ${#files} source files" >&2
   fi
 }

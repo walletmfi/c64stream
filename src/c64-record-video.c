@@ -1,3 +1,10 @@
+/*
+C64 Stream - An OBS Studio source plugin for Commodore 64 video and audio streaming
+Copyright (C) 2025 Christian Gleissner
+
+Licensed under the GNU General Public License v2.0 or later.
+See <https://www.gnu.org/licenses/> for details.
+*/
 #include <obs-module.h>
 #include <util/platform.h>
 #include <util/threading.h>
@@ -182,7 +189,7 @@ void c64_video_start_recording(struct c64_source *context)
     } else {
         uint64_t timestamp_ms = os_gettime_ns() / 1000000;
         context->recording_start_time = timestamp_ms;
-        context->recorded_frames = 0;
+        os_atomic_store_long(&context->recorded_frames, 0);
 
         // Write AVI header with detected frame rate
         c64_video_write_avi_header(context->video_file, context->width, context->height, context->expected_fps);
@@ -207,11 +214,11 @@ void c64_video_record_frame(struct c64_source *context, uint32_t *frame_buffer)
     // Each frame gets the exact timestamp it should have for perfectly regular timing
     double frame_interval_ms = 1000.0 / context->expected_fps;
     uint64_t calculated_timestamp_ms =
-        context->recording_start_time + (uint64_t)(context->recorded_frames * frame_interval_ms);
+        context->recording_start_time + (uint64_t)(os_atomic_load_long(&context->recorded_frames) * frame_interval_ms);
 
     // Write AVI frame chunk with proper header
     size_t frame_size = context->width * context->height * 3; // BGR24
-    // CRITICAL: Use pre-allocated buffer to eliminate malloc/free in hot path
+    // Use pre-allocated buffer to eliminate malloc/free in hot path
     if (context->bgr_frame_buffer) {
         uint8_t *bgr_buffer = context->bgr_frame_buffer;
 
@@ -228,9 +235,9 @@ void c64_video_record_frame(struct c64_source *context, uint32_t *frame_buffer)
         uint64_t now = os_gettime_ns();
         if ((++recording_debug_count % 10000) == 0 ||
             (now - last_recording_log_time >= 600000000000ULL)) { // Every 10k frames OR 10 minutes
-            C64_LOG_DEBUG("RECORDING SPOT CHECK: frame %u, %ux%u, non_zero=%u/100, fps=%.3f (total count: %d)",
-                          context->recorded_frames, context->width, context->height, non_zero_pixels,
-                          context->expected_fps, recording_debug_count);
+            C64_LOG_DEBUG("RECORDING SPOT CHECK: frame %ld, %ux%u, non_zero=%u/100, fps=%.3f (total count: %d)",
+                          os_atomic_load_long(&context->recorded_frames), context->width, context->height,
+                          non_zero_pixels, context->expected_fps, recording_debug_count);
             last_recording_log_time = now;
         }
 
@@ -248,8 +255,8 @@ void c64_video_record_frame(struct c64_source *context, uint32_t *frame_buffer)
                     sprintf(hexbuf + i * 3, "%02X ", bgr_buffer[i]);
                 }
                 hexbuf[48] = '\0';
-                C64_LOG_DEBUG("BGR SPOT CHECK: frame %u [0..15]: %s (total count: %d)", context->recorded_frames,
-                              hexbuf, bgr_debug_count);
+                C64_LOG_DEBUG("BGR SPOT CHECK: frame %ld [0..15]: %s (total count: %d)",
+                              os_atomic_load_long(&context->recorded_frames), hexbuf, bgr_debug_count);
                 last_bgr_log_time = now;
             }
         }
@@ -271,10 +278,10 @@ void c64_video_record_frame(struct c64_source *context, uint32_t *frame_buffer)
         // No free() needed - using pre-allocated buffer
 
         if (written == frame_size) {
-            context->recorded_frames++;
+            long new_frame_count = os_atomic_inc_long(&context->recorded_frames);
 
             // Update AVI header with current frame count (video-only)
-            c64_video_update_avi_header(context->video_file, context->recorded_frames, 0);
+            c64_video_update_avi_header(context->video_file, (uint32_t)new_frame_count, 0);
 
             // Log video timing information to CSV
             uint64_t actual_timestamp_ms = os_gettime_ns() / 1000000;
