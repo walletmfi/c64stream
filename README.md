@@ -81,31 +81,13 @@ A new window opens. Keep the default settings and click "OK":
 
 ![C64 Stream Configuration](./docs/images/properties.png "C64 Stream Configuration")
 
-3. **Debug Logging:** Enable detailed logging for debugging connection issues (optional)
+3. **Configure IPs / Host Names:** Configure the host name or IP address of your C64 Ultimate and click "OK".
 
-4. **Configure Network Settings:**
-   - **DNS Server IP:** IP address of DNS server for resolving device hostnames (default: `192.168.1.1` for most home routers). Used when the C64 Ultimate Host is a hostname rather than an IP address.
-   - **C64 Ultimate Host:** Enter your Ultimate device's hostname (default: `c64u`) or IP address to enable automatic streaming control from OBS (recommended for convenience), or set to `0.0.0.0` to accept streams from any C64 Ultimate on your network (requires manual control from the device)
-   - **OBS Server IP:** IP address where C64 Ultimate sends streams (auto-detected by default)
-   - **Auto-detect OBS IP:** Automatically detect and use OBS server IP in streaming commands (recommended)
-5. **Configure Ports:** Use the default ports (video: 11000, audio: 11001) unless network conflicts require different values
-6. **Buffer Delay:** Sets the network buffer for incoming UDP packets arriving from the C64 Ultimate (0–500 ms, default 10 ms). The buffer size is expressed in milliseconds to represent the time-based delay it introduces, compensating for packet loss, reordering, and variable network latency. Larger buffers improve stability under high-latency or congested conditions but increase end-to-end delay.
-7. **Recording Options (Optional):**
-   - **Save BMP Frames:** Enable to save individual frames as BMP files (useful for debugging, impacts performance)
-   - **Record AVI + WAV:** Enable to record uncompressed video and audio files (high disk usage)
-   - **Output Folder:** Choose where recording files are saved. Default locations by OS:
-     - #### Recording Directory
+🎉 **DONE!** Enjoy streaming from your C64 Ultimate.
 
-The plugin automatically creates recordings in platform-specific directories:
+If for some reason, you don't see an incoming video stream even though your C64 Ultimate is turned on, double check its host name or IP address. 
 
-  - **Windows:** `%USERPROFILE%\Documents\obs-studio\c64stream\recordings`
-     - **macOS:** `~/Documents/obs-studio/c64stream/recordings`
-     - **Linux:** `~/Documents/obs-studio/c64stream/recordings`
-8. **Apply Settings:** Click "OK" to save your configuration
-
-Once configured, live video and audio streams from the C64 Ultimate will be available in OBS Studio.
-
-### Ultimate Device Setup 🎛️
+### C64 Ultimate Setup 🎛️
 
 **Automatic Configuration (Recommended):** The OBS plugin automatically controls streaming on the Ultimate device. When you configure the Ultimate's hostname or IP address in the OBS plugin settings, the plugin tells the Ultimate device where to send streams and sends start commands automatically. Thus, no manual streaming adjustments are needed on the Ultimate device.
 
@@ -160,7 +142,21 @@ The plugin offers hostname resolution that works reliably on Linux and macOS whe
 - **Linux/macOS:** Uses enhanced DNS resolution to bypass systemd-resolved limitations
 - **All Platforms:** Support both hostname and IP address formats seamlessly
 
-## Recording Features 📹
+## Plugin Setup
+
+### General
+- **Version:**: Information about release version, Git ID, and build time. 
+- **Debug Logging**: Check this to see debug logs
+
+### Network
+- **DNS Server IP:** IP address of DNS server for resolving device hostnames (default: `192.168.1.1` for most home routers). Used when the C64 Ultimate Host is a hostname rather than an IP address.
+- **C64 Ultimate Host:** Enter your Ultimate device's hostname (default: `c64u`) or IP address to enable automatic streaming control from OBS (recommended for convenience), or set to `0.0.0.0` to accept streams from any C64 Ultimate on your network (requires manual control from the device)
+- **OBS Server IP:** IP address where C64 Ultimate sends streams (auto-detected by default)
+- **Auto-detect OBS IP:** Automatically detect and use OBS server IP in streaming commands (recommended)
+- **Configure Ports** Use the default ports (video: 11000, audio: 11001) unless network conflicts require different values
+- **Buffer Delay:** Sets the network buffer for incoming UDP packets arriving from the C64 Ultimate (0–500 ms, default 10 ms). The buffer size is expressed in milliseconds to represent the time-based delay it introduces, compensating for packet loss, reordering, and variable network latency. Larger buffers improve stability under high-latency or congested conditions but increase end-to-end delay.
+
+### Recording Features 📹
 
 The plugin includes built-in recording capabilities that work independently of OBS Studio's recording system, letting you save raw C64 Ultimate data streams directly to disk.
 
@@ -179,7 +175,7 @@ The plugin includes built-in recording capabilities that work independently of O
 - Video file: `session_YYYYMMDD_HHMMSS/video.avi` (24-bit BGR format)
 - Audio file: `session_YYYYMMDD_HHMMSS/audio.wav` (16-bit stereo PCM)
 
-### File Organization
+#### File Organization
 
 All recording files are organized into session folders with timestamps:
 ```
@@ -194,7 +190,7 @@ All recording files are organized into session folders with timestamps:
     └── ...
 ```
 
-### Recording Configuration
+#### Recording Configuration
 
 - **Output Folder Defaults:**
   - **Windows:** `%USERPROFILE%\Documents\obs-studio\c64stream\recordings`
@@ -203,7 +199,7 @@ All recording files are organized into session folders with timestamps:
 - **Automatic Session Management:** New session folder created each time recording is enabled
 - **Cross-Platform Compatibility:** Works on Windows, macOS, and Linux
 
-### Usage Notes
+#### Usage Notes
 
 - Recording operates independently of OBS Studio's built-in recording
 - Both recording options can be enabled simultaneously
@@ -212,7 +208,7 @@ All recording files are organized into session folders with timestamps:
 - Files are written in real-time as data is received from the C64 Ultimate
 - Session folders are created automatically with proper directory structure
 
-### Debug & Analysis CSV Logs 📊
+#### Debug & Analysis CSV Logs 📊
 
 The plugin automatically generates detailed CSV logs for debugging OBS performance and analyzing C64 Ultimate network streams. These logs enable bit-accurate recording analysis and precise frame timing measurements.
 
