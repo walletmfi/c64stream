@@ -1,17 +1,15 @@
+/*
+C64 Stream - An OBS Studio source plugin for Commodore 64 video and audio streaming
+Copyright (C) 2025 Christian Gleissner
+
+Licensed under the GNU General Public License v2.0 or later.
+See <https://www.gnu.org/licenses/> for details.
+*/
 #ifndef C64_COLOR_H
 #define C64_COLOR_H
 
 #include <stdint.h>
 #include <stdbool.h>
-
-/**
- * @file c64-color.h
- * @brief VIC-II color conversion and palette management
- *
- * This module provides optimized color conversion functionality for C64 Ultimate
- * video streams, including the VIC-II color palette and high-performance
- * lookup table-based pixel conversion.
- */
 
 // VIC-II color palette (16 colors) in BGRA format for OBS
 extern const uint32_t vic_colors[16];

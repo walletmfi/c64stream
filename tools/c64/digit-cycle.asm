@@ -1,5 +1,6 @@
 ; Simple C64 Digit Cycling Display
-; Clean implementation as requested
+; Cycles all characters on screen through digits 0 to 9
+; All characters are swapped in the frame border
 
 ; BASIC Loader: 10 SYS <start_address>
 *=$0801

@@ -1,3 +1,10 @@
+/*
+C64 Stream - An OBS Studio source plugin for Commodore 64 video and audio streaming
+Copyright (C) 2025 Christian Gleissner
+
+Licensed under the GNU General Public License v2.0 or later.
+See <https://www.gnu.org/licenses/> for details.
+*/
 #include <obs-module.h>
 #include <util/platform.h>
 #include <util/threading.h> // For atomic operations
@@ -75,7 +82,7 @@ void c64_render_frame_direct(struct c64_source *context, struct frame_assembly *
         c64_record_video_frame(context, context->frame_buffer);
     }
 
-    // DIRECT ASYNC VIDEO OUTPUT - no buffer swapping needed!
+    // Direct async video output - no buffer swapping needed
     struct obs_source_frame obs_frame = {0};
 
     // Set up frame data - RGBA format (4 bytes per pixel)
@@ -174,7 +181,6 @@ void c64_assemble_frame_with_interpolation(struct c64_source *context, struct fr
     }
 
     free(line_written);
-    // Assembly completion is already covered by the spot check above - remove this log
 }
 
 void c64_process_video_statistics_batch(struct c64_source *context, uint64_t current_time)
@@ -263,8 +269,6 @@ void c64_init_frame_assembly_lockfree(struct frame_assembly *frame, uint16_t fra
     frame->expected_packets = 0;
     frame->complete = false;
     frame->packets_received_mask = 0;
-
-    // Frame initialization is too frequent for debugging - removed
 }
 
 bool c64_try_add_packet_lockfree(struct frame_assembly *frame, uint16_t packet_index)

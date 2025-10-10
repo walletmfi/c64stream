@@ -1,8 +1,10 @@
-/**
- * WAV audio recording module for C64 Ultimate streaming
- * Handles 16-bit stereo PCM audio recording with proper WAV structure
- */
+/*
+C64 Stream - An OBS Studio source plugin for Commodore 64 video and audio streaming
+Copyright (C) 2025 Christian Gleissner
 
+Licensed under the GNU General Public License v2.0 or later.
+See <https://www.gnu.org/licenses/> for details.
+*/
 #ifndef C64_RECORD_AUDIO_H
 #define C64_RECORD_AUDIO_H
 

@@ -1,3 +1,10 @@
+/*
+C64 Stream - An OBS Studio source plugin for Commodore 64 video and audio streaming
+Copyright (C) 2025 Christian Gleissner
+
+Licensed under the GNU General Public License v2.0 or later.
+See <https://www.gnu.org/licenses/> for details.
+*/
 #include <obs-module.h>
 #include <util/platform.h>
 #include <util/threading.h>
@@ -211,7 +218,7 @@ void c64_video_record_frame(struct c64_source *context, uint32_t *frame_buffer)
 
     // Write AVI frame chunk with proper header
     size_t frame_size = context->width * context->height * 3; // BGR24
-    // CRITICAL: Use pre-allocated buffer to eliminate malloc/free in hot path
+    // Use pre-allocated buffer to eliminate malloc/free in hot path
     if (context->bgr_frame_buffer) {
         uint8_t *bgr_buffer = context->bgr_frame_buffer;
 

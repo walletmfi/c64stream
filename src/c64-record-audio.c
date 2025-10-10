@@ -1,3 +1,10 @@
+/*
+C64 Stream - An OBS Studio source plugin for Commodore 64 video and audio streaming
+Copyright (C) 2025 Christian Gleissner
+
+Licensed under the GNU General Public License v2.0 or later.
+See <https://www.gnu.org/licenses/> for details.
+*/
 #include <obs-module.h>
 #include <util/platform.h>
 #include <stdio.h>
@@ -15,7 +22,7 @@ void c64_audio_write_wav_header(FILE *file, uint32_t sample_rate, uint16_t chann
 
     // WAV header (44 bytes) - we'll update sizes later
     fwrite("RIFF", 1, 4, file); // ChunkID
-    uint32_t chunk_size = 36;   // ChunkSize (to be updated later)
+    uint32_t chunk_size = 36;   // ChunkSize
     fwrite(&chunk_size, 4, 1, file);
     fwrite("WAVE", 1, 4, file);   // Format
     fwrite("fmt ", 1, 4, file);   // Subchunk1ID
@@ -29,7 +36,7 @@ void c64_audio_write_wav_header(FILE *file, uint32_t sample_rate, uint16_t chann
     fwrite(&block_align, 2, 1, file);     // BlockAlign
     fwrite(&bits_per_sample, 2, 1, file); // BitsPerSample
     fwrite("data", 1, 4, file);           // Subchunk2ID
-    uint32_t subchunk2_size = 0;          // Subchunk2Size (to be updated later)
+    uint32_t subchunk2_size = 0;          // Subchunk2Size
     fwrite(&subchunk2_size, 4, 1, file);
 }
 

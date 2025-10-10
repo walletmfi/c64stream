@@ -1,3 +1,10 @@
+/*
+C64 Stream - An OBS Studio source plugin for Commodore 64 video and audio streaming
+Copyright (C) 2025 Christian Gleissner
+
+Licensed under the GNU General Public License v2.0 or later.
+See <https://www.gnu.org/licenses/> for details.
+*/
 #include <obs-module.h>
 #include <string.h>
 #include <time.h>
@@ -85,8 +92,6 @@ void c64_send_control_command(struct c64_source *context, bool enable, uint8_t s
 
     close(sock);
 }
-
-// Network packet logging utilities (conditional execution for performance)
 
 /**
  * Parse and log video packet at UDP reception (conditional execution)

@@ -89,7 +89,7 @@ A new window opens. Keep the default settings and click "OK":
    - **OBS Server IP:** IP address where C64 Ultimate sends streams (auto-detected by default)
    - **Auto-detect OBS IP:** Automatically detect and use OBS server IP in streaming commands (recommended)
 5. **Configure Ports:** Use the default ports (video: 11000, audio: 11001) unless network conflicts require different values
-6. **Render Delay:** Adjust frame buffering (0-100 frames, default 3) to smooth UDP packet loss/reordering
+6. **Buffer Delay:** Sets the network buffer for incoming UDP packets arriving from the C64 Ultimate (0–500 ms, default 10 ms). The buffer size is expressed in milliseconds to represent the time-based delay it introduces, compensating for packet loss, reordering, and variable network latency. Larger buffers improve stability under high-latency or congested conditions but increase end-to-end delay.
 7. **Recording Options (Optional):**
    - **Save BMP Frames:** Enable to save individual frames as BMP files (useful for debugging, impacts performance)
    - **Record AVI + WAV:** Enable to record uncompressed video and audio files (high disk usage)
