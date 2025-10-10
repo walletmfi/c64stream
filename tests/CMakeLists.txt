@@ -59,14 +59,15 @@ if(NOT IS_CI_BUILD)
 endif()
 
 # C64 mock server (for manual testing) - only build when explicitly enabled
-if(ENABLE_MOCK_SERVER)
+# Note: Requires POSIX threads (pthread), not available on Windows
+if(ENABLE_MOCK_SERVER AND NOT WIN32)
   add_executable(c64_mock_server c64_mock_server.c)
   target_link_libraries(c64_mock_server Threads::Threads)
 
   # Link math library on non-Windows platforms
-  if(NOT WIN32)
-    target_link_libraries(c64_mock_server m)
-  endif()
+  target_link_libraries(c64_mock_server m)
+elseif(ENABLE_MOCK_SERVER AND WIN32)
+  message(STATUS "Mock server disabled on Windows (requires POSIX threads)")
 endif()
 
 # Integration test (plugin + mock server) - only build when explicitly enabled
@@ -99,7 +100,7 @@ if(NOT IS_CI_BUILD)
   endif()
 endif()
 
-if(ENABLE_MOCK_SERVER)
+if(ENABLE_MOCK_SERVER AND NOT WIN32)
   if(MSVC)
     target_compile_options(c64_mock_server PRIVATE /W4 /std:c17)
   else()
@@ -120,7 +121,7 @@ set(TEST_TARGETS "")
 if(NOT IS_CI_BUILD)
   list(APPEND TEST_TARGETS test_vic_colors)
 endif()
-if(ENABLE_MOCK_SERVER)
+if(ENABLE_MOCK_SERVER AND NOT WIN32)
   list(APPEND TEST_TARGETS c64_mock_server)
 endif()
 if(ENABLE_INTEGRATION_TESTS)

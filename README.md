@@ -1,3 +1,4 @@
+
 # C64 Stream
 
 Bridge your Commodore 64 Ultimate directly to [OBS Studio](https://obsproject.com/) for seamless streaming and recording over your network connection.
@@ -13,9 +14,9 @@ The plugin connects directly to the Ultimate's network interface, eliminating th
 
 **Features:**
 - Native OBS integration as a standard video source
-- Real-time video streaming (PAL 384x272, NTSC 384x240) with automatic adjustment to 50 or 60 Hertz
+- Real-time video streaming (PAL 384x272, NTSC 384x240)
 - Synchronized audio streaming (16-bit stereo, ~48kHz)
-- Network-based connection (UDP/TCP) with automatic start of streaming
+- Network-based connection (UDP/TCP)
 - Automatic VIC-II color space conversion
 - Built-in recording capabilities (BMP frames, AVI video, WAV audio)
 
@@ -66,13 +67,15 @@ See the [OBS Plugins Guide](https://obsproject.com/kb/plugins-guide).
 
 ### Configuration ⚙️
 
+**Getting Your C64 on Stream:**
+
 1. **Add Source:** In OBS, click the "+" icon in the Sources tab. A window of all sources appears. Select "C64 Source":
 
-   <img src="./docs/images/select-plugin.png" alt="Select Plugin" title="Select C64 Stream Plugin" width="250"/>
+   ![Select Plugin](./docs/images/select-plugin.png "Select C64 Stream Plugin")
 
 A new window opens. Keep the default settings and click "OK":
 
-   <img src="./docs/images/create-source.png" alt="Create Source" title="Create C64 Stream Source" width="250"/>
+   ![Create Source](./docs/images/create-source.png "Create C64 Stream Source")
 
 2. **Open Properties:** Select the "C64 Stream" source in your sources list, then click the "Properties" button to open the configuration dialog
 
@@ -91,7 +94,11 @@ A new window opens. Keep the default settings and click "OK":
    - **Save BMP Frames:** Enable to save individual frames as BMP files (useful for debugging, impacts performance)
    - **Record AVI + WAV:** Enable to record uncompressed video and audio files (high disk usage)
    - **Output Folder:** Choose where recording files are saved. Default locations by OS:
-     - **Windows:** `%USERPROFILE%\Documents\obs-studio\c64stream\recordings`
+     - #### Recording Directory
+
+The plugin automatically creates recordings in platform-specific directories:
+
+  - **Windows:** `%USERPROFILE%\Documents\obs-studio\c64stream\recordings`
      - **macOS:** `~/Documents/obs-studio/c64stream/recordings`
      - **Linux:** `~/Documents/obs-studio/c64stream/recordings`
 8. **Apply Settings:** Click "OK" to save your configuration
@@ -125,6 +132,34 @@ The plugin supports both **hostnames** and **IP addresses** for the C64 Ultimate
 - **Direct IP:** `192.168.1.64` - Standard IPv4 address format
 - **Fallback:** `0.0.0.0` - Accept streams from any C64 Ultimate (no automatic control)
 
+**DNS Resolution:**
+
+The plugin offers hostname resolution that works reliably on Linux and macOS where system DNS may fail for local device names:
+
+1. **System DNS First:** Tries standard system DNS resolution (works for internet hostnames and properly configured networks)
+2. **FQDN Resolution:** Attempts resolution with trailing dot (e.g., `c64u.` for some network configurations)
+3. **Direct DNS Queries:** On Linux/macOS, bypasses systemd-resolved by querying DNS servers directly:
+   - Uses configured **DNS Server IP** (default: `192.168.1.1`)
+   - Falls back to common router IPs: `192.168.0.1`, `10.0.0.1`, `172.16.0.1`
+4. **Cross-Platform:** Windows uses system DNS (which works reliably), Linux/macOS use enhanced resolution
+
+**DNS Server Configuration:**
+- **Default:** `192.168.1.1` (most common home router DNS server)
+- **Custom:** Set to your router's IP or a specific DNS server (e.g., `192.168.0.1`, `10.0.0.1`)
+- **Automatic Fallback:** If the configured DNS server fails, tries other common router IPs
+- **Why This Helps:** Solves Linux/macOS issues where `c64u` hostname doesn't resolve through system DNS but works via direct router queries
+
+**Examples:**
+- `c64u` → resolves to `192.168.1.64` via enhanced DNS resolution
+- `192.168.1.64` → used directly as IP address
+- `retro-basement.local` → resolves via mDNS/Bonjour or direct DNS
+- `ultimate64` → tries system DNS first, then direct router DNS queries
+
+**Platform-Specific Behavior:**
+- **Windows:** Uses system DNS (typically works without issues)
+- **Linux/macOS:** Uses enhanced DNS resolution to bypass systemd-resolved limitations
+- **All Platforms:** Support both hostname and IP address formats seamlessly
+
 ## Recording Features 📹
 
 The plugin includes built-in recording capabilities that work independently of OBS Studio's recording system, letting you save raw C64 Ultimate data streams directly to disk.
@@ -151,11 +186,22 @@ All recording files are organized into session folders with timestamps:
 ~/Documents/obs-studio/c64stream/recordings/
 ├── session_20240929_143052/
 │   ├── frames/           # BMP frame files (if enabled)
+│   ├── network.csv       # Network timings
+│   ├── obs.csv           # OBS timings
 │   ├── video.avi         # Uncompressed video (if enabled)
 │   └── audio.wav         # Uncompressed audio (if enabled)
 └── session_20240929_151234/
     └── ...
 ```
+
+### Recording Configuration
+
+- **Output Folder Defaults:**
+  - **Windows:** `%USERPROFILE%\Documents\obs-studio\c64stream\recordings`
+  - **macOS:** `~/Documents/obs-studio/c64stream/recordings`
+  - **Linux:** `~/Documents/obs-studio/c64stream/recordings`
+- **Automatic Session Management:** New session folder created each time recording is enabled
+- **Cross-Platform Compatibility:** Works on Windows, macOS, and Linux
 
 ### Usage Notes
 
@@ -165,6 +211,38 @@ All recording files are organized into session folders with timestamps:
 - **⚠️ Checkbox states persist across OBS restarts - uncheck to stop recording or risk filling disk space**
 - Files are written in real-time as data is received from the C64 Ultimate
 - Session folders are created automatically with proper directory structure
+
+### Debug & Analysis CSV Logs 📊
+
+The plugin automatically generates detailed CSV logs for debugging OBS performance and analyzing C64 Ultimate network streams. These logs enable bit-accurate recording analysis and precise frame timing measurements.
+
+**Generated CSV Files:**
+- `obs.csv` - OBS processing timeline with microsecond precision
+- `network.csv` - UDP packet reception log with network timing analysis
+
+**Sample OBS Timeline (obs.csv):**
+```csv
+event_type,frame_num,elapsed_us,calculated_timestamp_ms,actual_timestamp_ms,data_size_bytes,fps
+video,0,1443,6385631,6385625,368640,59.826
+audio,0,15234,6385646,6385640,1536,48000
+```
+
+**Sample Network Analysis (network.csv):**
+```csv
+packet_type,elapsed_us,sequence_num,frame_num,line_num,packet_size,jitter_us
+video,225,1510,7671,8,780,0
+audio,2341,847,0,0,192,125
+```
+
+**Use Cases:**
+- **Debug OBS Performance:** Analyze frame processing delays and audio sync issues
+- **Network Stream Analysis:** Monitor UDP packet timing, jitter, and sequence errors
+- **Bit-Accurate Recordings:** Capture every frame with precise timing for forensic analysis
+- **C64 Ultimate Diagnostics:** Validate device streaming performance and network stability
+
+**Sample Recording:** See [docs/recordings/session_19700101_024625](docs/recordings/session_19700101_024625) for complete examples with all file types.
+
+**Activation:** CSV logging is automatically enabled whenever any recording option is active. No additional configuration required.
 
 
 ## Technical Details 🔧

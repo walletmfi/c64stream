@@ -18,6 +18,7 @@ GNU General Public License for more details.
 #include <stdlib.h>
 #include <string.h>
 #include <stdbool.h>
+#include <stdint.h>
 #include <math.h>
 #include <signal.h>
 #include <errno.h>
@@ -30,6 +31,8 @@ GNU General Public License for more details.
 #pragma comment(lib, "ws2_32.lib")
 #define close(s) closesocket(s)
 typedef int socklen_t;
+typedef long ssize_t;
+typedef HANDLE pthread_t;
 #else
 #include <unistd.h>
 #include <sys/socket.h>

@@ -40,16 +40,14 @@ bool obs_module_load(void)
 
     struct obs_source_info c64_info = {.id = "c64_source",
                                        .type = OBS_SOURCE_TYPE_INPUT,
-                                       .output_flags = OBS_SOURCE_VIDEO | OBS_SOURCE_AUDIO,
+                                       .output_flags = OBS_SOURCE_ASYNC_VIDEO | OBS_SOURCE_AUDIO,
                                        .get_name = c64_get_name,
                                        .create = c64_create,
                                        .destroy = c64_destroy,
                                        .update = c64_update,
                                        .get_defaults = c64_defaults,
-                                       .video_render = c64_render,
                                        .get_properties = c64_properties,
-                                       .get_width = c64_get_width,
-                                       .get_height = c64_get_height};
+                                       .audio_render = NULL}; // Audio and video pushed via obs_source_output_*
 
     obs_register_source(&c64_info);
     C64_LOG_INFO("C64 Stream plugin loaded successfully");

@@ -55,11 +55,24 @@ The C64 Ultimate device provides two primary data streams over its Ethernet port
 | 14   | Light Blue  | #887ECB  | (136, 126, 203)  |
 | 15   | Light Grey  | #ADADAD  | (173, 173, 173)  |
 
+### Authentic C64 Display Border Dimensions
+
+Color transition analysis of authentic C64 bootscreen data reveals exact VIC-II border dimensions:
+
+**Border Colors**
+- Outer Border: Light Blue (`#6D6AEF` / VIC color 14)
+- Inner Screen: Blue (`#2C29B1` / VIC color 6)
+
+**NTSC (384×240)**: L32|R32|T20|B20 → **320×200 screen**
+**PAL (384×272)**: L32|R32|T35|B37 → **320×200 screen**
+
+Both formats maintain identical 320×200 inner screen dimensions with symmetric horizontal borders.
+
 ## Audio Stream (ID 1)
 
 ### Stream Format
 - Packet Size: 770 bytes (2 byte header + 768 byte payload)
-- Sample Rate: 
+- Sample Rate:
   - PAL: 47983 Hz (-356 ppm from 48kHz)
   - NTSC: 47940 Hz (-1243 ppm from 48kHz)
 
@@ -69,6 +82,56 @@ The C64 Ultimate device provides two primary data streams over its Ethernet port
    - Format: 16-bit signed, little-endian
    - Channels: Left/Right interleaved
    - Sample Structure: [L][R][L][R]... (4 bytes per stereo sample)
+
+## Data Transmission Analysis
+
+### Video Stream Calculations
+
+**PAL (384×272, 50.125 Hz)**
+- Frame Size: 384 × 272 = 104,448 pixels
+- Pixels per Packet: 384 × 4 = 1,536 pixels
+- Packets per Frame: 272 ÷ 4 = **68 packets**
+- Frame Interval: 19.95 ms (50.125 Hz)
+- Packet Interval: 19.95 ms ÷ 68 = 0.293 ms/packet
+- Packet Rate: **68 packets per 19.95 ms = 3,408 packets/sec**
+- Data Rate: 68 × 780 bytes × 50.125 fps = 2,658,630 bytes/sec = **21.269 Mbps**
+
+**NTSC (384×240, 59.826 Hz)**
+- Frame Size: 384 × 240 = 92,160 pixels
+- Pixels per Packet: 384 × 4 = 1,536 pixels
+- Packets per Frame: 240 ÷ 4 = **60 packets**
+- Frame Interval: 16.71 ms (59.826 Hz)
+- Packet Interval: 16.71 ms ÷ 60 = 0.279 ms/packet
+- Packet Rate: **60 packets per 16.71 ms = 3,590 packets/sec**
+- Data Rate: 60 × 780 bytes × 59.826 fps = 2,799,857 bytes/sec = **22.399 Mbps**
+
+### Audio Stream Calculations
+
+**PAL Audio (47,983 Hz)**
+- Samples per Packet: 192 stereo samples
+- Packet Interval: 192 samples ÷ 47,983 Hz = 4.000 ms/packet
+- Packet Rate: **250.0 packets/sec** (exact)
+- Data Rate: 250.0 × 770 bytes = 192,500 bytes/sec = **1.540 Mbps**
+
+**NTSC Audio (47,940 Hz)**
+- Samples per Packet: 192 stereo samples
+- Packet Interval: 192 samples ÷ 47,940 Hz = 4.004 ms/packet
+- Packet Rate: **249.7 packets/sec**
+- Data Rate: 249.7 × 770 bytes = 192,269 bytes/sec = **1.538 Mbps**
+
+### Network Buffer Sizing
+
+**Video Buffer Requirements (integer packets per delay period)**
+- PAL: 68 packets per 19.95 ms frame
+- NTSC: 60 packets per 16.71 ms frame
+- **Maximum Rate**: 3,590 packets/sec (NTSC)
+
+**Audio Buffer Requirements (integer packets per delay period)**
+- PAL: 1 packet per 4.000 ms
+- NTSC: 1 packet per 4.004 ms
+- **Maximum Rate**: 250 packets/sec (PAL)
+
+**Data Volume Ratio**: Video:Audio ≈ **14.56:1** (22.399:1.538 Mbps)
 
 ## Control Commands
 

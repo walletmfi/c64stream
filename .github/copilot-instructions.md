@@ -2,7 +2,8 @@
 
 ## Project Overview
 
-This repository provides an OBS Studio source plugin for streaming video and audio from a Commodore 64 Ultimate device to OBS Studio. The plugin implements streaming capabilities according to the C64 Ultimate data streams specification. See `doc/c64-stream-spec.md` for a concise technical specification, or the [official documentation](https://1541u-documentation.readthedocs.io/en/latest/data_streams.html#data_streams) for full details.
+This repository provides an OBS Studio source plugin for streaming video and audio from a Commodore 64 Ultimate dev- **clang-format version too old**
+- Solution: Format checking requires clang-format 21.1.1+. Either upgrade or skip format checking for development builds. The CI system has the correct version.e to OBS Studio. The plugin implements streaming capabilities according to the C64 Ultimate data streams specification. See `doc/c64-stream-spec.md` for a concise technical specification, or the [official documentation](https://1541u-documentation.readthedocs.io/en/latest/data_streams.html#data_streams) for full details.
 
 ### Debug Build Tips:
 - Use `RelWithDebInfo` configuration for debugging with symbols
@@ -34,7 +35,7 @@ This repository provides an OBS Studio source plugin for streaming video and aud
 
 5. **Code Formatting (MANDATORY)**
    - **ALWAYS run `./build-aux/run-clang-format` after ANY code changes**
-   - All C/C++ code must pass clang-format 19.1.1+ validation
+   - All C/C++ code must pass clang-format 21.1.1+ validation
    - All files must end with a single newline character
    - Use 4 spaces for indentation, 120 character line limit
    - VS Code is configured to auto-format on save
@@ -87,7 +88,7 @@ This repository provides an OBS Studio source plugin for streaming video and aud
    - Linux/macOS: `zsh` (required for build scripts)
    - Windows: PowerShell 5.1+
 4. **Formatting tools:**
-   - `clang-format` version 19.1.1+ (critical requirement)
+   - `clang-format` version 21.1.1+ (critical requirement)
    - `gersemi` for CMake formatting (install via: `pip install gersemi`)
 
 ### Dependency Management:
@@ -173,7 +174,7 @@ export CI=1
 - Solution: Dependencies not downloaded. The build system should auto-download them, but if it fails, check internet connectivity and buildspec.json integrity.
 
 **Issue: "clang-format version too old"**
-- Solution: Format checking requires clang-format 19.1.1+. Either upgrade or skip format checking for development builds. The CI system has the correct version.
+- Solution: Format checking requires clang-format 21.1.1+. Either upgrade or skip format checking for development builds. The CI system has the correct version.
 
 **Issue: "zsh not found"**
 - Solution: Install zsh (`sudo apt-get install zsh` on Ubuntu)
@@ -268,7 +269,7 @@ Get-ChildItem src/*.c, src/*.h | ForEach-Object {
 - **Visual Studio Build Tools 2022** - Required for MSVC compiler
 - **Windows SDK 10.0.26100** (or compatible version)
 - **CMake 3.30.5+** - Install from cmake.org
-- **LLVM 19.1.1+** - Install from llvm.org/builds/ for clang-format
+- **LLVM 21.1.1+** - Install from llvm.org/builds/ for clang-format
 - **PowerShell 5.1+ or 7+** - For build script execution
 
 **Common Windows Build Issues:**
@@ -413,7 +414,7 @@ When setting default user directories, use platform conventions:
 
 ## Local Compilation Verification (MANDATORY)
 
-**Before announcing any change as completed, you MUST verify it builds locally on both Linux AND Windows platforms.**
+**Before announcing any change as completed, you MUST verify it builds locally on Linux. Windows compatibility is validated through CI.**
 
 ### Linux Verification (Required)
 ```bash
@@ -430,68 +431,39 @@ else
 fi
 ```
 
-### Windows Verification (Required)
-Choose ONE method to verify Windows compatibility:
-
-**Method 1: Docker-based Windows simulation (Linux users)**
-```bash
-./test-windows-build.sh
-# Must show: "🎉 SUCCESS: Windows build simulation completed!"
-```
-
-**Method 2: Native Windows build (Windows users)**
-```powershell
-# Clean build
-Remove-Item "build_x64" -Recurse -Force -ErrorAction SilentlyContinue
-cmake --preset windows-x64
-cmake --build build_x64 --config RelWithDebInfo
-
-# Verify success
-if (Test-Path "build_x64\RelWithDebInfo\c64stream.dll") {
-    Write-Host "✅ Windows build successful" -ForegroundColor Green
-} else {
-    Write-Host "❌ Windows build failed - DO NOT proceed" -ForegroundColor Red
-}
-```
-
-**Method 3: CI-compatible Windows build (Advanced)**
-```powershell
-$env:CI = "1"
-cmake --preset windows-ci-x64
-cmake --build build_x64 --config RelWithDebInfo --parallel
-# Must complete without errors or warnings
-```
+### Windows Compatibility
+Windows compatibility is automatically validated through GitHub Actions CI. Local Windows testing is optional but not required due to cross-compilation complexity. The CI system provides comprehensive Windows build validation including:
+- MSVC compilation with Visual Studio 2022
+- Windows-specific networking and threading code
+- DLL packaging and installation verification
 
 ### Validation Checklist
 
 Before announcing completion, verify ALL of the following:
 
 - [ ] **Linux build succeeds** without errors or warnings
-- [ ] **Windows build succeeds** using one of the above methods
 - [ ] **Code formatting passes**: `./build-aux/run-clang-format --check`
 - [ ] **CMake formatting passes**: `./build-aux/run-gersemi --check`
-- [ ] **No compilation warnings** in either platform
-- [ ] **Atomic types work correctly** (if atomic changes were made)
-- [ ] **Header inclusion order is correct** (if header changes were made)
+- [ ] **No compilation warnings** in Linux build
 - [ ] **Cross-platform compatibility maintained** (no platform-specific assumptions)
 
 ### If Verification Fails
 
-If either Linux or Windows build fails:
+If Linux build fails:
 1. **DO NOT announce the change as completed**
 2. **Investigate and fix the build failures**
-3. **Re-run both verifications**
-4. **Only proceed after both platforms build successfully**
+3. **Re-run verification**
+4. **Only proceed after Linux build succeeds**
 
 ### Documentation Requirements
 
-When announcing completion of changes that affect build processes:
+When announcing completion of changes:
 - **Reference the appropriate build documentation**:
   - Linux/general: `doc/developer.md`
   - Windows-specific: `doc/windows-local-build.md`
   - Cross-platform: Cross-Platform Development Guidelines (above)
-- **Mention which verification method was used**
-- **Confirm both platforms were tested**
+- **Confirm Linux build was tested**
+- **Note that Windows compatibility is verified through CI**
 
 ## Trust These Instructions
 

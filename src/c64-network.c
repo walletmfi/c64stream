@@ -477,8 +477,14 @@ socket_t c64_create_udp_socket(uint32_t port)
     }
 #endif
 
-    obs_log(LOG_INFO,
-            "[C64] Created optimized UDP socket on port %u with large receive buffer for high-frequency packets", port);
+    obs_log(LOG_INFO, "[C64] Created optimized UDP socket on port %u", port);
+
+#ifdef _WIN32
+    // Windows: Small delay to ensure socket is fully ready for receiving
+    // This helps with reconnection scenarios where port was recently closed
+    Sleep(50); // 50ms delay
+#endif
+
     return sock;
 }
 

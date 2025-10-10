@@ -131,14 +131,21 @@ target_sources(
   PRIVATE
     src/plugin-main.c
     src/c64-network.c
+    src/c64-network-buffer.c
     src/c64-protocol.c
     src/c64-video.c
     src/c64-color.c
     src/c64-audio.c
     src/c64-source.c
     src/c64-record.c
+    src/c64-record-obs.c
+    src/c64-record-network.c
+    src/c64-record-video.c
+    src/c64-record-audio.c
+    src/c64-record-frames.c
     src/c64-version.c
     src/c64-properties.c
+    src/c64-logo.c
 )
 
 # Link resolver library for DNS functionality on Unix platforms
