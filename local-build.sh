@@ -213,7 +213,7 @@ format_code() {
         return 0
     fi
 
-    # Check version (require 19.1.1+ like copilot-instructions, but CI may be stricter)
+    # Check version - require 19.1.1 or later (latest versions are now accepted)
     clang_format_version=$("$clang_format_cmd" --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
 
     if [[ -n "$clang_format_version" ]]; then
@@ -224,16 +224,10 @@ format_code() {
 
         # Check if version is at least 19.1.1
         if [[ "$major" -lt 19 ]] || [[ "$major" -eq 19 && "$minor" -lt 1 ]] || [[ "$major" -eq 19 && "$minor" -eq 1 && "$patch" -lt 1 ]]; then
-            log_warning "clang-format version $clang_format_version is too old (require 19.1.1+)"
-            log_warning "Skipping formatting - install clang-format 19.1.1+ for consistency with CI"
+            log_error "clang-format version $clang_format_version is too old (require 19.1.1+)"
+            log_error "Install clang-format 19.1.1 or later"
+            log_error "Skipping formatting - THIS WILL CAUSE CI FAILURES!"
             return 0
-        fi
-
-        # CI requires exactly 19.1.1, but for local development we accept 19.1.1+
-        # Newer versions should produce the same formatting with the same .clang-format config
-        if [[ "$major" -gt 19 || ("$major" -eq 19 && "$minor" -gt 1) ]]; then
-            log_warning "Using clang-format $clang_format_version (CI uses exactly 19.1.1)"
-            log_warning "Formatting should be compatible, but verify with CI if issues arise"
         fi
 
         log_info "Using clang-format version $clang_format_version"

@@ -96,7 +96,7 @@ cp build_macos/c64stream.so "$HOME/Library/Application Support/obs-studio/plugin
 
 ### Version Requirement
 
-**clang-format 19.1.1 or later is required** to match CI pipeline formatting.
+**clang-format 19.1.1 or later is required.** Latest versions (20.x, 21.x, etc.) are fully supported.
 
 **Check your version:**
 ```bash
@@ -104,10 +104,10 @@ clang-format --version
 # Should show: clang-format version 19.1.1 or higher
 ```
 
-**Install clang-format 19.1.1+:**
-- **Windows:** Download LLVM from https://llvm.org/builds/ (includes clang-format)
-- **Linux:** `brew install obsproject/tools/clang-format@19` (via Homebrew)
-- **macOS:** `brew install obsproject/tools/clang-format@19`
+**Install latest clang-format:**
+- **Windows:** Download latest LLVM from https://llvm.org/builds/ (includes clang-format)
+- **Linux:** `brew install clang-format` (via Homebrew)
+- **macOS:** `brew install clang-format`
 
 ### Automatic Formatting
 

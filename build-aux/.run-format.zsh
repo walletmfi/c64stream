@@ -33,26 +33,22 @@ invoke_formatter() {
 
   case ${formatter} {
     clang)
-      if (( ${+commands[clang-format-19]} )) {
-        local formatter=clang-format-19
-      } elif (( ${+commands[clang-format]} )) {
+      if (( ${+commands[clang-format]} )) {
         local formatter=clang-format
       } else {
-        log_error "No viable clang-format version found (required 19.1.1)"
+        log_error "No viable clang-format version found (required 19.1.1 or later)"
         exit 2
       }
 
       local -a formatter_version=($(${formatter} --version))
 
       if ! is-at-least 19.1.1 ${formatter_version[-1]}; then
-        log_error "clang-format is not version 19.1.1 or above (found ${formatter_version[-1]}."
+        log_error "clang-format is not version 19.1.1 or above (found ${formatter_version[-1]})."
         exit 2
       fi
 
-      if ! is-at-least ${formatter_version[-1]} 19.1.1; then
-        log_error "clang-format is more recent than version 19.1.1 (found ${formatter_version[-1]})."
-        exit 2
-      fi
+      # Accept any version 19.1.1 or later (removed upper bound check)
+      # This allows using the latest clang-format versions
 
       if (( ! #source_files )) source_files=(src/**/*.(c|cpp|h|hpp|m|mm)(.N) tests/**/*.(c|cpp|h|hpp|m|mm)(.N))
 
