@@ -415,26 +415,6 @@ socket_t c64_create_udp_socket(uint32_t port)
         return INVALID_SOCKET_VALUE;
     }
 
-    // Enable socket address reuse - critical for Windows reconnection
-    // Without this, Windows keeps ports in TIME_WAIT state after close()
-#ifdef _WIN32
-    BOOL reuse = TRUE;
-    if (setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, (char *)&reuse, sizeof(reuse)) < 0) {
-        int error = c64_get_socket_error();
-        obs_log(LOG_WARNING, "[C64] Failed to set SO_REUSEADDR on UDP socket: %s", c64_get_socket_error_string(error));
-    } else {
-        obs_log(LOG_DEBUG, "[C64] Set SO_REUSEADDR for socket port reuse on Windows");
-    }
-#else
-    int reuse = 1;
-    if (setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse)) < 0) {
-        int error = c64_get_socket_error();
-        obs_log(LOG_WARNING, "[C64] Failed to set SO_REUSEADDR on UDP socket: %s", c64_get_socket_error_string(error));
-    } else {
-        obs_log(LOG_DEBUG, "[C64] Set SO_REUSEADDR for socket port reuse");
-    }
-#endif
-
     // Configure UDP socket buffer sizes for high-frequency packet reception
     // C64S video stream: ~3400 packets/sec × 780 bytes = ~2.6 Mbps
     // We need large enough buffers to handle temporary bursts and OS scheduling delays

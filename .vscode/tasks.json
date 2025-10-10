@@ -10,7 +10,9 @@
                 "--build",
                 "build_x64",
                 "--config",
-                "Debug"
+                "Debug",
+                "--target",
+                "c64stream"
             ],
             "group": {
                 "kind": "build",
@@ -96,9 +98,8 @@
             "type": "shell",
             "command": "powershell",
             "args": [
-                "-ExecutionPolicy", "Bypass",
-                "-File",
-                "${workspaceFolder}/build-aux/install-plugin-windows.ps1"
+                "-Command",
+                "New-Item -ItemType Directory -Path 'C:\\ProgramData\\obs-studio\\plugins\\c64stream\\bin\\64bit' -Force | Out-Null; Copy-Item '${workspaceFolder}\\build_x64\\Debug\\c64stream.dll' -Destination 'C:\\ProgramData\\obs-studio\\plugins\\c64stream\\bin\\64bit\\' -Force; Write-Host 'Plugin installed to C:\\ProgramData\\obs-studio\\plugins\\c64stream'"
             ],
             "group": "build",
             "presentation": {

@@ -353,7 +353,13 @@ void *c64_video_thread_func(void *data)
             }
             // On Windows, WSAENOTSOCK means socket was closed - this is normal during shutdown
             if (error == WSAENOTSOCK && context->video_socket == INVALID_SOCKET_VALUE) {
+                C64_LOG_DEBUG("Video socket closed (WSAENOTSOCK) - exiting receiver thread gracefully");
                 break; // Socket was closed, exit gracefully
+            }
+            // On Windows, WSAESHUTDOWN means socket was shutdown - this is normal during reconnection
+            if (error == WSAESHUTDOWN) {
+                C64_LOG_DEBUG("Video socket shutdown (WSAESHUTDOWN) - exiting receiver thread for reconnection");
+                break; // Socket was shutdown, exit gracefully
             }
 #else
             if (error == EAGAIN || error == EWOULDBLOCK) {
@@ -362,10 +368,11 @@ void *c64_video_thread_func(void *data)
             }
             // On POSIX, EBADF means socket was closed - this is normal during shutdown
             if (error == EBADF && context->video_socket == INVALID_SOCKET_VALUE) {
+                C64_LOG_DEBUG("Video socket closed (EBADF) - exiting receiver thread gracefully");
                 break; // Socket was closed, exit gracefully
             }
 #endif
-            C64_LOG_ERROR("Video socket error: %s", c64_get_socket_error_string(error));
+            C64_LOG_ERROR("Video socket error: %s (error code: %d)", c64_get_socket_error_string(error), error);
             break;
         }
 

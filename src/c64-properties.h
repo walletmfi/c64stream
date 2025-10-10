@@ -16,4 +16,4 @@ obs_properties_t *c64_create_properties(void *data);
  */
 void c64_set_property_defaults(obs_data_t *settings);
 
-#endif // C64_PROPERTIES_H
+#endif  // C64_PROPERTIES_H

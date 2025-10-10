@@ -185,6 +185,78 @@ install_dependencies() {
     esac
 }
 
+format_code() {
+    log_info "Formatting source code..."
+
+    # Check if clang-format is available
+    local clang_format_cmd=""
+    local clang_format_version=""
+
+    # Try to find clang-format-19 first (preferred), then clang-format
+    if command -v clang-format-19 >/dev/null 2>&1; then
+        clang_format_cmd="clang-format-19"
+    elif command -v clang-format >/dev/null 2>&1; then
+        clang_format_cmd="clang-format"
+    elif [[ -f "/usr/bin/clang-format" ]]; then
+        clang_format_cmd="/usr/bin/clang-format"
+    elif [[ -f "/usr/local/bin/clang-format" ]]; then
+        clang_format_cmd="/usr/local/bin/clang-format"
+    elif [[ -f "/c/Program Files/LLVM/bin/clang-format.exe" ]]; then
+        clang_format_cmd="/c/Program Files/LLVM/bin/clang-format.exe"
+    elif [[ -f "C:/Program Files/LLVM/bin/clang-format.exe" ]]; then
+        clang_format_cmd="C:/Program Files/LLVM/bin/clang-format.exe"
+    fi
+
+    if [[ -z "$clang_format_cmd" ]]; then
+        log_warning "clang-format not found, skipping code formatting"
+        log_warning "Install clang-format 19.1.1+ to enable automatic formatting"
+        return 0
+    fi
+
+    # Check version (require 19.1.1+ like copilot-instructions, but CI may be stricter)
+    clang_format_version=$("$clang_format_cmd" --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+
+    if [[ -n "$clang_format_version" ]]; then
+        # Parse version components
+        local major=$(echo "$clang_format_version" | cut -d. -f1)
+        local minor=$(echo "$clang_format_version" | cut -d. -f2)
+        local patch=$(echo "$clang_format_version" | cut -d. -f3)
+
+        # Check if version is at least 19.1.1
+        if [[ "$major" -lt 19 ]] || [[ "$major" -eq 19 && "$minor" -lt 1 ]] || [[ "$major" -eq 19 && "$minor" -eq 1 && "$patch" -lt 1 ]]; then
+            log_warning "clang-format version $clang_format_version is too old (require 19.1.1+)"
+            log_warning "Skipping formatting - install clang-format 19.1.1+ for consistency with CI"
+            return 0
+        fi
+
+        # CI requires exactly 19.1.1, but for local development we accept 19.1.1+
+        # Newer versions should produce the same formatting with the same .clang-format config
+        if [[ "$major" -gt 19 || ("$major" -eq 19 && "$minor" -gt 1) ]]; then
+            log_warning "Using clang-format $clang_format_version (CI uses exactly 19.1.1)"
+            log_warning "Formatting should be compatible, but verify with CI if issues arise"
+        fi
+
+        log_info "Using clang-format version $clang_format_version"
+    fi
+
+    # Format all C source and header files using same flags as CI
+    # CI uses: -style=file -fallback-style=none -i
+    local files_formatted=0
+    for file in src/*.c src/*.h src/*.cpp src/*.hpp src/*.m src/*.mm tests/*.c tests/*.cpp tests/*.h tests/*.hpp; do
+        if [[ -f "$file" ]]; then
+            if "$clang_format_cmd" -style=file -fallback-style=none -i "$file" 2>/dev/null; then
+                files_formatted=$((files_formatted + 1))
+            fi
+        fi
+    done
+
+    if [[ $files_formatted -gt 0 ]]; then
+        log_success "Formatted $files_formatted source files with clang-format"
+    else
+        log_warning "No source files found to format"
+    fi
+}
+
 build_platform() {
     local platform=$1
     local config=$2
@@ -219,6 +291,9 @@ build_platform() {
         log_info "Cleaning build directory: $build_dir"
         rm -rf "$build_dir"
     fi
+
+    # Format code before building (ensures consistency across platforms)
+    format_code
 
     # Configure
     log_info "Configuring build..."
@@ -292,8 +367,28 @@ install_plugin() {
 
     log_info "Installing plugin to OBS..."
 
-    # Define installation directory
-    local install_dir="$HOME/.config/obs-studio/plugins/c64stream"
+    # Define installation directory based on platform
+    local install_dir
+    case $platform in
+        linux)
+            install_dir="$HOME/.config/obs-studio/plugins/c64stream"
+            ;;
+        macos)
+            install_dir="$HOME/Library/Application Support/obs-studio/plugins/c64stream"
+            ;;
+        windows)
+            # Use ProgramData for system-wide installation on Windows
+            if [[ "$OSTYPE" == "linux-gnu"* ]]; then
+                # Cross-compiling on Linux - cannot install to Windows paths
+                install_dir="./dist/windows/c64stream"
+                log_warning "Cross-compiling: Installing to local dist directory instead of Windows system path"
+            else
+                # Running on Windows - install to ProgramData
+                install_dir="/c/ProgramData/obs-studio/plugins/c64stream"
+                log_info "Installing to Windows system-wide location: C:\\ProgramData\\obs-studio\\plugins\\c64stream"
+            fi
+            ;;
+    esac
 
     # Create directory structure
     mkdir -p "$install_dir/bin/64bit"
@@ -320,14 +415,30 @@ install_plugin() {
             fi
             ;;
         windows)
-            if [[ -f "$build_dir/c64stream.dll" ]]; then
-                cp "$build_dir/c64stream.dll" "$install_dir/bin/64bit/"
-                log_success "Copied c64stream.dll to $install_dir/bin/64bit/"
-            elif [[ -f "$build_dir/RelWithDebInfo/c64stream.dll" ]]; then
-                cp "$build_dir/RelWithDebInfo/c64stream.dll" "$install_dir/bin/64bit/"
-                log_success "Copied c64stream.dll to $install_dir/bin/64bit/"
-            else
-                log_error "Plugin binary not found: $build_dir/c64stream.dll or $build_dir/RelWithDebInfo/c64stream.dll"
+            # Try different possible locations for the DLL
+            local dll_found=false
+            local dll_locations=(
+                "$build_dir/c64stream.dll"
+                "$build_dir/$BUILD_CONFIG/c64stream.dll"
+                "$build_dir/Debug/c64stream.dll"
+                "$build_dir/RelWithDebInfo/c64stream.dll"
+                "$build_dir/Release/c64stream.dll"
+            )
+
+            for dll_path in "${dll_locations[@]}"; do
+                if [[ -f "$dll_path" ]]; then
+                    cp "$dll_path" "$install_dir/bin/64bit/"
+                    log_success "Copied c64stream.dll from $dll_path to $install_dir/bin/64bit/"
+                    dll_found=true
+                    break
+                fi
+            done
+
+            if [[ "$dll_found" == "false" ]]; then
+                log_error "Plugin DLL not found in any of the expected locations:"
+                for dll_path in "${dll_locations[@]}"; do
+                    log_error "  - $dll_path"
+                done
                 return 1
             fi
             ;;
@@ -342,8 +453,30 @@ install_plugin() {
     fi
 
     log_success "Plugin installation completed!"
-    log_info "Plugin installed to: $install_dir"
-    
+
+    # Platform-specific installation messages
+    case $platform in
+        linux)
+            log_info "Plugin installed to: $install_dir"
+            log_info "Start OBS Studio to test the plugin"
+            ;;
+        macos)
+            log_info "Plugin installed to: $install_dir"
+            log_info "Start OBS Studio to test the plugin"
+            ;;
+        windows)
+            if [[ "$OSTYPE" == "linux-gnu"* ]]; then
+                log_info "Plugin files prepared in: $install_dir"
+                log_info "Copy these files to your Windows system for installation"
+            else
+                log_info "Plugin installed to: C:\\ProgramData\\obs-studio\\plugins\\c64stream"
+                log_info "System-wide installation completed - all users can access the plugin"
+                log_info "Start OBS Studio to test the plugin"
+                log_warning "Note: You may need administrator privileges to write to ProgramData"
+            fi
+            ;;
+    esac
+
     # Show the installed structure
     if command -v find >/dev/null 2>&1; then
         log_info "Installed files:"

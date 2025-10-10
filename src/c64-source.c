@@ -101,20 +101,16 @@ void c64_async_retry_task(void *data)
 static void close_and_reset_sockets(struct c64_source *context)
 {
     if (context->video_socket != INVALID_SOCKET_VALUE) {
-#ifdef _WIN32
-        // Windows: Proper socket shutdown sequence for UDP reconnection
-        shutdown(context->video_socket, SHUT_RDWR);
-#endif
+        C64_LOG_DEBUG("Closing video socket (port %u)", context->video_port);
         close(context->video_socket);
         context->video_socket = INVALID_SOCKET_VALUE;
+        C64_LOG_DEBUG("Video socket closed and reset to INVALID_SOCKET_VALUE");
     }
     if (context->audio_socket != INVALID_SOCKET_VALUE) {
-#ifdef _WIN32
-        // Windows: Proper socket shutdown sequence for UDP reconnection
-        shutdown(context->audio_socket, SHUT_RDWR);
-#endif
+        C64_LOG_DEBUG("Closing audio socket (port %u)", context->audio_port);
         close(context->audio_socket);
         context->audio_socket = INVALID_SOCKET_VALUE;
+        C64_LOG_DEBUG("Audio socket closed and reset to INVALID_SOCKET_VALUE");
     }
 }
 

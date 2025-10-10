@@ -35,4 +35,4 @@ struct c64_source;
 // Protocol operations
 void c64_send_control_command(struct c64_source *context, bool enable, uint8_t stream_id);
 
-#endif // C64_PROTOCOL_H
+#endif  // C64_PROTOCOL_H
