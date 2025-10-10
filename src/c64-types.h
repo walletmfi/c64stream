@@ -170,6 +170,19 @@ struct c64_source {
     uint8_t *bmp_row_buffer;       // Pre-allocated BMP row buffer for frame saving
     uint8_t *bgr_frame_buffer;     // Pre-allocated BGR buffer for video recording
     size_t recording_buffer_size;  // Size of allocated recording buffers
+
+    // CRT visual effects
+    bool crt_enable;              // Master CRT effects enable
+    bool scanlines_enable;        // Scanlines effect enable
+    float scanlines_opacity;      // Scanlines opacity (0.0-1.0)
+    int scanlines_width;          // Scanlines width in pixels (1-6)
+    float pixel_width;            // Pixel geometry width (0.5-3.0)
+    float pixel_height;           // Pixel geometry height (0.5-3.0)
+    bool bloom_enable;            // Bloom effect enable
+    float bloom_strength;         // Bloom strength (0.0-1.0)
+    float bloom_threshold;        // Bloom threshold (0.0-1.0)
+    gs_texture_t *render_texture; // GPU texture for rendering with effects
+    gs_effect_t *crt_effect;      // CRT shader effect
 };
 
 #endif  // C64_TYPES_H

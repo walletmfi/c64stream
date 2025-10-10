@@ -95,6 +95,54 @@ obs_properties_t *c64_create_properties(void *data)
         save_folder_prop,
         "Directory where session folders with frames, video, audio, and timing files will be created");
 
+    // Effects Group
+    obs_property_t *effects_group =
+        obs_properties_add_group(props, "effects_group", "Effects", OBS_GROUP_NORMAL, obs_properties_create());
+    obs_properties_t *effects_props = obs_property_group_content(effects_group);
+
+    // Master control
+    obs_property_t *crt_enable_prop = obs_properties_add_bool(effects_props, "crt_enable", "Enable CRT Visual Effects");
+    obs_property_set_long_description(crt_enable_prop, "Enable or disable all CRT visual effects");
+
+    // Section label
+    obs_properties_add_text(effects_props, "crt_label", "CRT EFFECT CONFIGURATION", OBS_TEXT_INFO);
+
+    // Scanlines
+    obs_properties_add_text(effects_props, "scanlines_label", "▶ Scanlines", OBS_TEXT_INFO);
+    obs_property_t *scanlines_enable_prop = obs_properties_add_bool(effects_props, "scanlines_enable", "Enable Scanlines");
+    obs_property_set_long_description(scanlines_enable_prop, "Enable horizontal scanline effect");
+
+    obs_property_t *scanlines_opacity_prop =
+        obs_properties_add_float_slider(effects_props, "scanlines_opacity", "Opacity", 0.0, 1.0, 0.05);
+    obs_property_set_long_description(scanlines_opacity_prop, "Scanline opacity (0.0 = transparent, 1.0 = opaque)");
+
+    obs_property_t *scanlines_width_prop =
+        obs_properties_add_int_slider(effects_props, "scanlines_width", "Width (pixels)", 1, 6, 1);
+    obs_property_set_long_description(scanlines_width_prop, "Scanline width in pixels");
+
+    // Pixel Geometry
+    obs_properties_add_text(effects_props, "pixel_geom_label", "▶ Pixel Geometry", OBS_TEXT_INFO);
+    obs_property_t *pixel_width_prop =
+        obs_properties_add_float_slider(effects_props, "pixel_width", "Pixel Width", 0.5, 3.0, 0.1);
+    obs_property_set_long_description(pixel_width_prop, "Horizontal pixel width multiplier");
+
+    obs_property_t *pixel_height_prop =
+        obs_properties_add_float_slider(effects_props, "pixel_height", "Pixel Height", 0.5, 3.0, 0.1);
+    obs_property_set_long_description(pixel_height_prop, "Vertical pixel height multiplier");
+
+    // CRT Bloom
+    obs_properties_add_text(effects_props, "bloom_label", "▶ CRT Bloom", OBS_TEXT_INFO);
+    obs_property_t *bloom_enable_prop = obs_properties_add_bool(effects_props, "bloom_enable", "Enable Bloom");
+    obs_property_set_long_description(bloom_enable_prop, "Enable brightness-based bloom effect");
+
+    obs_property_t *bloom_strength_prop =
+        obs_properties_add_float_slider(effects_props, "bloom_strength", "Strength", 0.0, 1.0, 0.05);
+    obs_property_set_long_description(bloom_strength_prop, "Bloom effect strength");
+
+    obs_property_t *bloom_threshold_prop =
+        obs_properties_add_float_slider(effects_props, "bloom_threshold", "Threshold", 0.0, 1.0, 0.05);
+    obs_property_set_long_description(bloom_threshold_prop, "Brightness threshold for bloom effect");
+
     return props;
 }
 
@@ -140,4 +188,15 @@ void c64_set_property_defaults(obs_data_t *settings)
 
     // Video recording defaults
     obs_data_set_default_bool(settings, "record_video", false); // Disabled by default
+
+    // CRT effects defaults
+    obs_data_set_default_bool(settings, "crt_enable", false);
+    obs_data_set_default_bool(settings, "scanlines_enable", false);
+    obs_data_set_default_double(settings, "scanlines_opacity", 0.25);
+    obs_data_set_default_int(settings, "scanlines_width", 2);
+    obs_data_set_default_double(settings, "pixel_width", 1.0);
+    obs_data_set_default_double(settings, "pixel_height", 1.0);
+    obs_data_set_default_bool(settings, "bloom_enable", false);
+    obs_data_set_default_double(settings, "bloom_strength", 0.4);
+    obs_data_set_default_double(settings, "bloom_threshold", 0.5);
 }

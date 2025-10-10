@@ -297,7 +297,22 @@ void *c64_create(obs_data_t *settings, obs_source_t *source)
     }
 
     // Initialize recording for this source
-    c64_record_init(context); // Start initial connection asynchronously to avoid blocking OBS startup
+    c64_record_init(context);
+
+    // Initialize CRT effect state from settings
+    context->crt_enable = obs_data_get_bool(settings, "crt_enable");
+    context->scanlines_enable = obs_data_get_bool(settings, "scanlines_enable");
+    context->scanlines_opacity = (float)obs_data_get_double(settings, "scanlines_opacity");
+    context->scanlines_width = (int)obs_data_get_int(settings, "scanlines_width");
+    context->pixel_width = (float)obs_data_get_double(settings, "pixel_width");
+    context->pixel_height = (float)obs_data_get_double(settings, "pixel_height");
+    context->bloom_enable = obs_data_get_bool(settings, "bloom_enable");
+    context->bloom_strength = (float)obs_data_get_double(settings, "bloom_strength");
+    context->bloom_threshold = (float)obs_data_get_double(settings, "bloom_threshold");
+    context->render_texture = NULL;
+    context->crt_effect = NULL;
+
+    // Start initial connection asynchronously to avoid blocking OBS startup
     C64_LOG_INFO("C64S source created successfully - queuing async initial connection");
     context->retry_in_progress = true; // Prevent render thread from also starting retry
     obs_queue_task(OBS_TASK_UI, c64_async_retry_task, context, false);
@@ -340,6 +355,18 @@ void c64_destroy(void *data)
 
     // Cleanup logo system
     c64_logo_cleanup(context);
+
+    // Cleanup CRT effect resources (must be done in graphics context)
+    obs_enter_graphics();
+    if (context->render_texture) {
+        gs_texture_destroy(context->render_texture);
+        context->render_texture = NULL;
+    }
+    if (context->crt_effect) {
+        gs_effect_destroy(context->crt_effect);
+        context->crt_effect = NULL;
+    }
+    obs_leave_graphics();
 
     // Cleanup resources
     pthread_mutex_destroy(&context->assembly_mutex);
@@ -453,6 +480,17 @@ void c64_update(void *data, obs_data_t *settings)
 
     // Update recording settings
     c64_record_update_settings(context, settings);
+
+    // Update CRT effect settings
+    context->crt_enable = obs_data_get_bool(settings, "crt_enable");
+    context->scanlines_enable = obs_data_get_bool(settings, "scanlines_enable");
+    context->scanlines_opacity = (float)obs_data_get_double(settings, "scanlines_opacity");
+    context->scanlines_width = (int)obs_data_get_int(settings, "scanlines_width");
+    context->pixel_width = (float)obs_data_get_double(settings, "pixel_width");
+    context->pixel_height = (float)obs_data_get_double(settings, "pixel_height");
+    context->bloom_enable = obs_data_get_bool(settings, "bloom_enable");
+    context->bloom_strength = (float)obs_data_get_double(settings, "bloom_strength");
+    context->bloom_threshold = (float)obs_data_get_double(settings, "bloom_threshold");
 
     // Start streaming with current configuration (will create new sockets if needed)
     C64_LOG_INFO("Applying configuration and starting streaming");
@@ -604,6 +642,82 @@ void c64_stop_streaming(struct c64_source *context)
     }
 
     C64_LOG_INFO("C64S streaming stopped");
+}
+
+// Video render callback for CRT effects (GPU rendering)
+void c64_video_render(void *data, gs_effect_t *effect)
+{
+    UNUSED_PARAMETER(effect);
+    struct c64_source *context = data;
+    if (!context)
+        return;
+
+    // If CRT effects are disabled, do nothing (use default async video rendering)
+    if (!context->crt_enable) {
+        return;
+    }
+
+    // Load shader effect if not already loaded
+    if (!context->crt_effect) {
+        char *effect_path = obs_module_file("effects/crt_effect.effect");
+        if (effect_path) {
+            context->crt_effect = gs_effect_create_from_file(effect_path, NULL);
+            bfree(effect_path);
+            if (!context->crt_effect) {
+                C64_LOG_ERROR("Failed to load CRT effect shader");
+                return;
+            }
+        } else {
+            C64_LOG_ERROR("Failed to find CRT effect shader file");
+            return;
+        }
+    }
+
+    // Update render texture if needed (create or recreate on size change)
+    if (!context->render_texture || gs_texture_get_width(context->render_texture) != context->width ||
+        gs_texture_get_height(context->render_texture) != context->height) {
+        if (context->render_texture) {
+            gs_texture_destroy(context->render_texture);
+        }
+        context->render_texture =
+            gs_texture_create(context->width, context->height, GS_RGBA, 1, (const uint8_t **)&context->frame_buffer, 0);
+        if (!context->render_texture) {
+            C64_LOG_ERROR("Failed to create render texture");
+            return;
+        }
+    } else {
+        // Update texture with latest frame data
+        gs_texture_set_image(context->render_texture, context->frame_buffer, context->width * 4, false);
+    }
+
+    // Set shader parameters
+    gs_effect_set_texture(gs_effect_get_param_by_name(context->crt_effect, "image"), context->render_texture);
+    gs_effect_set_bool(gs_effect_get_param_by_name(context->crt_effect, "scanlines_enable"), context->scanlines_enable);
+    gs_effect_set_float(gs_effect_get_param_by_name(context->crt_effect, "scanlines_opacity"),
+                        context->scanlines_opacity);
+    gs_effect_set_int(gs_effect_get_param_by_name(context->crt_effect, "scanlines_width"), context->scanlines_width);
+    gs_effect_set_float(gs_effect_get_param_by_name(context->crt_effect, "pixel_width"), context->pixel_width);
+    gs_effect_set_float(gs_effect_get_param_by_name(context->crt_effect, "pixel_height"), context->pixel_height);
+    gs_effect_set_bool(gs_effect_get_param_by_name(context->crt_effect, "bloom_enable"), context->bloom_enable);
+    gs_effect_set_float(gs_effect_get_param_by_name(context->crt_effect, "bloom_strength"), context->bloom_strength);
+    gs_effect_set_float(gs_effect_get_param_by_name(context->crt_effect, "bloom_threshold"), context->bloom_threshold);
+
+    // Render the texture with the CRT effect
+    while (gs_effect_loop(context->crt_effect, "Draw")) {
+        gs_draw_sprite(context->render_texture, 0, context->width, context->height);
+    }
+}
+
+uint32_t c64_get_width(void *data)
+{
+    struct c64_source *context = data;
+    return context ? context->width : 0;
+}
+
+uint32_t c64_get_height(void *data)
+{
+    struct c64_source *context = data;
+    return context ? context->height : 0;
 }
 
 // Synchronous render callback removed - now using async video output via obs_source_output_video()

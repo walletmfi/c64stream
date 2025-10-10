@@ -1,0 +1,91 @@
+/*
+C64 Stream - CRT Visual Effects Shader
+Copyright (C) 2025 Christian Gleissner
+
+Licensed under the GNU General Public License v2.0 or later.
+See <https://www.gnu.org/licenses/> for details.
+*/
+
+// Uniforms
+uniform float4x4 ViewProj;
+uniform texture2d image;
+
+// CRT effect parameters
+uniform bool scanlines_enable;
+uniform float scanlines_opacity;
+uniform int scanlines_width;
+uniform float pixel_width;
+uniform float pixel_height;
+uniform bool bloom_enable;
+uniform float bloom_strength;
+uniform float bloom_threshold;
+
+sampler_state textureSampler {
+    Filter   = Linear;
+    AddressU = Clamp;
+    AddressV = Clamp;
+};
+
+struct VertData {
+    float4 pos : POSITION;
+    float2 uv  : TEXCOORD0;
+};
+
+VertData VSDefault(VertData v_in)
+{
+    VertData vert_out;
+    vert_out.pos = mul(float4(v_in.pos.xyz, 1.0), ViewProj);
+    vert_out.uv  = v_in.uv;
+    return vert_out;
+}
+
+float4 PSDefault(VertData v_in) : TARGET
+{
+    float2 uv = v_in.uv;
+    
+    // Apply pixel geometry distortion
+    float2 pixel_uv = uv;
+    if (pixel_width != 1.0 || pixel_height != 1.0) {
+        float2 center = float2(0.5, 0.5);
+        float2 offset = uv - center;
+        offset.x *= pixel_width;
+        offset.y *= pixel_height;
+        pixel_uv = center + offset;
+        
+        // Clamp to valid texture coordinates
+        if (pixel_uv.x < 0.0 || pixel_uv.x > 1.0 || pixel_uv.y < 0.0 || pixel_uv.y > 1.0) {
+            return float4(0.0, 0.0, 0.0, 1.0);
+        }
+    }
+    
+    // Sample the texture
+    float4 color = image.Sample(textureSampler, pixel_uv);
+    
+    // Apply scanlines
+    if (scanlines_enable) {
+        float scanline = frac(v_in.uv.y * 272.0 / float(scanlines_width));
+        if (scanline < 0.5) {
+            color.rgb *= (1.0 - scanlines_opacity);
+        }
+    }
+    
+    // Apply bloom effect
+    if (bloom_enable) {
+        float brightness = dot(color.rgb, float3(0.299, 0.587, 0.114));
+        if (brightness > bloom_threshold) {
+            float bloom_factor = (brightness - bloom_threshold) / (1.0 - bloom_threshold);
+            color.rgb += color.rgb * bloom_factor * bloom_strength;
+        }
+    }
+    
+    return color;
+}
+
+technique Draw
+{
+    pass
+    {
+        vertex_shader = VSDefault(v_in);
+        pixel_shader  = PSDefault(v_in);
+    }
+}
