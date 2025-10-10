@@ -29,7 +29,7 @@ static bool load_logo_pixels(struct c64_source *context)
     C64_LOG_DEBUG("Loading PNG pixel data with stb_image...");
 
     // Use obs_module_file() to get the path to the scaled logo in the data directory
-    char *logo_path = obs_module_file("images/c64stream-logo-scaled.png");
+    char *logo_path = obs_module_file("images/c64stream-logo.png");
     if (!logo_path) {
         C64_LOG_WARNING("Failed to locate PNG file in module data directory");
         return false;
@@ -93,7 +93,7 @@ static gs_texture_t *load_logo_texture(void)
     C64_LOG_DEBUG("Attempting to load logo texture...");
 
     // Use obs_module_file() to get the path to the scaled logo in the data directory
-    char *logo_path = obs_module_file("images/c64stream-logo-scaled.png");
+    char *logo_path = obs_module_file("images/c64stream-logo.png");
     if (!logo_path) {
         C64_LOG_WARNING("Failed to locate logo file in module data directory");
         return NULL;
