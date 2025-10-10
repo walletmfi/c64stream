@@ -39,14 +39,53 @@ static uint64_t c64_calculate_ideal_timestamp(struct c64_source *context, uint16
 // Helper functions for frame assembly (updated to use lock-free implementation)
 void c64_init_frame_assembly(struct frame_assembly *frame, uint16_t frame_num)
 {
-    // Delegate to lock-free implementation for performance
-    c64_init_frame_assembly_lockfree(frame, frame_num);
+    memset(frame, 0, sizeof(struct frame_assembly));
+    frame->frame_num = frame_num;
+    frame->start_time = os_gettime_ns();
+    frame->received_packets = 0;
+    frame->expected_packets = 0;
+    frame->complete = false;
+    frame->packets_received_mask = 0;
 }
 
 bool c64_is_frame_complete(struct frame_assembly *frame)
 {
-    // Delegate to lock-free implementation for performance
-    return c64_is_frame_complete_lockfree(frame);
+    uint16_t received = frame->received_packets;
+    uint16_t expected = frame->expected_packets;
+
+    if (expected == 0) {
+        return false;
+    }
+
+    bool complete = (received >= expected);
+
+    static uint16_t last_debug_frame = 0;
+    static uint64_t last_debug_time = 0;
+    uint64_t now = os_gettime_ns();
+
+    if (frame->frame_num != last_debug_frame && received > 0 &&
+        (last_debug_time == 0 || (now - last_debug_time) > 1000000000ULL)) {
+        C64_LOG_DEBUG("🎬 Frame completion check: frame %u has %u/%u packets (complete=%d)", frame->frame_num, received,
+                      expected, complete);
+        last_debug_frame = frame->frame_num;
+        last_debug_time = now;
+    }
+
+    if (complete && !frame->complete) {
+        frame->complete = true;
+        // Periodic frame completion monitoring (every 5 minutes)
+        static int completion_debug_count = 0;
+        static uint64_t last_completion_log_time = 0;
+        uint64_t now = os_gettime_ns();
+        if ((++completion_debug_count % 5000) == 0 ||
+            (now - last_completion_log_time >= 300000000000ULL)) { // Every 5k completions OR 5 minutes
+            C64_LOG_DEBUG("🎬 Frame COMPLETION SPOT CHECK: frame %u with %u/%u packets! (total count: %d)",
+                          frame->frame_num, received, expected, completion_debug_count);
+            last_completion_log_time = now;
+        }
+    }
+
+    return complete;
 }
 
 bool c64_is_frame_timeout(struct frame_assembly *frame)
@@ -260,17 +299,6 @@ void c64_process_audio_statistics_batch(struct c64_source *context, uint64_t cur
     }
 }
 
-void c64_init_frame_assembly_lockfree(struct frame_assembly *frame, uint16_t frame_num)
-{
-    memset(frame, 0, sizeof(struct frame_assembly));
-    frame->frame_num = frame_num;
-    frame->start_time = os_gettime_ns();
-    frame->received_packets = 0;
-    frame->expected_packets = 0;
-    frame->complete = false;
-    frame->packets_received_mask = 0;
-}
-
 bool c64_try_add_packet_lockfree(struct frame_assembly *frame, uint16_t packet_index)
 {
     if (packet_index >= C64_MAX_PACKETS_PER_FRAME) {
@@ -287,46 +315,6 @@ bool c64_try_add_packet_lockfree(struct frame_assembly *frame, uint16_t packet_i
 
     frame->received_packets++;
     return true;
-}
-
-bool c64_is_frame_complete_lockfree(struct frame_assembly *frame)
-{
-    uint16_t received = frame->received_packets;
-    uint16_t expected = frame->expected_packets;
-
-    if (expected == 0) {
-        return false;
-    }
-
-    bool complete = (received >= expected);
-
-    static uint16_t last_debug_frame = 0;
-    static uint64_t last_debug_time = 0;
-    uint64_t now = os_gettime_ns();
-
-    if (frame->frame_num != last_debug_frame && received > 0 &&
-        (last_debug_time == 0 || (now - last_debug_time) > 1000000000ULL)) {
-        C64_LOG_DEBUG("🎬 Frame completion check: frame %u has %u/%u packets (complete=%d)", frame->frame_num, received,
-                      expected, complete);
-        last_debug_frame = frame->frame_num;
-        last_debug_time = now;
-    }
-
-    if (complete && !frame->complete) {
-        frame->complete = true;
-        // Periodic frame completion monitoring (every 5 minutes)
-        static int completion_debug_count = 0;
-        static uint64_t last_completion_log_time = 0;
-        uint64_t now = os_gettime_ns();
-        if ((++completion_debug_count % 5000) == 0 ||
-            (now - last_completion_log_time >= 300000000000ULL)) { // Every 5k completions OR 5 minutes
-            C64_LOG_DEBUG("🎬 Frame COMPLETION SPOT CHECK: frame %u with %u/%u packets! (total count: %d)",
-                          frame->frame_num, received, expected, completion_debug_count);
-            last_completion_log_time = now;
-        }
-    }
-
-    return complete;
 }
 
 // Video thread function
@@ -373,8 +361,9 @@ void *c64_video_thread_func(void *data)
             }
             // On Windows, WSAESHUTDOWN means socket was shutdown - this is normal during reconnection
             if (error == WSAESHUTDOWN) {
-                C64_LOG_DEBUG("Video socket shutdown (WSAESHUTDOWN) - exiting receiver thread for reconnection");
-                break; // Socket was shutdown, exit gracefully
+                C64_LOG_DEBUG("Video socket shutdown (WSAESHUTDOWN) - waiting for reconnection");
+                os_sleep_ms(100); // Wait for reconnection to complete
+                continue;         // Continue waiting instead of exiting thread
             }
 #else
             if (error == EAGAIN || error == EWOULDBLOCK) {

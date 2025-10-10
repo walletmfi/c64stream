@@ -7,6 +7,7 @@ See <https://www.gnu.org/licenses/> for details.
 */
 #include <obs-module.h>
 #include <util/platform.h>
+#include <util/threading.h>
 #include <string.h>
 #include <pthread.h>
 #include <stdio.h>
@@ -21,66 +22,13 @@ See <https://www.gnu.org/licenses/> for details.
 #include "c64-record-audio.h"
 #include "c64-record-frames.h"
 #include "c64-types.h"
+#include "c64-file.h"
 
 #ifndef S_ISDIR
 #ifdef _WIN32
 #define S_ISDIR(m) (((m) & S_IFMT) == S_IFDIR)
 #endif
 #endif
-
-// Shared utility functions
-
-/**
- * Create directory path recursively (cross-platform)
- * @param path Directory path to create
- * @return true if successful or directory exists, false on error
- */
-bool c64_shared_create_directory_recursive(const char *path)
-{
-    char tmp[1024];
-    char *p = NULL;
-    size_t len;
-
-    snprintf(tmp, sizeof(tmp), "%s", path);
-    len = strlen(tmp);
-    if (tmp[len - 1] == '/' || tmp[len - 1] == '\\')
-        tmp[len - 1] = 0;
-
-    // Start from the beginning, but skip drive letters on Windows (e.g., "C:")
-    p = tmp;
-    if (len > 1 && tmp[1] == ':') {
-        p = tmp + 2; // Skip "C:" part on Windows
-    }
-    if (*p == '/' || *p == '\\') {
-        p++; // Skip leading slash
-    }
-
-    // Create each directory in the path
-    for (; *p; p++) {
-        if (*p == '/' || *p == '\\') {
-            *p = 0;
-            if (os_mkdir(tmp) != 0) {
-                // Check if it already exists (ignore error if it does)
-                struct stat st;
-                if (stat(tmp, &st) != 0 || !S_ISDIR(st.st_mode)) {
-                    // Directory creation failed and it doesn't exist
-                    return false;
-                }
-            }
-            *p = '/'; // Use forward slash consistently (works on Windows too)
-        }
-    }
-
-    // Create the final directory
-    if (os_mkdir(tmp) != 0) {
-        struct stat st;
-        if (stat(tmp, &st) != 0 || !S_ISDIR(st.st_mode)) {
-            return false;
-        }
-    }
-
-    return true;
-}
 
 // Session management functions
 
@@ -106,7 +54,7 @@ void c64_session_ensure_exists(struct c64_source *context)
 
     // Create the session directory recursively (cross-platform)
     C64_LOG_INFO("Attempting to create session directory: %s", context->session_folder);
-    if (!c64_shared_create_directory_recursive(context->session_folder)) {
+    if (!c64_create_directory_recursive(context->session_folder)) {
         C64_LOG_WARNING("Failed to create session directory: %s", context->session_folder);
         context->session_folder[0] = '\0'; // Clear on failure
     } else {
@@ -312,8 +260,8 @@ void c64_start_video_recording(struct c64_source *context)
 
     uint64_t timestamp_ms = os_gettime_ns() / 1000000;
     context->recording_start_time = timestamp_ms;
-    context->recorded_frames = 0;
-    context->recorded_audio_samples = 0;
+    os_atomic_store_long(&context->recorded_frames, 0);
+    os_atomic_store_long(&context->recorded_audio_samples, 0);
 
     // Write AVI header with detected frame rate
     c64_video_write_avi_header(context->video_file, context->width, context->height, context->expected_fps);
@@ -353,8 +301,8 @@ void c64_stop_video_recording(struct c64_source *context)
         context->audio_file = NULL;
     }
 
-    C64_LOG_INFO("Recording stopped. Frames: %u, Audio samples: %llu", context->recorded_frames,
-                 (unsigned long long)context->recorded_audio_samples);
+    C64_LOG_INFO("Recording stopped. Frames: %ld, Audio samples: %ld", os_atomic_load_long(&context->recorded_frames),
+                 os_atomic_load_long(&context->recorded_audio_samples));
 
     pthread_mutex_unlock(&context->recording_mutex);
 }
@@ -380,8 +328,8 @@ void c64_record_init(struct c64_source *context)
     context->recording_start_time = 0;
     context->csv_timing_base_ns = 0;
     context->network_timing_base_ns = 0;
-    context->recorded_frames = 0;
-    context->recorded_audio_samples = 0;
+    os_atomic_store_long(&context->recorded_frames, 0);
+    os_atomic_store_long(&context->recorded_audio_samples, 0);
 
     // Initialize recording mutex
     if (pthread_mutex_init(&context->recording_mutex, NULL) != 0) {

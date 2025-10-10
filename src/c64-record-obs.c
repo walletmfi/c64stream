@@ -63,9 +63,10 @@ void c64_obs_log_video_event(struct c64_source *context, uint64_t calculated_tim
     uint64_t audio_packets = (uint64_t)os_atomic_load_long(&context->audio_packets_received);
     uint64_t sequence_errors = (uint64_t)os_atomic_load_long(&context->video_sequence_errors);
 
-    fprintf(context->timing_file, "video,%u,%llu,%llu,%llu,%zu,%.3f,%u,%llu,%llu,%llu\n", context->recorded_frames,
-            (unsigned long long)elapsed_us, (unsigned long long)calculated_timestamp_ms,
-            (unsigned long long)actual_timestamp_ms, frame_size, context->expected_fps, context->recorded_audio_samples,
+    fprintf(context->timing_file, "video,%ld,%llu,%llu,%llu,%zu,%.3f,%ld,%llu,%llu,%llu\n",
+            os_atomic_load_long(&context->recorded_frames), (unsigned long long)elapsed_us,
+            (unsigned long long)calculated_timestamp_ms, (unsigned long long)actual_timestamp_ms, frame_size,
+            context->expected_fps, os_atomic_load_long(&context->recorded_audio_samples),
             (unsigned long long)video_packets, (unsigned long long)audio_packets, (unsigned long long)sequence_errors);
 
     // Flush immediately for real-time analysis
@@ -95,9 +96,10 @@ void c64_obs_log_audio_event(struct c64_source *context, uint64_t calculated_tim
     uint64_t audio_packets = (uint64_t)os_atomic_load_long(&context->audio_packets_received);
     uint64_t sequence_errors = (uint64_t)os_atomic_load_long(&context->video_sequence_errors);
 
-    fprintf(context->timing_file, "audio,0,%llu,%llu,%llu,%zu,%.3f,%u,%llu,%llu,%llu\n", (unsigned long long)elapsed_us,
-            (unsigned long long)calculated_timestamp_ms, (unsigned long long)actual_timestamp_ms, data_size,
-            context->expected_fps, context->recorded_audio_samples, (unsigned long long)video_packets,
+    fprintf(context->timing_file, "audio,0,%llu,%llu,%llu,%zu,%.3f,%ld,%llu,%llu,%llu\n",
+            (unsigned long long)elapsed_us, (unsigned long long)calculated_timestamp_ms,
+            (unsigned long long)actual_timestamp_ms, data_size, context->expected_fps,
+            os_atomic_load_long(&context->recorded_audio_samples), (unsigned long long)video_packets,
             (unsigned long long)audio_packets, (unsigned long long)sequence_errors);
 
     // Flush immediately for real-time analysis

@@ -38,9 +38,7 @@ void c64_process_video_statistics_batch(struct c64_source *context, uint64_t cur
 void c64_process_audio_statistics_batch(struct c64_source *context, uint64_t current_time);
 
 // Lock-free frame assembly functions
-void c64_init_frame_assembly_lockfree(struct frame_assembly *frame, uint16_t frame_num);
 bool c64_try_add_packet_lockfree(struct frame_assembly *frame, uint16_t packet_index);
-bool c64_is_frame_complete_lockfree(struct frame_assembly *frame);
 
 // Video thread functions
 void *c64_video_thread_func(void *data);

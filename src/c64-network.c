@@ -367,52 +367,6 @@ bool c64_resolve_hostname_with_dns(const char *hostname, const char *custom_dns_
     return false;
 }
 
-// Get the current user's Documents folder path
-bool c64_get_user_documents_path(char *path_buffer, size_t buffer_size)
-{
-    if (!path_buffer || buffer_size < 32) {
-        return false;
-    }
-
-#ifdef _WIN32
-    // Windows: Use SHGetFolderPath to get the current user's Documents folder
-    WCHAR documents_path_w[MAX_PATH];
-    char documents_path[MAX_PATH];
-
-    HRESULT hr = SHGetFolderPathW(NULL, CSIDL_MYDOCUMENTS, NULL, SHGFP_TYPE_CURRENT, documents_path_w);
-    if (SUCCEEDED(hr)) {
-        // Convert wide string to multi-byte string
-        int result =
-            WideCharToMultiByte(CP_UTF8, 0, documents_path_w, -1, documents_path, sizeof(documents_path), NULL, NULL);
-        if (result > 0) {
-            strncpy(path_buffer, documents_path, buffer_size - 1);
-            path_buffer[buffer_size - 1] = '\0';
-            obs_log(LOG_DEBUG, "[C64] Retrieved Windows Documents path: %s", path_buffer);
-            return true;
-        } else {
-            obs_log(LOG_WARNING, "[C64] Failed to convert Windows Documents path to UTF-8");
-        }
-    } else {
-        obs_log(LOG_WARNING, "[C64] Failed to get Windows Documents folder path (HRESULT: 0x%08X)", hr);
-    }
-
-    // Fallback to Public Documents if personal Documents fails
-    strcpy(path_buffer, "C:\\Users\\Public\\Documents");
-    return false;
-#else
-    // Unix/Linux/macOS: Use HOME environment variable
-    char *home_dir = getenv("HOME");
-    if (home_dir) {
-        snprintf(path_buffer, buffer_size, "%s/Documents", home_dir);
-        return true;
-    } else {
-        // Fallback
-        snprintf(path_buffer, buffer_size, "/home/%s/Documents", getenv("USER") ?: "user");
-        return false;
-    }
-#endif
-}
-
 socket_t c64_create_udp_socket(uint32_t port)
 {
     socket_t sock = socket(AF_INET, SOCK_DGRAM, 0);

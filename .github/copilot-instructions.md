@@ -90,10 +90,11 @@ fi
 - [ ] Code formatting passes
 - [ ] CMake formatting passes
 - [ ] Cross-platform compatibility maintained
+- [ ] Code committed with clear commit message
 
 ## Cross-Platform Notes
 **Networking:** Windows uses WinSock2, POSIX uses BSD sockets. Use wrapper functions in `c64-network.h`.
 **File paths:** Forward slashes work everywhere, handle Windows drive letters.
-**Threading:** Use pthread APIs (available on all platforms via OBS).
+**Threading:** Prefer atomic functions and semaphores from util/threading.h, falling back to pthread APIs if the code would otherwise be too complicated (available on all platforms via OBS).
 
 Windows compatibility validated via CI - local Windows testing optional.

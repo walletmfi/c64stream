@@ -34,7 +34,7 @@ void c64_network_write_header(struct c64_source *context)
     // Write CSV header for network packet analysis
     fprintf(context->network_file,
             "packet_type,elapsed_us,sequence_num,frame_num,line_num,last_packet,packet_size,data_payload,jitter_us,"
-            "packet_interval_us,total_video_packets,total_audio_packets,sequence_errors,buffer_depth\n");
+            "packet_interval_us,total_video_packets,total_audio_packets,sequence_errors\n");
     fflush(context->network_file);
 
     C64_LOG_INFO("Network packet CSV header written successfully");
@@ -73,19 +73,11 @@ void c64_network_log_video_packet(struct c64_source *context, uint16_t sequence_
     uint64_t audio_packets = (uint64_t)os_atomic_load_long(&context->audio_packets_received);
     uint64_t sequence_errors = (uint64_t)os_atomic_load_long(&context->video_sequence_errors);
 
-    // Estimate buffer depth (calculate queued packets in video buffer)
-    uint32_t buffer_depth = 0;
-    if (context->network_buffer) {
-        // Calculate approximate queued packets (simplified - actual calculation would require buffer access)
-        buffer_depth = 10; // Placeholder - real implementation would need buffer interface
-    }
-
     // Write video packet event to CSV
-    fprintf(context->network_file, "video,%llu,%u,%u,%u,%d,%zu,%zu,%lld,%llu,%llu,%llu,%llu,%u\n",
+    fprintf(context->network_file, "video,%llu,%u,%u,%u,%d,%zu,%zu,%lld,%llu,%llu,%llu,%llu\n",
             (unsigned long long)elapsed_us, sequence_num, frame_num, line_num, is_last_packet ? 1 : 0, packet_size,
             data_payload, (long long)jitter_us, (unsigned long long)packet_interval_us,
-            (unsigned long long)video_packets, (unsigned long long)audio_packets, (unsigned long long)sequence_errors,
-            buffer_depth);
+            (unsigned long long)video_packets, (unsigned long long)audio_packets, (unsigned long long)sequence_errors);
 
     // Flush every 50 packets to balance performance vs real-time analysis
     static int flush_counter = 0;
@@ -124,18 +116,11 @@ void c64_network_log_audio_packet(struct c64_source *context, uint16_t sequence_
     uint64_t audio_packets = (uint64_t)os_atomic_load_long(&context->audio_packets_received);
     uint64_t sequence_errors = (uint64_t)os_atomic_load_long(&context->video_sequence_errors);
 
-    // Estimate buffer depth (calculate queued packets in audio buffer)
-    uint32_t buffer_depth = 0;
-    if (context->network_buffer) {
-        // Calculate approximate queued packets (simplified - actual calculation would require buffer access)
-        buffer_depth = 5; // Placeholder - real implementation would need buffer interface
-    }
-
     // Write audio packet event to CSV (use 0 for video-specific fields)
-    fprintf(context->network_file, "audio,%llu,%u,0,0,0,%zu,%u,%lld,%llu,%llu,%llu,%llu,%u\n",
+    fprintf(context->network_file, "audio,%llu,%u,0,0,0,%zu,%u,%lld,%llu,%llu,%llu,%llu\n",
             (unsigned long long)elapsed_us, sequence_num, packet_size, sample_count, (long long)jitter_us,
             (unsigned long long)packet_interval_us, (unsigned long long)video_packets,
-            (unsigned long long)audio_packets, (unsigned long long)sequence_errors, buffer_depth);
+            (unsigned long long)audio_packets, (unsigned long long)sequence_errors);
 
     // Flush every 25 packets for audio (lower frequency than video)
     static int flush_counter = 0;
