@@ -520,8 +520,8 @@ static void c64_render_black_screen(struct c64_source *context, uint64_t timesta
     uint64_t now = os_gettime_ns();
     if ((++black_screen_debug_count % 10000) == 0 ||
         (now - last_black_screen_log_time >= 600000000000ULL)) { // Every 10k renders OR 10 minutes
-        C64_LOG_DEBUG("⚫ BLACK SCREEN SPOT CHECK: %ux%u RGBA, timestamp=%" PRIu64 " (total count: %d)",
-                      obs_frame.width, obs_frame.height, obs_frame.timestamp, black_screen_debug_count);
+        C64_LOG_DEBUG("⚫ BLACK SCREEN SPOT CHECK: %ux%u RGBA, timestamp=%" PRIu64 " (total count: %d)", context->width,
+                      context->height, timestamp_ns, black_screen_debug_count);
         last_black_screen_log_time = now;
     }
 }

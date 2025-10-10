@@ -669,7 +669,8 @@ void c64_video_tick(void *data, float seconds)
     } else {
         // Update texture with latest frame data
         obs_enter_graphics();
-        gs_texture_set_image(context->render_texture, context->frame_buffer, context->width * 4, false);
+        gs_texture_set_image(context->render_texture, (const uint8_t *)context->frame_buffer, context->width * 4,
+                             false);
         obs_leave_graphics();
     }
 }
