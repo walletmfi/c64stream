@@ -53,6 +53,11 @@ invoke_formatter() {
 
   case ${formatter} {
     clang)
+      # Ensure Homebrew clang-format is in PATH first (critical for CI)
+      if [[ -d /home/linuxbrew/.linuxbrew/bin ]]; then
+        export PATH="/home/linuxbrew/.linuxbrew/bin:/home/linuxbrew/.linuxbrew/sbin:${PATH}"
+      fi
+      
       # Try to find clang-format, preferring Homebrew installation on Linux
       if [[ -x /home/linuxbrew/.linuxbrew/bin/clang-format ]] {
         local formatter=/home/linuxbrew/.linuxbrew/bin/clang-format
@@ -63,12 +68,22 @@ invoke_formatter() {
         exit 2
       }
 
-      local -a formatter_version=($(${formatter} --version))
+      # Get version and parse it robustly
+      local version_output=$(${formatter} --version)
+      local version_number=$(echo "${version_output}" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
 
-      if ! is-at-least 19.1.1 ${formatter_version[-1]}; then
-        log_error "clang-format is not version 19.1.1 or above (found ${formatter_version[-1]})."
+      if [[ -z ${version_number} ]]; then
+        log_error "Could not parse clang-format version from: ${version_output}"
         exit 2
       fi
+
+      if ! is-at-least 19.1.1 ${version_number}; then
+        log_error "clang-format is not version 19.1.1 or above (found ${version_number})."
+        log_error "Full version output: ${version_output}"
+        exit 2
+      fi
+
+      log_info "Using clang-format ${version_number} at ${formatter}"
 
       # Accept any version 19.1.1 or later (removed upper bound check)
       # This allows using the latest clang-format versions
