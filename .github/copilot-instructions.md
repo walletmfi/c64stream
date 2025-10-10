@@ -90,6 +90,7 @@ fi
 - [ ] Code formatting passes
 - [ ] CMake formatting passes
 - [ ] Cross-platform compatibility maintained
+- [ ] Code committed with clear commit message
 
 ## Cross-Platform Notes
 **Networking:** Windows uses WinSock2, POSIX uses BSD sockets. Use wrapper functions in `c64-network.h`.
