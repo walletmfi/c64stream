@@ -85,62 +85,6 @@ A new window opens. Keep the default settings and click "OK":
 
 🎉 **DONE!** Enjoy streaming from your C64 Ultimate.
 
-If for some reason, you don't see an incoming video stream even though your C64 Ultimate is turned on, double check its host name or IP address. 
-
-### C64 Ultimate Setup 🎛️
-
-**Automatic Configuration (Recommended):** The OBS plugin automatically controls streaming on the Ultimate device. When you configure the Ultimate's hostname or IP address in the OBS plugin settings, the plugin tells the Ultimate device where to send streams and sends start commands automatically. Thus, no manual streaming adjustments are needed on the Ultimate device.
-
-**Manual Configuration:**
-1. Press F2 to access the Ultimate's configuration menu
-2. Navigate to "Data Streams" section
-3. Set "Stream VIC to" field: `your-obs-ip:11000` (e.g., `192.168.1.100:11000`)
-4. Set "Stream Audio to" field: `your-obs-ip:11001` (e.g., `192.168.1.100:11001`)
-5. Save configuration changes
-6. Manually start streaming from the Ultimate device
-
-For comprehensive configuration details, refer to the [official C64 Ultimate documentation](https://1541u-documentation.readthedocs.io/en/latest/data_streams.html).
-
-### Hostname vs IP Address 🌐
-
-The plugin supports both **hostnames** and **IP addresses** for the C64 Ultimate Host field with enhanced DNS resolution that works reliably across all platforms:
-
-**Using Hostnames (Recommended):**
-- **Default:** `c64u` - The plugin will try to resolve this hostname to an IP address
-- **Custom:** `my-c64u` or `retro-pc` - Use any hostname your C64 Ultimate device is known by
-- **FQDN Support:** The plugin automatically tries both `hostname` and `hostname.` (with trailing dot) for proper DNS resolution
-
-**Using IP Addresses:**
-- **Direct IP:** `192.168.1.64` - Standard IPv4 address format
-- **Fallback:** `0.0.0.0` - Accept streams from any C64 Ultimate (no automatic control)
-
-**DNS Resolution:**
-
-The plugin offers hostname resolution that works reliably on Linux and macOS where system DNS may fail for local device names:
-
-1. **System DNS First:** Tries standard system DNS resolution (works for internet hostnames and properly configured networks)
-2. **FQDN Resolution:** Attempts resolution with trailing dot (e.g., `c64u.` for some network configurations)
-3. **Direct DNS Queries:** On Linux/macOS, bypasses systemd-resolved by querying DNS servers directly:
-   - Uses configured **DNS Server IP** (default: `192.168.1.1`)
-   - Falls back to common router IPs: `192.168.0.1`, `10.0.0.1`, `172.16.0.1`
-4. **Cross-Platform:** Windows uses system DNS (which works reliably), Linux/macOS use enhanced resolution
-
-**DNS Server Configuration:**
-- **Default:** `192.168.1.1` (most common home router DNS server)
-- **Custom:** Set to your router's IP or a specific DNS server (e.g., `192.168.0.1`, `10.0.0.1`)
-- **Automatic Fallback:** If the configured DNS server fails, tries other common router IPs
-- **Why This Helps:** Solves Linux/macOS issues where `c64u` hostname doesn't resolve through system DNS but works via direct router queries
-
-**Examples:**
-- `c64u` → resolves to `192.168.1.64` via enhanced DNS resolution
-- `192.168.1.64` → used directly as IP address
-- `retro-basement.local` → resolves via mDNS/Bonjour or direct DNS
-- `ultimate64` → tries system DNS first, then direct router DNS queries
-
-**Platform-Specific Behavior:**
-- **Windows:** Uses system DNS (typically works without issues)
-- **Linux/macOS:** Uses enhanced DNS resolution to bypass systemd-resolved limitations
-- **All Platforms:** Support both hostname and IP address formats seamlessly
 
 ## Plugin Setup
 
@@ -239,6 +183,63 @@ audio,2341,847,0,0,192,125
 **Sample Recording:** See [docs/recordings/session_19700101_024625](docs/recordings/session_19700101_024625) for complete examples with all file types.
 
 **Activation:** CSV logging is automatically enabled whenever any recording option is active. No additional configuration required.
+
+## Network Details
+
+### Hostname vs IP Address 🌐
+
+The plugin supports both **hostnames** and **IP addresses** for the C64 Ultimate Host field with enhanced DNS resolution that works reliably across all platforms:
+
+**Using Hostnames (Recommended):**
+- **Default:** `c64u` - The plugin will try to resolve this hostname to an IP address
+- **Custom:** `my-c64u` or `retro-pc` - Use any hostname your C64 Ultimate device is known by
+- **FQDN Support:** The plugin automatically tries both `hostname` and `hostname.` (with trailing dot) for proper DNS resolution
+
+**Using IP Addresses:**
+- **Direct IP:** `192.168.1.64` - Standard IPv4 address format
+- **Fallback:** `0.0.0.0` - Accept streams from any C64 Ultimate (no automatic control)
+
+### DNS Resolution
+
+The plugin offers hostname resolution that works reliably on Linux and macOS where system DNS may fail for local device names:
+
+1. **System DNS First:** Tries standard system DNS resolution (works for internet hostnames and properly configured networks)
+2. **FQDN Resolution:** Attempts resolution with trailing dot (e.g., `c64u.` for some network configurations)
+3. **Direct DNS Queries:** On Linux/macOS, bypasses systemd-resolved by querying DNS servers directly:
+   - Uses configured **DNS Server IP** (default: `192.168.1.1`)
+   - Falls back to common router IPs: `192.168.0.1`, `10.0.0.1`, `172.16.0.1`
+4. **Cross-Platform:** Windows uses system DNS (which works reliably), Linux/macOS use enhanced resolution
+
+**DNS Server Configuration:**
+- **Default:** `192.168.1.1` (most common home router DNS server)
+- **Custom:** Set to your router's IP or a specific DNS server (e.g., `192.168.0.1`, `10.0.0.1`)
+- **Automatic Fallback:** If the configured DNS server fails, tries other common router IPs
+- **Why This Helps:** Solves Linux/macOS issues where `c64u` hostname doesn't resolve through system DNS but works via direct router queries
+
+**Examples:**
+- `c64u` → resolves to `192.168.1.64` via enhanced DNS resolution
+- `192.168.1.64` → used directly as IP address
+- `retro-basement.local` → resolves via mDNS/Bonjour or direct DNS
+- `ultimate64` → tries system DNS first, then direct router DNS queries
+
+**Platform-Specific Behavior:**
+- **Windows:** Uses system DNS (typically works without issues)
+- **Linux/macOS:** Uses enhanced DNS resolution to bypass systemd-resolved limitations
+- **All Platforms:** Support both hostname and IP address formats seamlessly
+
+### C64 Ultimate Setup 🎛️
+
+**Automatic Configuration (Recommended):** The OBS plugin automatically controls streaming on the Ultimate device. When you configure the Ultimate's hostname or IP address in the OBS plugin settings, the plugin tells the Ultimate device where to send streams and sends start commands automatically. Thus, no manual streaming adjustments are needed on the Ultimate device.
+
+**Manual Configuration:**
+1. Press F2 to access the Ultimate's configuration menu
+2. Navigate to "Data Streams" section
+3. Set "Stream VIC to" field: `your-obs-ip:11000` (e.g., `192.168.1.100:11000`)
+4. Set "Stream Audio to" field: `your-obs-ip:11001` (e.g., `192.168.1.100:11001`)
+5. Save configuration changes
+6. Manually start streaming from the Ultimate device
+
+For comprehensive configuration details, refer to the [official C64 Ultimate documentation](https://1541u-documentation.readthedocs.io/en/latest/data_streams.html).
 
 
 ## Technical Details 🔧
