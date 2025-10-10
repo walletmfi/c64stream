@@ -15,6 +15,9 @@ See <https://www.gnu.org/licenses/> for details.
 #include "c64-file.h"
 #include <obs-module.h>
 
+// Forward declaration of callback
+static bool crt_enable_modified(obs_properties_t *props, obs_property_t *property, obs_data_t *settings);
+
 obs_properties_t *c64_create_properties(void *data)
 {
     UNUSED_PARAMETER(data);
@@ -103,13 +106,15 @@ obs_properties_t *c64_create_properties(void *data)
     // Master control
     obs_property_t *crt_enable_prop = obs_properties_add_bool(effects_props, "crt_enable", "Enable CRT Visual Effects");
     obs_property_set_long_description(crt_enable_prop, "Enable or disable all CRT visual effects");
+    obs_property_set_modified_callback(crt_enable_prop, crt_enable_modified);
 
     // Section label
     obs_properties_add_text(effects_props, "crt_label", "CRT EFFECT CONFIGURATION", OBS_TEXT_INFO);
 
     // Scanlines
     obs_properties_add_text(effects_props, "scanlines_label", "▶ Scanlines", OBS_TEXT_INFO);
-    obs_property_t *scanlines_enable_prop = obs_properties_add_bool(effects_props, "scanlines_enable", "Enable Scanlines");
+    obs_property_t *scanlines_enable_prop =
+        obs_properties_add_bool(effects_props, "scanlines_enable", "Enable Scanlines");
     obs_property_set_long_description(scanlines_enable_prop, "Enable horizontal scanline effect");
 
     obs_property_t *scanlines_opacity_prop =
@@ -144,6 +149,51 @@ obs_properties_t *c64_create_properties(void *data)
     obs_property_set_long_description(bloom_threshold_prop, "Brightness threshold for bloom effect");
 
     return props;
+}
+
+// Callback for CRT enable checkbox - enables/disables all CRT effect controls
+static bool crt_enable_modified(obs_properties_t *props, obs_property_t *property, obs_data_t *settings)
+{
+    UNUSED_PARAMETER(property);
+    bool enabled = obs_data_get_bool(settings, "crt_enable");
+
+    // Get the effects group properties
+    obs_property_t *effects_group = obs_properties_get(props, "effects_group");
+    if (!effects_group)
+        return true;
+
+    obs_properties_t *effects_props = obs_property_group_content(effects_group);
+    if (!effects_props)
+        return true;
+
+    // Enable/disable all effect sub-controls
+    obs_property_t *scanlines_enable = obs_properties_get(effects_props, "scanlines_enable");
+    obs_property_t *scanlines_opacity = obs_properties_get(effects_props, "scanlines_opacity");
+    obs_property_t *scanlines_width = obs_properties_get(effects_props, "scanlines_width");
+    obs_property_t *pixel_width = obs_properties_get(effects_props, "pixel_width");
+    obs_property_t *pixel_height = obs_properties_get(effects_props, "pixel_height");
+    obs_property_t *bloom_enable = obs_properties_get(effects_props, "bloom_enable");
+    obs_property_t *bloom_strength = obs_properties_get(effects_props, "bloom_strength");
+    obs_property_t *bloom_threshold = obs_properties_get(effects_props, "bloom_threshold");
+
+    if (scanlines_enable)
+        obs_property_set_enabled(scanlines_enable, enabled);
+    if (scanlines_opacity)
+        obs_property_set_enabled(scanlines_opacity, enabled);
+    if (scanlines_width)
+        obs_property_set_enabled(scanlines_width, enabled);
+    if (pixel_width)
+        obs_property_set_enabled(pixel_width, enabled);
+    if (pixel_height)
+        obs_property_set_enabled(pixel_height, enabled);
+    if (bloom_enable)
+        obs_property_set_enabled(bloom_enable, enabled);
+    if (bloom_strength)
+        obs_property_set_enabled(bloom_strength, enabled);
+    if (bloom_threshold)
+        obs_property_set_enabled(bloom_threshold, enabled);
+
+    return true;
 }
 
 void c64_set_property_defaults(obs_data_t *settings)
