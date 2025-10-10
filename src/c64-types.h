@@ -150,8 +150,11 @@ struct c64_source {
     FILE *video_file;
     FILE *audio_file;
     FILE *timing_file;
+    FILE *network_file;
     char session_folder[800];  // Current session folder path
     uint64_t recording_start_time;
+    uint64_t csv_timing_base_ns;      // Nanosecond timestamp when first CSV entry is written
+    uint64_t network_timing_base_ns;  // Nanosecond timestamp when first network entry is written
     uint32_t recorded_frames;
     uint32_t recorded_audio_samples;
     pthread_mutex_t recording_mutex;

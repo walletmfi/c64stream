@@ -35,4 +35,10 @@ struct c64_source;
 // Protocol operations
 void c64_send_control_command(struct c64_source *context, bool enable, uint8_t stream_id);
 
+// Network packet logging utilities (conditional execution for performance)
+void c64_log_video_packet_if_enabled(struct c64_source *context, const uint8_t *packet, size_t packet_size,
+                                     uint64_t timestamp_ns);
+void c64_log_audio_packet_if_enabled(struct c64_source *context, const uint8_t *packet, size_t packet_size,
+                                     uint64_t timestamp_ns);
+
 #endif  // C64_PROTOCOL_H

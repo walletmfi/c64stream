@@ -10,6 +10,7 @@
 #include "c64-protocol.h"
 #include "c64-video.h"  // For batch statistics processing
 #include "c64-record.h" // For recording functions
+#include "c64-record-network.h"
 
 // Audio thread function
 void *audio_thread_func(void *data)
@@ -88,6 +89,9 @@ void *audio_thread_func(void *data)
         os_atomic_set_long(&context->audio_packets_received, os_atomic_load_long(&context->audio_packets_received) + 1);
         os_atomic_set_long(&context->audio_bytes_received,
                            os_atomic_load_long(&context->audio_bytes_received) + (long)received);
+
+        // Log network packet at UDP reception (conditional - no parsing overhead if disabled)
+        c64_log_audio_packet_if_enabled(context, packet, received, packet_time);
 
         // Simple approach: just process packets as they arrive, no sequence warnings
 

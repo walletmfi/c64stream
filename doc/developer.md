@@ -7,13 +7,13 @@ C64 Ultimate video/audio streaming plugin for OBS Studio.
 **Windows:**
 - Visual Studio 2022 (with C++ workload)
 - CMake 3.30+
-- LLVM 19.1.1+ (for clang-format)
+- LLVM 21.1.1+ (for clang-format)
 
 **Linux:**
 - build-essential
 - cmake 3.28+
 - zsh
-- clang-format 19.1.1+
+- clang-format 21.1.1+
 
 **macOS:**
 - Xcode 16.0+
@@ -92,16 +92,16 @@ cp build_macos/c64stream.so "$HOME/Library/Application Support/obs-studio/plugin
 
 ## Code Formatting (Mandatory)
 
-**All code must be formatted with clang-format 19.1.1+ before committing.** This ensures consistency across platforms and prevents build failures on Linux where formatting is automatically checked.
+**All code must be formatted with clang-format 21.1.1+ before committing.** This ensures consistency across platforms and prevents build failures on Linux where formatting is automatically checked.
 
 ### Version Requirement
 
-**clang-format 19.1.1 or later is required.** Latest versions (20.x, 21.x, etc.) are fully supported.
+**clang-format 21.1.1 or later is required.** Latest versions (22.x, 23.x, etc.) are fully supported.
 
 **Check your version:**
 ```bash
 clang-format --version
-# Should show: clang-format version 19.1.1 or higher
+# Should show: clang-format version 21.1.1 or higher
 ```
 
 **Install latest clang-format:**

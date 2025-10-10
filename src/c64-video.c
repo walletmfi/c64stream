@@ -14,6 +14,8 @@
 #include "c64-color.h"
 #include "c64-types.h"
 #include "c64-protocol.h"
+#include "c64-record-network.h"
+#include "c64-protocol.h"
 #include "c64-record.h"
 #include "c64-source.h"
 
@@ -52,9 +54,20 @@ void c64_render_frame_direct(struct c64_source *context, struct frame_assembly *
     // First, assemble the frame with interpolation for missing rows
     c64_assemble_frame_with_interpolation(context, frame);
 
+    // Generate monotonic timestamp based on frame sequence for butter-smooth playback
+    uint64_t monotonic_timestamp = c64_calculate_ideal_timestamp(context, frame->frame_num);
+
     // Save frame to disk if enabled
     if (context->save_frames) {
         c64_save_frame_as_bmp(context, context->frame_buffer);
+
+        // Log frame saving timing to CSV if enabled
+        if (context->timing_file) {
+            uint64_t calculated_timestamp_ms = monotonic_timestamp / 1000000; // Convert ns to ms
+            uint64_t actual_timestamp_ms = os_gettime_ns() / 1000000;
+            size_t frame_size = context->width * context->height * 4; // RGBA bytes
+            c64_obs_log_video_event(context, calculated_timestamp_ms, actual_timestamp_ms, frame_size);
+        }
     }
 
     // Record frame to video file if recording is enabled
@@ -71,8 +84,6 @@ void c64_render_frame_direct(struct c64_source *context, struct frame_assembly *
     obs_frame.width = context->width;
     obs_frame.height = context->height;
     obs_frame.format = VIDEO_FORMAT_RGBA;
-    // Generate monotonic timestamp based on frame sequence for butter-smooth playback
-    uint64_t monotonic_timestamp = c64_calculate_ideal_timestamp(context, frame->frame_num);
     obs_frame.timestamp = monotonic_timestamp; // Use monotonic timestamp instead of packet timestamp
     obs_frame.flip = false;                    // No vertical flip needed
 
@@ -402,11 +413,16 @@ void *c64_video_thread_func(void *data)
         os_atomic_set_long(&context->video_packets_received, os_atomic_load_long(&context->video_packets_received) + 1);
         os_atomic_set_long(&context->video_bytes_received,
                            os_atomic_load_long(&context->video_bytes_received) + (long)received);
+
+        // Log network packet at UDP reception (conditional - no parsing overhead if disabled)
+        c64_log_video_packet_if_enabled(context, packet, received, packet_time);
+
+        // Parse packet header for validation (always needed for packet validation)
         uint16_t pixels_per_line = *(uint16_t *)(packet + 6);
         uint8_t lines_per_packet = packet[8];
         uint8_t bits_per_pixel = packet[9];
-        // Simple approach: just count packets received, no complex sequence tracking
 
+        // Simple approach: just count packets received, no complex sequence tracking
         uint64_t now = os_gettime_ns();
         c64_process_video_statistics_batch(context, now);
 

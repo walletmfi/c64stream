@@ -192,9 +192,9 @@ format_code() {
     local clang_format_cmd=""
     local clang_format_version=""
 
-    # Try to find clang-format-19 first (preferred), then clang-format
-    if command -v clang-format-19 >/dev/null 2>&1; then
-        clang_format_cmd="clang-format-19"
+    # Try to find clang-format-21 first (preferred), then clang-format
+    if command -v clang-format-21 >/dev/null 2>&1; then
+        clang_format_cmd="clang-format-21"
     elif command -v clang-format >/dev/null 2>&1; then
         clang_format_cmd="clang-format"
     elif [[ -f "/usr/bin/clang-format" ]]; then
@@ -209,11 +209,11 @@ format_code() {
 
     if [[ -z "$clang_format_cmd" ]]; then
         log_warning "clang-format not found, skipping code formatting"
-        log_warning "Install clang-format 19.1.1+ to enable automatic formatting"
+        log_warning "Install clang-format 21.1.1+ to enable automatic formatting"
         return 0
     fi
 
-    # Check version - require 19.1.1 or later (latest versions are now accepted)
+    # Check version - require 21.1.1 or later (latest versions are now accepted)
     clang_format_version=$("$clang_format_cmd" --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
 
     if [[ -n "$clang_format_version" ]]; then
@@ -222,10 +222,10 @@ format_code() {
         local minor=$(echo "$clang_format_version" | cut -d. -f2)
         local patch=$(echo "$clang_format_version" | cut -d. -f3)
 
-        # Check if version is at least 19.1.1
-        if [[ "$major" -lt 19 ]] || [[ "$major" -eq 19 && "$minor" -lt 1 ]] || [[ "$major" -eq 19 && "$minor" -eq 1 && "$patch" -lt 1 ]]; then
-            log_error "clang-format version $clang_format_version is too old (require 19.1.1+)"
-            log_error "Install clang-format 19.1.1 or later"
+        # Check if version is at least 21.1.1
+        if [[ "$major" -lt 21 ]] || [[ "$major" -eq 21 && "$minor" -lt 1 ]] || [[ "$major" -eq 21 && "$minor" -eq 1 && "$patch" -lt 1 ]]; then
+            log_error "clang-format version $clang_format_version is too old (require 21.1.1+)"
+            log_error "Install clang-format 21.1.1 or later"
             log_error "Skipping formatting - THIS WILL CAUSE CI FAILURES!"
             return 0
         fi

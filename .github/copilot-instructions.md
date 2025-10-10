@@ -2,7 +2,8 @@
 
 ## Project Overview
 
-This repository provides an OBS Studio source plugin for streaming video and audio from a Commodore 64 Ultimate device to OBS Studio. The plugin implements streaming capabilities according to the C64 Ultimate data streams specification. See `doc/c64-stream-spec.md` for a concise technical specification, or the [official documentation](https://1541u-documentation.readthedocs.io/en/latest/data_streams.html#data_streams) for full details.
+This repository provides an OBS Studio source plugin for streaming video and audio from a Commodore 64 Ultimate dev- **clang-format version too old**
+- Solution: Format checking requires clang-format 21.1.1+. Either upgrade or skip format checking for development builds. The CI system has the correct version.e to OBS Studio. The plugin implements streaming capabilities according to the C64 Ultimate data streams specification. See `doc/c64-stream-spec.md` for a concise technical specification, or the [official documentation](https://1541u-documentation.readthedocs.io/en/latest/data_streams.html#data_streams) for full details.
 
 ### Debug Build Tips:
 - Use `RelWithDebInfo` configuration for debugging with symbols
@@ -34,7 +35,7 @@ This repository provides an OBS Studio source plugin for streaming video and aud
 
 5. **Code Formatting (MANDATORY)**
    - **ALWAYS run `./build-aux/run-clang-format` after ANY code changes**
-   - All C/C++ code must pass clang-format 19.1.1+ validation
+   - All C/C++ code must pass clang-format 21.1.1+ validation
    - All files must end with a single newline character
    - Use 4 spaces for indentation, 120 character line limit
    - VS Code is configured to auto-format on save
@@ -87,7 +88,7 @@ This repository provides an OBS Studio source plugin for streaming video and aud
    - Linux/macOS: `zsh` (required for build scripts)
    - Windows: PowerShell 5.1+
 4. **Formatting tools:**
-   - `clang-format` version 19.1.1+ (critical requirement)
+   - `clang-format` version 21.1.1+ (critical requirement)
    - `gersemi` for CMake formatting (install via: `pip install gersemi`)
 
 ### Dependency Management:
@@ -173,7 +174,7 @@ export CI=1
 - Solution: Dependencies not downloaded. The build system should auto-download them, but if it fails, check internet connectivity and buildspec.json integrity.
 
 **Issue: "clang-format version too old"**
-- Solution: Format checking requires clang-format 19.1.1+. Either upgrade or skip format checking for development builds. The CI system has the correct version.
+- Solution: Format checking requires clang-format 21.1.1+. Either upgrade or skip format checking for development builds. The CI system has the correct version.
 
 **Issue: "zsh not found"**
 - Solution: Install zsh (`sudo apt-get install zsh` on Ubuntu)
@@ -268,7 +269,7 @@ Get-ChildItem src/*.c, src/*.h | ForEach-Object {
 - **Visual Studio Build Tools 2022** - Required for MSVC compiler
 - **Windows SDK 10.0.26100** (or compatible version)
 - **CMake 3.30.5+** - Install from cmake.org
-- **LLVM 19.1.1+** - Install from llvm.org/builds/ for clang-format
+- **LLVM 21.1.1+** - Install from llvm.org/builds/ for clang-format
 - **PowerShell 5.1+ or 7+** - For build script execution
 
 **Common Windows Build Issues:**

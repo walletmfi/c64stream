@@ -186,6 +186,8 @@ All recording files are organized into session folders with timestamps:
 ~/Documents/obs-studio/c64stream/recordings/
 ├── session_20240929_143052/
 │   ├── frames/           # BMP frame files (if enabled)
+│   ├── network.csv       # Network timings
+│   ├── obs.csv           # OBS timings
 │   ├── video.avi         # Uncompressed video (if enabled)
 │   └── audio.wav         # Uncompressed audio (if enabled)
 └── session_20240929_151234/
@@ -209,6 +211,38 @@ All recording files are organized into session folders with timestamps:
 - **⚠️ Checkbox states persist across OBS restarts - uncheck to stop recording or risk filling disk space**
 - Files are written in real-time as data is received from the C64 Ultimate
 - Session folders are created automatically with proper directory structure
+
+### Debug & Analysis CSV Logs 📊
+
+The plugin automatically generates detailed CSV logs for debugging OBS performance and analyzing C64 Ultimate network streams. These logs enable bit-accurate recording analysis and precise frame timing measurements.
+
+**Generated CSV Files:**
+- `obs.csv` - OBS processing timeline with microsecond precision
+- `network.csv` - UDP packet reception log with network timing analysis
+
+**Sample OBS Timeline (obs.csv):**
+```csv
+event_type,frame_num,elapsed_us,calculated_timestamp_ms,actual_timestamp_ms,data_size_bytes,fps
+video,0,1443,6385631,6385625,368640,59.826
+audio,0,15234,6385646,6385640,1536,48000
+```
+
+**Sample Network Analysis (network.csv):**
+```csv
+packet_type,elapsed_us,sequence_num,frame_num,line_num,packet_size,jitter_us
+video,225,1510,7671,8,780,0
+audio,2341,847,0,0,192,125
+```
+
+**Use Cases:**
+- **Debug OBS Performance:** Analyze frame processing delays and audio sync issues
+- **Network Stream Analysis:** Monitor UDP packet timing, jitter, and sequence errors
+- **Bit-Accurate Recordings:** Capture every frame with precise timing for forensic analysis
+- **C64 Ultimate Diagnostics:** Validate device streaming performance and network stability
+
+**Sample Recording:** See [docs/recordings/session_19700101_024625](docs/recordings/session_19700101_024625) for complete examples with all file types.
+
+**Activation:** CSV logging is automatically enabled whenever any recording option is active. No additional configuration required.
 
 
 ## Technical Details 🔧

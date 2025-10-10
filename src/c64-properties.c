@@ -73,11 +73,12 @@ obs_properties_t *c64_create_properties(void *data)
 
     obs_property_t *save_frames_prop = obs_properties_add_bool(recording_props, "save_frames", "☐ Save BMP Frames");
     obs_property_set_long_description(
-        save_frames_prop, "Save each frame as BMP in frames/ subfolder (for debugging - impacts performance)");
+        save_frames_prop,
+        "Save each frame as BMP in frames/ subfolder + CSV timing (for debugging - impacts performance)");
 
     obs_property_t *record_video_prop = obs_properties_add_bool(recording_props, "record_video", "☐ Record AVI + WAV");
-    obs_property_set_long_description(record_video_prop,
-                                      "Record uncompressed AVI video + WAV audio (for debugging - high disk usage)");
+    obs_property_set_long_description(
+        record_video_prop, "Record uncompressed AVI video + WAV audio + CSV timing (for debugging - high disk usage)");
 
     // Save Folder (applies to both frame saving and video recording) - now properly in Recording group
     obs_property_t *save_folder_prop =

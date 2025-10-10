@@ -116,9 +116,9 @@ install_formatting_tools() {
     # Ensure clang-format is available
     if ! command -v clang-format >/dev/null 2>&1; then
         # Try to install a specific version
-        if apt-cache show clang-format-19 >/dev/null 2>&1; then
-            sudo apt-get install -y clang-format-19
-            sudo update-alternatives --install /usr/bin/clang-format clang-format /usr/bin/clang-format-19 100
+        if apt-cache show clang-format-21 >/dev/null 2>&1; then
+            sudo apt-get install -y clang-format-21
+            sudo update-alternatives --install /usr/bin/clang-format clang-format /usr/bin/clang-format-21 100
         else
             sudo apt-get install -y clang-format
         fi

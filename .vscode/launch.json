@@ -15,34 +15,34 @@
 
     "version": "0.2.0",
     "configurations": [
-        // {
-        //     "name": "🐧 Debug OBS with C64 Stream Plugin (Linux)",
-        //     "type": "cppdbg",
-        //     "request": "launch",
-        //     "program": "/usr/bin/obs",
-        //     "args": ["--verbose"],
-        //     "stopAtEntry": false,
-        //     "cwd": "${workspaceFolder}",
-        //     "environment": [],
-        //     "externalConsole": false,
-        //     "MIMode": "gdb",
-        //     "setupCommands": [
-        //         {
-        //             "description": "Enable pretty-printing for gdb",
-        //             "text": "-enable-pretty-printing",
-        //             "ignoreFailures": true
-        //         }
-        //     ],
-        //     "preLaunchTask": "Linux: Build and Install Plugin",
-        //     "miDebuggerPath": "/usr/bin/gdb",
-        //     "logging": {
-        //         "moduleLoad": false,
-        //         "trace": false,
-        //         "engineLogging": false,
-        //         "programOutput": true,
-        //         "exceptions": true
-        //     }
-        // },
+        {
+            "name": "🐧 Debug OBS with C64 Stream Plugin (Linux)",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "/usr/bin/obs",
+            "args": ["--verbose"],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}",
+            "environment": [],
+            "externalConsole": false,
+            "MIMode": "gdb",
+            "setupCommands": [
+                {
+                    "description": "Enable pretty-printing for gdb",
+                    "text": "-enable-pretty-printing",
+                    "ignoreFailures": true
+                }
+            ],
+            "preLaunchTask": "Linux: Build and Install Plugin",
+            "miDebuggerPath": "/usr/bin/gdb",
+            "logging": {
+                "moduleLoad": false,
+                "trace": false,
+                "engineLogging": false,
+                "programOutput": true,
+                "exceptions": true
+            }
+        },
         {
             "name": "🪟 Debug OBS with C64 Stream Plugin (Windows)",
             "type": "cppvsdbg",

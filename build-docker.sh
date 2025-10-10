@@ -148,7 +148,7 @@ DEBIAN_FRONTEND=noninteractive apt-get install -y \
     libobs-dev \
     libobs0t64 \
     zsh \
-    clang-format-19 \
+    clang-format-21 \
     python3-pip \
     git
 
@@ -162,8 +162,8 @@ cmake --build build_x86_64 --config RelWithDebInfo
 
 # Run formatting checks
 echo "Checking code formatting..."
-clang-format-19 --dry-run --Werror src/plugin-main.c tests/*.c || {
-    echo "Code formatting issues found. Run 'clang-format-19 -i src/plugin-main.c tests/*.c' to fix."
+clang-format-21 --dry-run --Werror src/plugin-main.c tests/*.c || {
+    echo "Code formatting issues found. Run 'clang-format-21 -i src/plugin-main.c tests/*.c' to fix."
     exit 1
 }
 

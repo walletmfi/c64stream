@@ -138,6 +138,11 @@ target_sources(
     src/c64-audio.c
     src/c64-source.c
     src/c64-record.c
+    src/c64-record-obs.c
+    src/c64-record-network.c
+    src/c64-record-video.c
+    src/c64-record-audio.c
+    src/c64-record-frames.c
     src/c64-version.c
     src/c64-properties.c
     src/c64-logo.c

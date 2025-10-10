@@ -1,1 +1,126 @@
-.run-format.zsh
+#!/usr/bin/env zsh
+
+builtin emulate -L zsh
+setopt EXTENDED_GLOB
+setopt ERR_EXIT
+setopt ERR_RETURN
+setopt NO_UNSET
+setopt PIPE_FAIL
+
+autoload -Uz is-at-least
+
+# Simple version check and format
+main() {
+  local formatter=""
+  
+  # Find clang-format
+  if [[ -x /home/linuxbrew/.linuxbrew/bin/clang-format ]]; then
+    formatter="/home/linuxbrew/.linuxbrew/bin/clang-format"
+  elif command -v clang-format >/dev/null 2>&1; then
+    formatter="clang-format"
+  else
+    echo "❌ No viable clang-format version found (required 21.1.1 or later)" >&2
+    exit 2
+  fi
+
+  # Check version
+  local version_output=$($formatter --version)
+  local version_number=$(echo "$version_output" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+
+  if [[ -z $version_number ]]; then
+    echo "❌ Could not parse clang-format version from: $version_output" >&2
+    exit 2
+  fi
+
+  if ! is-at-least 21.1.1 $version_number; then
+    echo "❌ clang-format is not version 21.1.1 or above (found $version_number)" >&2
+    echo "Full version output: $version_output" >&2
+    exit 2
+  fi
+
+  echo "✅ Using clang-format $version_number at $formatter" >&2
+
+  # Parse arguments
+  local check_mode=false
+  local fail_condition="never"
+  
+  while [[ $# -gt 0 ]]; do
+    case $1 in
+      --version)
+        echo "run-clang-format 1.0.0"
+        exit 0
+        ;;
+      --check)
+        check_mode=true
+        shift
+        ;;
+      --fail-error)
+        fail_condition="error"
+        shift
+        ;;
+      --fail-warning)
+        fail_condition="warning"
+        shift
+        ;;
+      --fail-never)
+        fail_condition="never"
+        shift
+        ;;
+      -*)
+        echo "Unknown option: $1" >&2
+        exit 1
+        ;;
+      *)
+        break
+        ;;
+    esac
+  done
+  
+  if [[ "$check_mode" == "true" ]]; then
+    local files=($@)
+    if [[ ${#files} -eq 0 ]]; then
+      files=(src/**/*.(c|cpp|h|hpp|m|mm)(.N) tests/**/*.(c|cpp|h|hpp|m|mm)(.N))
+    fi
+    
+    local num_failures=0
+    for file in $files; do
+      if [[ -f $file ]]; then
+        if ! $formatter --dry-run --Werror -style=file -fallback-style=none "$file" &>/dev/null; then
+          echo "❌ File $file is not correctly formatted" >&2
+          ((num_failures++))
+        fi
+      fi
+    done
+    
+    if [[ $num_failures -eq 0 ]]; then
+      echo "✅ All source files are correctly formatted" >&2
+    else
+      if [[ "$fail_condition" == "error" ]]; then
+        exit 2
+      elif [[ "$fail_condition" == "warning" ]]; then
+        exit 2
+      else
+        # fail-never
+        echo "⚠️ Found $num_failures formatting issues but continuing (fail-never mode)" >&2
+        exit 0
+      fi
+    fi
+  else
+    # Format files
+    local files=($@)
+    if [[ ${#files} -eq 0 ]]; then
+      files=(src/**/*.(c|cpp|h|hpp|m|mm)(.N) tests/**/*.(c|cpp|h|hpp|m|mm)(.N))
+    fi
+    
+    for file in $files; do
+      if [[ -f $file ]]; then
+        echo "Formatting $file" >&2
+        $formatter -style=file -fallback-style=none -i "$file"
+      fi
+    done
+    
+    echo "✅ Formatted ${#files} source files" >&2
+  fi
+}
+
+main "$@"
