@@ -1,15 +1,24 @@
+/*
+C64 Stream - An OBS Studio source plugin for Commodore 64 video and audio streaming
+Copyright (C) 2025 Christian Gleissner
+
+This program is free software; you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation; either version 2 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License along
+with this program. If not, see <https://www.gnu.org/licenses/>
+*/
 #include "c64-color.h"
 #include "c64-logging.h"
 #include <stdint.h>
 #include <stdbool.h>
-
-/**
- * @file c64-color.c
- * @brief VIC-II color conversion and palette management implementation
- *
- * Provides optimized color conversion for C64 Ultimate video streams with
- * pre-computed lookup tables for maximum performance in hot path operations.
- */
 
 // VIC-II color palette (16 colors) in BGRA format for OBS Studio
 // Colors converted from C64 Ultimate grab.py RGB values to BGRA with full alpha
@@ -32,7 +41,7 @@ const uint32_t vic_colors[16] = {
     0xFFB2B2B2  // 15: Light Grey
 };
 
-// Color conversion optimization: Pre-computed lookup table for pixel pairs
+// Pre-computed lookup table for pixel pairs
 static uint64_t color_pair_lut[256];
 static bool color_lut_initialized = false;
 

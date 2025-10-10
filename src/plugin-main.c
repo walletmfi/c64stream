@@ -1,6 +1,6 @@
 /*
-C64 Stream Plugin for OBS
-Copyright (C) 2025 Chris Gleissner
+C64 Stream - An OBS Studio source plugin for Commodore 64 video and audio streaming
+Copyright (C) 2025 Christian Gleissner
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -34,9 +34,6 @@ bool obs_module_load(void)
 {
     C64_LOG_INFO("Loading %s", c64_get_version_string());
     C64_LOG_INFO("Build info: %s", c64_get_build_info());
-
-    // DEBUG: This will always be hit when the plugin loads
-    // Module loading
 
     struct obs_source_info c64_info = {.id = "c64_source",
                                        .type = OBS_SOURCE_TYPE_INPUT,

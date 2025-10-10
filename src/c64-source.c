@@ -1,3 +1,10 @@
+/*
+C64 Stream - An OBS Studio source plugin for Commodore 64 video and audio streaming
+Copyright (C) 2025 Christian Gleissner
+
+Licensed under the GNU General Public License v2.0 or later.
+See <https://www.gnu.org/licenses/> for details.
+*/
 #include <obs-module.h>
 #include <graphics/graphics.h>
 #include <util/platform.h>
@@ -7,12 +14,8 @@
 #include <pthread.h>
 #include "c64-network.h"
 #include "c64-network-buffer.h"
-
 #include "c64-logging.h"
 #include "c64-source.h"
-
-// Forward declarations
-
 #include "c64-types.h"
 #include "c64-protocol.h"
 #include "c64-video.h"
@@ -28,7 +31,6 @@
 static void close_and_reset_sockets(struct c64_source *context);
 
 // Async retry task - runs in OBS thread pool (NOT render thread)
-// Based on working 0.4.3 approach but simplified
 void c64_async_retry_task(void *data)
 {
     struct c64_source *context = (struct c64_source *)data;

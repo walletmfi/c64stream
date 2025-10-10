@@ -2,52 +2,72 @@
 
 ## Project Overview
 
-This repository provides an OBS Studio source plugin for streaming video and audio from a Commodore 64 Ultimate dev- **clang-format version too old**
-- Solution: Format checking requires clang-format 21.1.1+. Either upgrade or skip format checking for development builds. The CI system has the correct version.e to OBS Studio. The plugin implements streaming capabilities according to the C64 Ultimate data streams specification. See `doc/c64-stream-spec.md` for a concise technical specification, or the [official documentation](https://1541u-documentation.readthedocs.io/en/latest/data_streams.html#data_streams) for full details.
+This repository provides an OBS Studio source plugin for streaming video and audio from a Commodore 64 Ultimate device. The plugin implements streaming capabilities according to the C64 Ultimate data streams specification. See `doc/c64-stream-spec.md` for a concise technical specification, or the [official documentation](https://1541u-documentation.readthedocs.io/en/latest/data_streams.html#data_streams) for full details.
 
-### Debug Build Tips:
-- Use `RelWithDebInfo` configuration for debugging with symbols
-- Enable verbose CMake output: `cmake --preset <n> -- -DCMAKE_VERBOSE_MAKEFILE=ON`
-- Check ccache statistics after builds for performance insights
-
-## Code Review Guidelines
+## Code Guidelines
 
 ### Core Principles
-1. **Keep It Simple (KISS)**
+
+The following principles must always be followed. Do not consider work done until you have double-checked any new code against them.
+
+1. **Performance**
+   - Optimize for low latency and high throughput, especially in the video/audio processing path\
+   - Use <util/threading.h> for threading and synchronization
+   - Use atomic operations where possible instead of locks
+   - Preallocate buffers to avoid dynamic memory allocation in hot paths
+   - Minimize resource usage (CPU, memory, bandwidth)
+
+2. **Resiliency and Robustness**
+   - Handle network interruptions gracefully
+   - Validate all external inputs
+   - Implement proper error handling and logging
+   - Ensure the plugin can recover from transient failures
+
+3. **Keep It Simple (KISS)**
    - Prefer simple, clear solutions over complex ones
    - Code should be easy to understand at first glance
    - Avoid overengineering and premature optimization
 
-2. **Don't Repeat Yourself (DRY)**
+4. **Don't Repeat Yourself (DRY)**
    - Eliminate code duplication through appropriate abstraction
    - Reuse existing functionality where possible
    - Keep configuration and constants in one place
 
-3. **Consistency**
+5. **Consistency**
    - Follow established patterns in the codebase
    - Maintain consistent naming and structure
    - Use similar solutions for similar problems
 
-4. **Modularity and Maintainability**
+6. **Modularity and Maintainability**
    - Keep functions and modules focused on single responsibilities
    - Make code easy to modify without breaking other parts
    - Design clear interfaces between components
 
-5. **Code Formatting (MANDATORY)**
+7. **Comments**
+    - Use comments to explain the "why" behind complex logic
+    - Avoid obvious comments that restate the code
+    - Keep comments up-to-date with code changes
+    - Keep comments very concise and factual. Avoid speculative or emotional comments.
+    - Don't use past or future tense in comments. Keep them in present tense.
+    - Comment header files and functions to explain purpose and usage.
+    - Use the following license header for all source files:
+      ```c
+      /*
+      C64 Stream - An OBS Studio source plugin for Commodore 64 video and audio streaming
+      Copyright (C) 2025 Christian Gleissner
+
+      Licensed under the GNU General Public License v2.0 or later.
+      See <https://www.gnu.org/licenses/> for details.
+      */
+      ```
+
+8. **Code Formatting (MANDATORY)**
    - **ALWAYS run `./build-aux/run-clang-format` after ANY code changes**
    - All C/C++ code must pass clang-format 21.1.1+ validation
    - All files must end with a single newline character
    - Use 4 spaces for indentation, 120 character line limit
    - VS Code is configured to auto-format on save
    - **Never commit code that fails clang-format checks**
-
-### Review Focus Areas
-- Architecture and design issues
-- Performance implications
-- Security concerns
-- Error handling
-- Edge cases
-- API design and usability
 
 ### What to Avoid
 - Trivial comments that don't add value
@@ -287,6 +307,11 @@ cmake --build --preset <preset> --target all
 # Package plugin (creates distributable)
 cmake --build --preset <preset> --target package
 ```
+
+### Debug Build Tips:
+- Use `RelWithDebInfo` configuration for debugging with symbols
+- Enable verbose CMake output: `cmake --preset <n> -- -DCMAKE_VERBOSE_MAKEFILE=ON`
+- Check ccache statistics after builds for performance insights
 
 ## Project Architecture and Layout
 
