@@ -33,7 +33,10 @@ invoke_formatter() {
 
   case ${formatter} {
     clang)
-      if (( ${+commands[clang-format]} )) {
+      # Try to find clang-format, preferring Homebrew installation on Linux
+      if [[ -x /home/linuxbrew/.linuxbrew/bin/clang-format ]] {
+        local formatter=/home/linuxbrew/.linuxbrew/bin/clang-format
+      } elif (( ${+commands[clang-format]} )) {
         local formatter=clang-format
       } else {
         log_error "No viable clang-format version found (required 19.1.1 or later)"
