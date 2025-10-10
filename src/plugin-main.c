@@ -37,7 +37,8 @@ bool obs_module_load(void)
 
     struct obs_source_info c64_info = {.id = "c64_source",
                                        .type = OBS_SOURCE_TYPE_INPUT,
-                                       .output_flags = OBS_SOURCE_ASYNC_VIDEO | OBS_SOURCE_AUDIO | OBS_SOURCE_CUSTOM_DRAW,
+                                       .output_flags = OBS_SOURCE_ASYNC_VIDEO | OBS_SOURCE_AUDIO |
+                                                       OBS_SOURCE_CUSTOM_DRAW,
                                        .get_name = c64_get_name,
                                        .create = c64_create,
                                        .destroy = c64_destroy,
