@@ -50,6 +50,7 @@ runs:
         if (( ${+RUNNER_DEBUG} )) setopt XTRACE
 
         print ::group::Install clang-format
+        eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
         brew install --quiet clang-format
         print ::endgroup::
 
