@@ -1,7 +1,27 @@
 #!/usr/bin/env zsh
 
-builtin emulate -L zsh
-setopt EXTENDED_GLOB
+builtin emulate -L zs      }
+
+      local -a formatter_version=($(${formatter} --version))
+
+      # Extract version number more robustly
+      # Handle both "clang-format version 21.1.3" and "Ubuntu clang-format version 18.1.3 (1ubuntu1)"
+      local version_number=$(echo ${formatter_version} | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+      
+      if [[ -z ${version_number} ]]; then
+        log_error "Could not parse clang-format version from: ${formatter_version}"
+        exit 2
+      fi
+
+      if ! is-at-least 19.1.1 ${version_number}; then
+        log_error "clang-format is not version 19.1.1 or above (found ${version_number})."
+        log_error "Full version output: ${formatter_version}"
+        exit 2
+      fi
+
+      log_info "Using clang-format ${version_number} at ${formatter}"
+
+      # Accept any version 19.1.1 or later (removed upper bound check)EXTENDED_GLOB
 setopt PUSHD_SILENT
 setopt ERR_EXIT
 setopt ERR_RETURN
