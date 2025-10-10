@@ -18,6 +18,9 @@ See <https://www.gnu.org/licenses/> for details.
 #ifdef _WIN32
 #include <shlobj.h>
 #include <windows.h>
+#ifndef S_ISDIR
+#define S_ISDIR(mode) (((mode) & S_IFMT) == S_IFDIR)
+#endif
 #endif
 
 /**

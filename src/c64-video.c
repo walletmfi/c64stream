@@ -361,8 +361,9 @@ void *c64_video_thread_func(void *data)
             }
             // On Windows, WSAESHUTDOWN means socket was shutdown - this is normal during reconnection
             if (error == WSAESHUTDOWN) {
-                C64_LOG_DEBUG("Video socket shutdown (WSAESHUTDOWN) - exiting receiver thread for reconnection");
-                break; // Socket was shutdown, exit gracefully
+                C64_LOG_DEBUG("Video socket shutdown (WSAESHUTDOWN) - waiting for reconnection");
+                os_sleep_ms(100); // Wait for reconnection to complete
+                continue;         // Continue waiting instead of exiting thread
             }
 #else
             if (error == EAGAIN || error == EWOULDBLOCK) {
