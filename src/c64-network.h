@@ -79,9 +79,6 @@ bool c64_resolve_hostname(const char *hostname, char *ip_buffer, size_t buffer_s
 bool c64_resolve_hostname_with_dns(const char *hostname, const char *custom_dns_server, char *ip_buffer,
                                    size_t buffer_size);
 
-// Platform-specific utilities
-bool c64_get_user_documents_path(char *path_buffer, size_t buffer_size);
-
 // Socket operations
 socket_t c64_create_udp_socket(uint32_t port);
 socket_t c64_create_tcp_socket(const char *ip, uint32_t port);

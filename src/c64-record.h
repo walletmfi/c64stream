@@ -21,9 +21,6 @@ struct c64_source;
 #include "c64-record-audio.h"
 #include "c64-record-frames.h"
 
-// Shared utility functions
-bool c64_shared_create_directory_recursive(const char *path);
-
 // Session management functions
 void c64_session_ensure_exists(struct c64_source *context);
 bool c64_session_any_recording_active(struct c64_source *context);

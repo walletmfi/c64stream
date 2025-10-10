@@ -12,6 +12,7 @@ See <https://www.gnu.org/licenses/> for details.
 #include "c64-protocol.h"
 #include "c64-video.h"
 #include "c64-logging.h" // For Windows snprintf compatibility
+#include "c64-file.h"
 #include <obs-module.h>
 
 obs_properties_t *c64_create_properties(void *data)
