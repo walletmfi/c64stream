@@ -54,7 +54,7 @@ float4 PSDefault(VertData v_in) : TARGET
         
         // Clamp to valid texture coordinates
         if (pixel_uv.x < 0.0 || pixel_uv.x > 1.0 || pixel_uv.y < 0.0 || pixel_uv.y > 1.0) {
-            return float4(0.0, 0.0, 0.0, 1.0);
+            return float4(0.0, 0.0, 0.0, 0.0);
         }
     }
     
@@ -79,18 +79,31 @@ float4 PSDefault(VertData v_in) : TARGET
         }
     }
     
-    // Apply bloom effect with 5x strength range
+    // Apply bloom effect - less aggressive, preserves color saturation
     if (bloom_enable) {
         float brightness = dot(color.rgb, float3(0.299, 0.587, 0.114));
         
         // Integrated threshold that decreases as strength increases
-        // At strength=0, threshold is high (0.9), at strength=1, threshold is low (0.3)
-        float threshold = 0.9 - (bloom_strength * 0.6);
+        // At strength=0, threshold is high (0.85), at strength=1, threshold is low (0.4)
+        float threshold = 0.85 - (bloom_strength * 0.45);
         
         if (brightness > threshold) {
+            // Calculate bloom factor based on how much we exceed threshold
             float bloom_factor = (brightness - threshold) / (1.0 - threshold);
-            // Apply 5x multiplier to bloom strength for more visible effect
-            color.rgb += color.rgb * bloom_factor * (bloom_strength * 5.0);
+            
+            // Reduced multiplier (2.5x instead of 5x) for less aggressive bloom
+            float bloom_intensity = bloom_factor * (bloom_strength * 2.5);
+            
+            // Preserve color saturation by not over-brightening
+            // Mix between current color and slightly brightened color
+            // This prevents washing out to white
+            float3 bloom_color = color.rgb * (1.0 + bloom_intensity * 0.5);
+            
+            // Clamp to prevent over-saturation
+            bloom_color = min(bloom_color, float3(1.0, 1.0, 1.0));
+            
+            // Blend with original color to preserve saturation
+            color.rgb = lerp(color.rgb, bloom_color, bloom_intensity * 0.6);
         }
     }
     

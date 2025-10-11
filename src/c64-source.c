@@ -642,7 +642,7 @@ void c64_stop_streaming(struct c64_source *context)
     C64_LOG_INFO("C64S streaming stopped");
 }
 
-// Video tick callback - updates texture from async frame buffer when CRT effects are enabled
+// Video tick callback - updates texture from async frame buffer
 void c64_video_tick(void *data, float seconds)
 {
     UNUSED_PARAMETER(seconds);
@@ -650,10 +650,7 @@ void c64_video_tick(void *data, float seconds)
     if (!context)
         return;
 
-    // Only update texture when CRT effects are enabled
-    if (!context->crt_enable)
-        return;
-
+    // Always update texture for CUSTOM_DRAW rendering
     // Update render texture if needed (create or recreate on size change)
     if (!context->render_texture || gs_texture_get_width(context->render_texture) != context->width ||
         gs_texture_get_height(context->render_texture) != context->height) {
@@ -679,19 +676,25 @@ void c64_video_tick(void *data, float seconds)
 // Video render callback for CRT effects (GPU rendering)
 void c64_video_render(void *data, gs_effect_t *effect)
 {
-    UNUSED_PARAMETER(effect);
     struct c64_source *context = data;
     if (!context)
         return;
 
-    // If CRT effects are disabled, return early to let async video show through
-    if (!context->crt_enable) {
-        return;
-    }
-
     // Check if texture is ready
     if (!context->render_texture)
         return;
+
+    // If CRT effects are disabled, use simple passthrough rendering
+    if (!context->crt_enable) {
+        // Use default effect for simple texture draw
+        if (effect) {
+            gs_effect_set_texture(gs_effect_get_param_by_name(effect, "image"), context->render_texture);
+            while (gs_effect_loop(effect, "Draw")) {
+                gs_draw_sprite(context->render_texture, 0, context->width, context->height);
+            }
+        }
+        return;
+    }
 
     // Load CRT shader effect if not already loaded
     if (!context->crt_effect) {
@@ -701,6 +704,13 @@ void c64_video_render(void *data, gs_effect_t *effect)
             bfree(effect_path);
             if (!context->crt_effect) {
                 C64_LOG_ERROR("Failed to load CRT effect shader");
+                // Fallback to passthrough
+                if (effect) {
+                    gs_effect_set_texture(gs_effect_get_param_by_name(effect, "image"), context->render_texture);
+                    while (gs_effect_loop(effect, "Draw")) {
+                        gs_draw_sprite(context->render_texture, 0, context->width, context->height);
+                    }
+                }
                 return;
             }
         } else {
@@ -720,22 +730,61 @@ void c64_video_render(void *data, gs_effect_t *effect)
     gs_effect_set_bool(gs_effect_get_param_by_name(context->crt_effect, "bloom_enable"), context->bloom_enable);
     gs_effect_set_float(gs_effect_get_param_by_name(context->crt_effect, "bloom_strength"), context->bloom_strength);
 
-    // Render the texture with the CRT effect
+    // Calculate effective output size based on effects
+    uint32_t output_width = c64_get_width(context);
+    uint32_t output_height = c64_get_height(context);
+
+    // Render the texture with the CRT effect at the calculated size
     while (gs_effect_loop(context->crt_effect, "Draw")) {
-        gs_draw_sprite(context->render_texture, 0, context->width, context->height);
+        gs_draw_sprite(context->render_texture, 0, output_width, output_height);
     }
 }
 
 uint32_t c64_get_width(void *data)
 {
     struct c64_source *context = data;
-    return context ? context->width : 0;
+    if (!context)
+        return 0;
+
+    // Calculate effective width based on CRT effects
+    uint32_t base_width = context->width;
+
+    if (context->crt_enable) {
+        // Pixel geometry effect scales the output
+        float scale_factor = context->pixel_width;
+        if (scale_factor > 1.0f) {
+            base_width = (uint32_t)(base_width * scale_factor);
+        }
+    }
+
+    return base_width;
 }
 
 uint32_t c64_get_height(void *data)
 {
     struct c64_source *context = data;
-    return context ? context->height : 0;
+    if (!context)
+        return 0;
+
+    // Calculate effective height based on CRT effects
+    uint32_t base_height = context->height;
+
+    if (context->crt_enable) {
+        // Pixel geometry effect scales the output
+        float scale_factor = context->pixel_height;
+        if (scale_factor > 1.0f) {
+            base_height = (uint32_t)(base_height * scale_factor);
+        }
+
+        // Scanlines add extra rows
+        if (context->scanlines_enable && context->scanlines_width > 0) {
+            // Each original row gets scanlines_width extra pixels
+            uint32_t original_rows = base_height;
+            base_height = original_rows + (original_rows * context->scanlines_width);
+        }
+    }
+
+    return base_height;
 }
 
 // Synchronous render callback removed - now using async video output via obs_source_output_video()
