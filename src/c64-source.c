@@ -490,6 +490,10 @@ void c64_update(void *data, obs_data_t *settings)
     context->bloom_enable = obs_data_get_bool(settings, "bloom_enable");
     context->bloom_strength = (float)obs_data_get_double(settings, "bloom_strength");
 
+    // Update last_frame_time when settings change to prevent logo flashing
+    // during slider adjustments
+    context->last_frame_time = os_gettime_ns();
+
     // Start streaming with current configuration (will create new sockets if needed)
     C64_LOG_INFO("Applying configuration and starting streaming");
     c64_start_streaming(context);
