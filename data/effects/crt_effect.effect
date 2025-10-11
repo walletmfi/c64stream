@@ -42,39 +42,25 @@ float4 PSDefault(VertData v_in) : TARGET
 {
     float2 uv = v_in.uv;
     
-    // Apply pixel geometry scaling (inverted - larger values = larger image)
-    float2 pixel_uv = uv;
-    if (pixel_width != 1.0 || pixel_height != 1.0) {
-        float2 center = float2(0.5, 0.5);
-        float2 offset = uv - center;
-        // Invert the scaling: divide by pixel size to make larger values = larger image
-        offset.x /= pixel_width;
-        offset.y /= pixel_height;
-        pixel_uv = center + offset;
-        
-        // Clamp to valid texture coordinates
-        if (pixel_uv.x < 0.0 || pixel_uv.x > 1.0 || pixel_uv.y < 0.0 || pixel_uv.y > 1.0) {
-            return float4(0.0, 0.0, 0.0, 0.0);
-        }
-    }
+    // No longer apply pixel geometry scaling in shader - handled by matrix transform
+    // Simply sample the texture at the given UV coordinates
+    float4 color = image.Sample(textureSampler, uv);
     
-    // Sample the texture
-    float4 color = image.Sample(textureSampler, pixel_uv);
-    
-    // Apply scanlines - create actual row separation
+    // Apply scanlines based on scaled canvas position
     if (scanlines_enable) {
-        // Get the actual screen position in pixels
-        // Assume PAL resolution of 384x272
-        float screen_y = v_in.uv.y * 272.0;
+        // Calculate the scaled canvas height
+        float canvas_height = 272.0 * pixel_height; // Base height scaled by pixel_height
         
-        // Calculate which scanline row we're in (each C64 row + black space)
-        float row_height = 1.0 + float(scanlines_width);
-        float row_position = frac(screen_y / row_height);
+        // Get the position in the scaled canvas
+        float scaled_row = uv.y * canvas_height;
         
-        // If we're in the black space part (after the first pixel)
-        if (row_position > (1.0 / row_height)) {
-            // Interpolate between black and the row color based on opacity
-            // opacity=0 means complete black, opacity=1 means copy of the pixel row
+        // Calculate which scanline row we're in
+        // gap = scanlines_width, so each group has (1 + gap) rows
+        float row_in_group = fmod(floor(scaled_row), float(scanlines_width) + 1.0);
+        
+        // Darken rows that are in the gap (not the first row of each group)
+        if (row_in_group >= 1.0) {
+            // Apply scanline opacity: 0 = complete black, 1 = copy of pixel row
             color.rgb *= scanlines_opacity;
         }
     }

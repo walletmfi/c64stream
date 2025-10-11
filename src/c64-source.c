@@ -734,14 +734,18 @@ void c64_video_render(void *data, gs_effect_t *effect)
     gs_effect_set_bool(gs_effect_get_param_by_name(context->crt_effect, "bloom_enable"), context->bloom_enable);
     gs_effect_set_float(gs_effect_get_param_by_name(context->crt_effect, "bloom_strength"), context->bloom_strength);
 
-    // Calculate effective output size based on effects
-    uint32_t output_width = c64_get_width(context);
-    uint32_t output_height = c64_get_height(context);
+    // Apply GPU matrix scaling for pixel geometry
+    // This scales the rendered output without changing the texture or async frame buffer
+    gs_matrix_push();
+    gs_matrix_scale3f(context->pixel_width, context->pixel_height, 1.0f);
 
-    // Render the texture with the CRT effect at the calculated size
+    // Render the texture with the CRT effect
+    // The texture remains at original size; scaling is applied via matrix transform
     while (gs_effect_loop(context->crt_effect, "Draw")) {
-        gs_draw_sprite(context->render_texture, 0, output_width, output_height);
+        gs_draw_sprite(context->render_texture, 0, context->width, context->height);
     }
+
+    gs_matrix_pop();
 }
 
 uint32_t c64_get_width(void *data)
@@ -750,18 +754,13 @@ uint32_t c64_get_width(void *data)
     if (!context)
         return 0;
 
-    // Calculate effective width based on CRT effects
-    uint32_t base_width = context->width;
-
-    if (context->crt_enable) {
-        // Pixel geometry effect scales the output
-        float scale_factor = context->pixel_width;
-        if (scale_factor > 1.0f) {
-            base_width = (uint32_t)(base_width * scale_factor);
-        }
+    // Return scaled width when CRT effects are enabled
+    // Matrix transform handles the actual scaling during rendering
+    if (context->crt_enable && context->pixel_width > 0.0f) {
+        return (uint32_t)(context->width * context->pixel_width);
     }
 
-    return base_width;
+    return context->width;
 }
 
 uint32_t c64_get_height(void *data)
@@ -770,25 +769,13 @@ uint32_t c64_get_height(void *data)
     if (!context)
         return 0;
 
-    // Calculate effective height based on CRT effects
-    uint32_t base_height = context->height;
-
-    if (context->crt_enable) {
-        // Pixel geometry effect scales the output
-        float scale_factor = context->pixel_height;
-        if (scale_factor > 1.0f) {
-            base_height = (uint32_t)(base_height * scale_factor);
-        }
-
-        // Scanlines add extra rows
-        if (context->scanlines_enable && context->scanlines_width > 0) {
-            // Each original row gets scanlines_width extra pixels
-            uint32_t original_rows = base_height;
-            base_height = original_rows + (original_rows * context->scanlines_width);
-        }
+    // Return scaled height when CRT effects are enabled
+    // Matrix transform handles the actual scaling during rendering
+    if (context->crt_enable && context->pixel_height > 0.0f) {
+        return (uint32_t)(context->height * context->pixel_height);
     }
 
-    return base_height;
+    return context->height;
 }
 
 // Synchronous render callback removed - now using async video output via obs_source_output_video()
