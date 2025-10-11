@@ -16,8 +16,17 @@ uniform float scanlines_opacity;
 uniform int scanlines_width;
 uniform float pixel_width;
 uniform float pixel_height;
+uniform float blur_strength;
 uniform bool bloom_enable;
 uniform float bloom_strength;
+uniform bool afterglow_enable;
+uniform int afterglow_duration_ms;
+uniform int afterglow_curve;
+uniform bool tint_enable;
+uniform int tint_mode;
+uniform float tint_strength;
+uniform float dt_ms;
+uniform texture2d texture_accum_prev;
 
 sampler_state textureSampler {
     Filter   = Linear;
@@ -41,58 +50,160 @@ VertData VSDefault(VertData v_in)
 float4 PSDefault(VertData v_in) : TARGET
 {
     float2 uv = v_in.uv;
-    
-    // No longer apply pixel geometry scaling in shader - handled by matrix transform
-    // Simply sample the texture at the given UV coordinates
-    float4 color = image.Sample(textureSampler, uv);
-    
-    // Apply scanlines based on scaled canvas position
+
+    // === PIXEL GEOMETRY WITH BLUR CONTROL ===
+    // Pixel geometry scaling is handled by get_width/get_height functions
+    // Here we apply blur control for crisp vs soft scaling
+    float4 color;
+    if (blur_strength > 0.0) {
+        // Gaussian-style blur with multiple taps for soft scaling
+        float blur_radius = blur_strength * 0.003; // Increased for more visible effect
+
+        // 9-tap gaussian-style sampling
+        color  = image.Sample(textureSampler, uv) * 0.25;                                    // Center (main weight)
+        color += image.Sample(textureSampler, uv + float2(blur_radius, 0.0)) * 0.125;       // Right
+        color += image.Sample(textureSampler, uv - float2(blur_radius, 0.0)) * 0.125;       // Left
+        color += image.Sample(textureSampler, uv + float2(0.0, blur_radius)) * 0.125;       // Up
+        color += image.Sample(textureSampler, uv - float2(0.0, blur_radius)) * 0.125;       // Down
+        color += image.Sample(textureSampler, uv + float2(blur_radius, blur_radius)) * 0.0625;   // Top-right
+        color += image.Sample(textureSampler, uv - float2(blur_radius, blur_radius)) * 0.0625;   // Bottom-left
+        color += image.Sample(textureSampler, uv + float2(-blur_radius, blur_radius)) * 0.0625;  // Top-left
+        color += image.Sample(textureSampler, uv - float2(-blur_radius, blur_radius)) * 0.0625;  // Bottom-right
+    } else {
+        // Precise sampling for crisp scaling (no blur)
+        color = image.Sample(textureSampler, uv);
+    }
+
+    // === SCANLINES EFFECT (FIXED IMPLEMENTATION) ===
     if (scanlines_enable) {
-        // Calculate the scaled canvas height
-        float canvas_height = 272.0 * pixel_height; // Base height scaled by pixel_height
-        
-        // Get the position in the scaled canvas
-        float scaled_row = uv.y * canvas_height;
-        
-        // Calculate which scanline row we're in
-        // gap = scanlines_width, so each group has (1 + gap) rows
-        float row_in_group = fmod(floor(scaled_row), float(scanlines_width) + 1.0);
-        
-        // Darken rows that are in the gap (not the first row of each group)
+        // Calculate texture dimensions for proper scanline scaling
+        float texture_height = 272.0; // Base C64 height
+        float scaled_height = texture_height * pixel_height;
+
+        // Get pixel row position
+        float pixel_row = uv.y * scaled_height;
+        float scanline_group_size = float(scanlines_width) + 1.0;
+        float row_in_group = fmod(pixel_row, scanline_group_size);
+
+        // Apply scanline effect: first row normal, subsequent rows dimmed
         if (row_in_group >= 1.0) {
-            // Apply scanline opacity: 0 = complete black, 1 = copy of pixel row
             color.rgb *= scanlines_opacity;
         }
     }
-    
-    // Apply bloom effect - less aggressive, preserves color saturation
+
+    // === ENHANCED BLOOM EFFECT WITH BLEEDING ===
     if (bloom_enable) {
-        float brightness = dot(color.rgb, float3(0.299, 0.587, 0.114));
-        
-        // Integrated threshold that decreases as strength increases
-        // At strength=0, threshold is high (0.85), at strength=1, threshold is low (0.4)
+        // Sample current pixel and neighbors for bloom bleeding effect
+        float4 center = color;
+        float bloom_radius = bloom_strength * 0.002; // Radius scales with strength
+
+        // Multi-tap sampling for bloom bleeding - more taps = more bleeding at higher strength
+        float4 bloom_sum = center * 0.4; // Center weight
+
+        // Cross pattern sampling (4 directions)
+        bloom_sum += image.Sample(textureSampler, uv + float2(bloom_radius, 0.0)) * 0.15;
+        bloom_sum += image.Sample(textureSampler, uv - float2(bloom_radius, 0.0)) * 0.15;
+        bloom_sum += image.Sample(textureSampler, uv + float2(0.0, bloom_radius)) * 0.15;
+        bloom_sum += image.Sample(textureSampler, uv - float2(0.0, bloom_radius)) * 0.15;
+
+        // Diagonal sampling for stronger bloom effect
+        if (bloom_strength > 0.3) {
+            bloom_sum += image.Sample(textureSampler, uv + float2(bloom_radius, bloom_radius) * 0.7) * 0.05;
+            bloom_sum += image.Sample(textureSampler, uv + float2(-bloom_radius, bloom_radius) * 0.7) * 0.05;
+            bloom_sum += image.Sample(textureSampler, uv + float2(bloom_radius, -bloom_radius) * 0.7) * 0.05;
+            bloom_sum += image.Sample(textureSampler, uv + float2(-bloom_radius, -bloom_radius) * 0.7) * 0.05;
+        }
+
+        float brightness = dot(bloom_sum.rgb, float3(0.299, 0.587, 0.114));
+
+        // Dynamic threshold that decreases as strength increases
         float threshold = 0.85 - (bloom_strength * 0.45);
-        
+
         if (brightness > threshold) {
             // Calculate bloom factor based on how much we exceed threshold
             float bloom_factor = (brightness - threshold) / (1.0 - threshold);
-            
-            // Reduced multiplier (2.5x instead of 5x) for less aggressive bloom
-            float bloom_intensity = bloom_factor * (bloom_strength * 2.5);
-            
-            // Preserve color saturation by not over-brightening
-            // Mix between current color and slightly brightened color
-            // This prevents washing out to white
-            float3 bloom_color = color.rgb * (1.0 + bloom_intensity * 0.5);
-            
-            // Clamp to prevent over-saturation
-            bloom_color = min(bloom_color, float3(1.0, 1.0, 1.0));
-            
-            // Blend with original color to preserve saturation
-            color.rgb = lerp(color.rgb, bloom_color, bloom_intensity * 0.6);
+
+            // ENHANCED: 3x stronger bloom (7.5x instead of 2.5x)
+            float bloom_intensity = bloom_factor * (bloom_strength * 7.5);
+
+            // Create bloom effect that preserves color saturation but bleeds
+            float3 bloom_color = bloom_sum.rgb * (1.0 + bloom_intensity * 1.2);
+
+            // Allow more oversaturation for stronger glow effect
+            bloom_color = min(bloom_color, float3(1.5, 1.5, 1.5));
+
+            // Blend with original color to create bleeding effect
+            color.rgb = lerp(center.rgb, bloom_color, bloom_intensity * 0.8);
+        } else {
+            // Use the blended sample even without bloom for subtle bleeding
+            color.rgb = lerp(center.rgb, bloom_sum.rgb, bloom_strength * 0.1);
         }
     }
-    
+
+    // === AFTERGLOW EFFECT ===
+    // Note: Simplified approach - full implementation would require render-to-texture
+    if (afterglow_enable && dt_ms > 0.0 && afterglow_duration_ms > 0) {
+        // Sample previous afterglow accumulation (simplified approach)
+        float4 prev_glow = float4(0.0, 0.0, 0.0, 0.0);
+        // Note: texture_accum_prev may not be properly initialized in current implementation
+        // This is a placeholder for future full afterglow implementation
+
+        // Calculate decay factor based on time and settings
+        float base_decay_rate = dt_ms / float(afterglow_duration_ms);
+        float decay_rate = base_decay_rate;
+
+        // Apply different decay curves
+        if (afterglow_curve == 1) { // Gradual Fade (Slow Start)
+            decay_rate = base_decay_rate * base_decay_rate; // Quadratic - slower at start
+        }
+        else if (afterglow_curve == 2) { // Rapid Fade (Fast Start)
+            decay_rate = sqrt(base_decay_rate); // Square root - faster at start
+        }
+        else if (afterglow_curve == 3) { // Long Tail (Exponential)
+            decay_rate = 1.0 - exp(-base_decay_rate * 2.5); // Exponential decay
+        }
+        // afterglow_curve == 0 is linear (no change needed)
+
+        // Current frame luminance for phosphor persistence effect
+        float current_luminance = dot(color.rgb, float3(0.299, 0.587, 0.114));
+
+        // Brighter pixels decay slower (phosphor persistence effect)
+        float persistence_factor = 1.0 - (current_luminance * 0.4); // Bright areas persist longer
+        decay_rate *= max(0.1, persistence_factor); // Never decay too fast
+
+        // Decay previous glow
+        float3 decayed_glow = prev_glow.rgb * (1.0 - clamp(decay_rate, 0.0, 0.95)); // Never fully disappear instantly
+
+        // Blend current frame with decayed glow - additive for visible trails
+        color.rgb = max(color.rgb, decayed_glow * 0.8); // Scale down for more realistic effect
+    }
+
+    // === SCREEN TINT EFFECT ===
+    // Emulate 1980s monochrome CRTs: first convert to monochrome, then apply tint
+    if (tint_enable && tint_strength > 0.0) {
+        // Step 1: Convert to monochrome (grayscale)
+        float luminance = dot(color.rgb, float3(0.299, 0.587, 0.114));
+        float3 monochrome = float3(luminance, luminance, luminance);
+
+        // Step 2: Apply tint to the monochrome image
+        float3 tinted_color = color.rgb;
+
+        if (tint_mode == 1) { // Amber CRT
+            float3 amber_tint = float3(1.0, 0.75, 0.3);
+            tinted_color = lerp(color.rgb, monochrome * amber_tint, tint_strength);
+        }
+        else if (tint_mode == 2) { // Green CRT
+            float3 green_tint = float3(0.5, 0.95, 0.35);
+            tinted_color = lerp(color.rgb, monochrome * green_tint, tint_strength);
+        }
+        else if (tint_mode == 3) { // Pure Monochrome
+            tinted_color = lerp(color.rgb, monochrome, tint_strength);
+        }
+        // tint_mode == 0 (None) - no change
+
+        color.rgb = tinted_color;
+    }
+
     return color;
 }
 

@@ -114,9 +114,6 @@ obs_properties_t *c64_create_properties(void *data)
         obs_properties_add_button(effects_props, "crt_reset", "Reset to Defaults", crt_reset_defaults);
     obs_property_set_long_description(reset_button, "Reset all CRT effect settings to their default values");
 
-    // Section label
-    obs_properties_add_text(effects_props, "crt_label", "CRT EFFECT CONFIGURATION", OBS_TEXT_INFO);
-
     // Scanlines
     obs_properties_add_text(effects_props, "scanlines_label", "▶ Scanlines", OBS_TEXT_INFO);
     obs_property_t *scanlines_enable_prop =
@@ -142,6 +139,11 @@ obs_properties_t *c64_create_properties(void *data)
         obs_properties_add_float_slider(effects_props, "pixel_height", "Pixel Height", 0.5, 3.0, 0.1);
     obs_property_set_long_description(pixel_height_prop, "Vertical pixel size multiplier");
 
+    obs_property_t *blur_strength_prop =
+        obs_properties_add_float_slider(effects_props, "blur_strength", "Blur", 0.0, 1.0, 0.05);
+    obs_property_set_long_description(blur_strength_prop,
+                                      "Scaling blur (0.0 = precise scaling, 1.0 = very blurry with gaussian blur)");
+
     // CRT Bloom
     obs_properties_add_text(effects_props, "bloom_label", "▶ CRT Bloom", OBS_TEXT_INFO);
     obs_property_t *bloom_enable_prop = obs_properties_add_bool(effects_props, "bloom_enable", "Enable Bloom");
@@ -150,6 +152,41 @@ obs_properties_t *c64_create_properties(void *data)
     obs_property_t *bloom_strength_prop =
         obs_properties_add_float_slider(effects_props, "bloom_strength", "Strength", 0.0, 1.0, 0.05);
     obs_property_set_long_description(bloom_strength_prop, "Bloom effect strength (0.0 = disabled, 1.0 = maximum)");
+
+    // Afterglow
+    obs_properties_add_text(effects_props, "afterglow_label", "🟡 Afterglow", OBS_TEXT_INFO);
+    obs_property_t *afterglow_enable_prop =
+        obs_properties_add_bool(effects_props, "afterglow_enable", "Enable Afterglow");
+    obs_property_set_long_description(afterglow_enable_prop, "Enable phosphor persistence (lingering brightness)");
+
+    obs_property_t *afterglow_duration_prop =
+        obs_properties_add_int_slider(effects_props, "afterglow_duration_ms", "Afterglow Duration (ms)", 0, 3000, 10);
+    obs_property_set_long_description(afterglow_duration_prop, "Time for afterglow to fade completely");
+
+    obs_property_t *afterglow_curve_prop = obs_properties_add_list(effects_props, "afterglow_curve", "Decay Curve",
+                                                                   OBS_COMBO_TYPE_LIST, OBS_COMBO_FORMAT_INT);
+    obs_property_list_add_int(afterglow_curve_prop, "Instant Fade (Linear)", 0);
+    obs_property_list_add_int(afterglow_curve_prop, "Gradual Fade (Slow Start)", 1);
+    obs_property_list_add_int(afterglow_curve_prop, "Rapid Fade (Fast Start)", 2);
+    obs_property_list_add_int(afterglow_curve_prop, "Long Tail (Exponential)", 3);
+    obs_property_set_long_description(afterglow_curve_prop, "How quickly the afterglow fades away");
+
+    // Screen Tint
+    obs_properties_add_text(effects_props, "tint_label", "🟩 Screen Tint", OBS_TEXT_INFO);
+    obs_property_t *tint_enable_prop = obs_properties_add_bool(effects_props, "tint_enable", "Enable Screen Tint");
+    obs_property_set_long_description(tint_enable_prop, "Enable monochrome-style color tinting");
+
+    obs_property_t *tint_mode_prop =
+        obs_properties_add_list(effects_props, "tint_mode", "Tint Type", OBS_COMBO_TYPE_LIST, OBS_COMBO_FORMAT_INT);
+    obs_property_list_add_int(tint_mode_prop, "None (colour)", 0);
+    obs_property_list_add_int(tint_mode_prop, "Amber", 1);
+    obs_property_list_add_int(tint_mode_prop, "Green", 2);
+    obs_property_list_add_int(tint_mode_prop, "Monochrome", 3);
+    obs_property_set_long_description(tint_mode_prop, "Type of monochrome tint to apply");
+
+    obs_property_t *tint_strength_prop =
+        obs_properties_add_float_slider(effects_props, "tint_strength", "Tint Strength", 0.0, 1.0, 0.05);
+    obs_property_set_long_description(tint_strength_prop, "Strength of tint effect (0.0 = disabled, 1.0 = full tint)");
 
     return props;
 }
@@ -176,8 +213,15 @@ static bool crt_enable_modified(obs_properties_t *props, obs_property_t *propert
     obs_property_t *scanlines_width = obs_properties_get(effects_props, "scanlines_width");
     obs_property_t *pixel_width = obs_properties_get(effects_props, "pixel_width");
     obs_property_t *pixel_height = obs_properties_get(effects_props, "pixel_height");
+    obs_property_t *blur_strength = obs_properties_get(effects_props, "blur_strength");
     obs_property_t *bloom_enable = obs_properties_get(effects_props, "bloom_enable");
     obs_property_t *bloom_strength = obs_properties_get(effects_props, "bloom_strength");
+    obs_property_t *afterglow_enable = obs_properties_get(effects_props, "afterglow_enable");
+    obs_property_t *afterglow_duration = obs_properties_get(effects_props, "afterglow_duration_ms");
+    obs_property_t *afterglow_curve = obs_properties_get(effects_props, "afterglow_curve");
+    obs_property_t *tint_enable = obs_properties_get(effects_props, "tint_enable");
+    obs_property_t *tint_mode = obs_properties_get(effects_props, "tint_mode");
+    obs_property_t *tint_strength = obs_properties_get(effects_props, "tint_strength");
 
     if (reset_button)
         obs_property_set_enabled(reset_button, enabled);
@@ -191,10 +235,24 @@ static bool crt_enable_modified(obs_properties_t *props, obs_property_t *propert
         obs_property_set_enabled(pixel_width, enabled);
     if (pixel_height)
         obs_property_set_enabled(pixel_height, enabled);
+    if (blur_strength)
+        obs_property_set_enabled(blur_strength, enabled);
     if (bloom_enable)
         obs_property_set_enabled(bloom_enable, enabled);
     if (bloom_strength)
         obs_property_set_enabled(bloom_strength, enabled);
+    if (afterglow_enable)
+        obs_property_set_enabled(afterglow_enable, enabled);
+    if (afterglow_duration)
+        obs_property_set_enabled(afterglow_duration, enabled);
+    if (afterglow_curve)
+        obs_property_set_enabled(afterglow_curve, enabled);
+    if (tint_enable)
+        obs_property_set_enabled(tint_enable, enabled);
+    if (tint_mode)
+        obs_property_set_enabled(tint_mode, enabled);
+    if (tint_strength)
+        obs_property_set_enabled(tint_strength, enabled);
 
     return true;
 }
@@ -220,8 +278,15 @@ static bool crt_reset_defaults(obs_properties_t *props, obs_property_t *property
     obs_data_set_int(settings, "scanlines_width", 1);
     obs_data_set_double(settings, "pixel_width", 1.0);
     obs_data_set_double(settings, "pixel_height", 1.0);
+    obs_data_set_double(settings, "blur_strength", 0.25);
     obs_data_set_bool(settings, "bloom_enable", false);
     obs_data_set_double(settings, "bloom_strength", 0.25);
+    obs_data_set_bool(settings, "afterglow_enable", false);
+    obs_data_set_int(settings, "afterglow_duration_ms", 300);
+    obs_data_set_int(settings, "afterglow_curve", 0);
+    obs_data_set_bool(settings, "tint_enable", false);
+    obs_data_set_int(settings, "tint_mode", 0);
+    obs_data_set_double(settings, "tint_strength", 1.0);
 
     // Apply the updated settings
     obs_source_update(context->source, settings);
@@ -281,6 +346,13 @@ void c64_set_property_defaults(obs_data_t *settings)
     obs_data_set_default_int(settings, "scanlines_width", 1);
     obs_data_set_default_double(settings, "pixel_width", 1.0);
     obs_data_set_default_double(settings, "pixel_height", 1.0);
+    obs_data_set_default_double(settings, "blur_strength", 0.25);
     obs_data_set_default_bool(settings, "bloom_enable", false);
     obs_data_set_default_double(settings, "bloom_strength", 0.25);
+    obs_data_set_default_bool(settings, "afterglow_enable", false);
+    obs_data_set_default_int(settings, "afterglow_duration_ms", 300);
+    obs_data_set_default_int(settings, "afterglow_curve", 0);
+    obs_data_set_default_bool(settings, "tint_enable", false);
+    obs_data_set_default_int(settings, "tint_mode", 0);
+    obs_data_set_default_double(settings, "tint_strength", 1.0);
 }

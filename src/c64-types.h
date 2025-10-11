@@ -172,16 +172,26 @@ struct c64_source {
     size_t recording_buffer_size;  // Size of allocated recording buffers
 
     // CRT visual effects
-    bool crt_enable;               // Master CRT effects enable
-    bool scanlines_enable;         // Scanlines effect enable
-    float scanlines_opacity;       // Scanlines opacity (0.0-1.0)
-    int scanlines_width;           // Scanlines width in pixels (1-6)
-    float pixel_width;             // Pixel geometry width (0.5-3.0)
-    float pixel_height;            // Pixel geometry height (0.5-3.0)
-    bool bloom_enable;             // Bloom effect enable
-    float bloom_strength;          // Bloom strength (0.0-1.0, internally scaled 5x)
-    gs_texture_t *render_texture;  // GPU texture for rendering with effects
-    gs_effect_t *crt_effect;       // CRT shader effect
+    bool crt_enable;                     // Master CRT effects enable
+    bool scanlines_enable;               // Scanlines effect enable
+    float scanlines_opacity;             // Scanlines opacity (0.0-1.0)
+    int scanlines_width;                 // Scanlines width in pixels (1-6)
+    float pixel_width;                   // Pixel geometry width (0.5-3.0)
+    float pixel_height;                  // Pixel geometry height (0.5-3.0)
+    float blur_strength;                 // Blur strength for pixel geometry (0.0-1.0)
+    bool bloom_enable;                   // Bloom effect enable
+    float bloom_strength;                // Bloom strength (0.0-1.0, internally scaled 7.5x)
+    bool afterglow_enable;               // Afterglow effect enable
+    int afterglow_duration_ms;           // Afterglow duration in milliseconds
+    int afterglow_curve;                 // Afterglow decay curve (0=linear, 1=exponential)
+    bool tint_enable;                    // Screen tint effect enable
+    int tint_mode;                       // Tint mode (0=none, 1=amber, 2=green, 3=monochrome)
+    float tint_strength;                 // Tint strength (0.0-1.0)
+    gs_texture_t *render_texture;        // GPU texture for rendering with effects
+    gs_effect_t *crt_effect;             // CRT shader effect
+    gs_texture_t *afterglow_accum_prev;  // Ping-pong texture for afterglow accumulation
+    gs_texture_t *afterglow_accum_next;  // Ping-pong texture for afterglow accumulation
+    uint64_t last_frame_time_ns;         // Last frame timestamp for afterglow delta calculation
 };
 
 #endif  // C64_TYPES_H

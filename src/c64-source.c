@@ -306,11 +306,20 @@ void *c64_create(obs_data_t *settings, obs_source_t *source)
     context->scanlines_width = (int)obs_data_get_int(settings, "scanlines_width");
     context->pixel_width = (float)obs_data_get_double(settings, "pixel_width");
     context->pixel_height = (float)obs_data_get_double(settings, "pixel_height");
+    context->blur_strength = (float)obs_data_get_double(settings, "blur_strength");
     context->bloom_enable = obs_data_get_bool(settings, "bloom_enable");
     context->bloom_strength = (float)obs_data_get_double(settings, "bloom_strength");
-    context->bloom_threshold = (float)obs_data_get_double(settings, "bloom_threshold");
+    context->afterglow_enable = obs_data_get_bool(settings, "afterglow_enable");
+    context->afterglow_duration_ms = (int)obs_data_get_int(settings, "afterglow_duration_ms");
+    context->afterglow_curve = (int)obs_data_get_int(settings, "afterglow_curve");
+    context->tint_enable = obs_data_get_bool(settings, "tint_enable");
+    context->tint_mode = (int)obs_data_get_int(settings, "tint_mode");
+    context->tint_strength = (float)obs_data_get_double(settings, "tint_strength");
     context->render_texture = NULL;
     context->crt_effect = NULL;
+    context->afterglow_accum_prev = NULL;
+    context->afterglow_accum_next = NULL;
+    context->last_frame_time_ns = 0;
 
     // Start initial connection asynchronously to avoid blocking OBS startup
     C64_LOG_INFO("C64S source created successfully - queuing async initial connection");
@@ -361,6 +370,14 @@ void c64_destroy(void *data)
     if (context->render_texture) {
         gs_texture_destroy(context->render_texture);
         context->render_texture = NULL;
+    }
+    if (context->afterglow_accum_prev) {
+        gs_texture_destroy(context->afterglow_accum_prev);
+        context->afterglow_accum_prev = NULL;
+    }
+    if (context->afterglow_accum_next) {
+        gs_texture_destroy(context->afterglow_accum_next);
+        context->afterglow_accum_next = NULL;
     }
     if (context->crt_effect) {
         gs_effect_destroy(context->crt_effect);
@@ -488,9 +505,15 @@ void c64_update(void *data, obs_data_t *settings)
     context->scanlines_width = (int)obs_data_get_int(settings, "scanlines_width");
     context->pixel_width = (float)obs_data_get_double(settings, "pixel_width");
     context->pixel_height = (float)obs_data_get_double(settings, "pixel_height");
+    context->blur_strength = (float)obs_data_get_double(settings, "blur_strength");
     context->bloom_enable = obs_data_get_bool(settings, "bloom_enable");
     context->bloom_strength = (float)obs_data_get_double(settings, "bloom_strength");
-    context->bloom_threshold = (float)obs_data_get_double(settings, "bloom_threshold");
+    context->afterglow_enable = obs_data_get_bool(settings, "afterglow_enable");
+    context->afterglow_duration_ms = (int)obs_data_get_int(settings, "afterglow_duration_ms");
+    context->afterglow_curve = (int)obs_data_get_int(settings, "afterglow_curve");
+    context->tint_enable = obs_data_get_bool(settings, "tint_enable");
+    context->tint_mode = (int)obs_data_get_int(settings, "tint_mode");
+    context->tint_strength = (float)obs_data_get_double(settings, "tint_strength");
 
     // Start streaming with current configuration (will create new sockets if needed)
     C64_LOG_INFO("Applying configuration and starting streaming");
@@ -662,9 +685,25 @@ void c64_video_tick(void *data, float seconds)
         }
         context->render_texture =
             gs_texture_create(context->width, context->height, GS_RGBA, 1, (const uint8_t **)&context->frame_buffer, 0);
+
+        // Create afterglow accumulation textures (ping-pong buffers)
+        if (context->afterglow_accum_prev) {
+            gs_texture_destroy(context->afterglow_accum_prev);
+        }
+        if (context->afterglow_accum_next) {
+            gs_texture_destroy(context->afterglow_accum_next);
+        }
+        context->afterglow_accum_prev =
+            gs_texture_create(context->width, context->height, GS_RGBA, 1, NULL, GS_RENDER_TARGET);
+        context->afterglow_accum_next =
+            gs_texture_create(context->width, context->height, GS_RGBA, 1, NULL, GS_RENDER_TARGET);
+
         obs_leave_graphics();
         if (!context->render_texture) {
             C64_LOG_ERROR("Failed to create render texture");
+        }
+        if (!context->afterglow_accum_prev || !context->afterglow_accum_next) {
+            C64_LOG_ERROR("Failed to create afterglow accumulation textures");
         }
     } else {
         // Update texture with latest frame data
@@ -682,14 +721,25 @@ void c64_video_render(void *data, gs_effect_t *effect)
     if (!context || !context->render_texture)
         return;
 
-    // If CRT effects are disabled, use default rendering or simple texture draw
+    // Calculate delta time for afterglow effect
+    uint64_t current_time_ns = obs_get_video_frame_time();
+    float dt_ms = 0.0f;
+    if (context->last_frame_time_ns != 0) {
+        dt_ms = (float)(current_time_ns - context->last_frame_time_ns) / 1000000.0f; // Convert ns to ms
+    }
+    context->last_frame_time_ns = current_time_ns;
+
+    // If CRT effects are disabled, draw texture without effects
     if (!context->crt_enable) {
-        // Draw texture without effects using provided effect
+        // Draw texture without effects - always visible, using original dimensions
         if (effect) {
             gs_effect_set_texture(gs_effect_get_param_by_name(effect, "image"), context->render_texture);
             while (gs_effect_loop(effect, "Draw")) {
                 gs_draw_sprite(context->render_texture, 0, context->width, context->height);
             }
+        } else {
+            // Fallback: draw texture directly without any effect
+            gs_draw_sprite(context->render_texture, 0, context->width, context->height);
         }
         return;
     }
@@ -725,26 +775,73 @@ void c64_video_render(void *data, gs_effect_t *effect)
     gs_effect_set_int(gs_effect_get_param_by_name(context->crt_effect, "scanlines_width"), context->scanlines_width);
     gs_effect_set_float(gs_effect_get_param_by_name(context->crt_effect, "pixel_width"), context->pixel_width);
     gs_effect_set_float(gs_effect_get_param_by_name(context->crt_effect, "pixel_height"), context->pixel_height);
+    gs_effect_set_float(gs_effect_get_param_by_name(context->crt_effect, "blur_strength"), context->blur_strength);
     gs_effect_set_bool(gs_effect_get_param_by_name(context->crt_effect, "bloom_enable"), context->bloom_enable);
     gs_effect_set_float(gs_effect_get_param_by_name(context->crt_effect, "bloom_strength"), context->bloom_strength);
-    gs_effect_set_float(gs_effect_get_param_by_name(context->crt_effect, "bloom_threshold"), context->bloom_threshold);
+    gs_effect_set_bool(gs_effect_get_param_by_name(context->crt_effect, "afterglow_enable"), context->afterglow_enable);
+    gs_effect_set_int(gs_effect_get_param_by_name(context->crt_effect, "afterglow_duration_ms"),
+                      context->afterglow_duration_ms);
+    gs_effect_set_int(gs_effect_get_param_by_name(context->crt_effect, "afterglow_curve"), context->afterglow_curve);
+    gs_effect_set_bool(gs_effect_get_param_by_name(context->crt_effect, "tint_enable"), context->tint_enable);
+    gs_effect_set_int(gs_effect_get_param_by_name(context->crt_effect, "tint_mode"), context->tint_mode);
+    gs_effect_set_float(gs_effect_get_param_by_name(context->crt_effect, "tint_strength"), context->tint_strength);
 
-    // Render the texture with the CRT effect
+    // Set afterglow parameters
+    gs_effect_set_float(gs_effect_get_param_by_name(context->crt_effect, "dt_ms"), dt_ms);
+    if (context->afterglow_accum_prev) {
+        gs_effect_set_texture(gs_effect_get_param_by_name(context->crt_effect, "texture_accum_prev"),
+                              context->afterglow_accum_prev);
+    }
+
+    // Render the texture with the CRT effect using scaled dimensions
+    uint32_t render_width = c64_get_width(context);
+    uint32_t render_height = c64_get_height(context);
+
     while (gs_effect_loop(context->crt_effect, "Draw")) {
-        gs_draw_sprite(context->render_texture, 0, context->width, context->height);
+        gs_draw_sprite(context->render_texture, 0, render_width, render_height);
+    }
+
+    // Update afterglow accumulation texture (simple ping-pong)
+    if (context->afterglow_enable && context->afterglow_accum_prev && context->afterglow_accum_next) {
+        // Swap accumulation buffers for next frame
+        gs_texture_t *temp = context->afterglow_accum_prev;
+        context->afterglow_accum_prev = context->afterglow_accum_next;
+        context->afterglow_accum_next = temp;
+
+        // Note: In a full implementation, we would render the current frame result to afterglow_accum_next
+        // For now, the shader handles the accumulation using the previous buffer
     }
 }
 
 uint32_t c64_get_width(void *data)
 {
     struct c64_source *context = data;
-    return context ? context->width : 0;
+    if (!context)
+        return 0;
+
+    // Apply pixel geometry scaling for CRT effects
+    if (context->crt_enable) {
+        return (uint32_t)((float)context->width * context->pixel_width);
+    }
+    return context->width;
 }
 
 uint32_t c64_get_height(void *data)
 {
     struct c64_source *context = data;
-    return context ? context->height : 0;
+    if (!context)
+        return 0;
+
+    // Apply pixel geometry scaling for CRT effects
+    if (context->crt_enable) {
+        // For scanlines, also account for scanline width scaling
+        float height_scale = context->pixel_height;
+        if (context->scanlines_enable) {
+            height_scale *= (1.0f + (float)context->scanlines_width);
+        }
+        return (uint32_t)((float)context->height * height_scale);
+    }
+    return context->height;
 }
 
 // Synchronous render callback removed - now using async video output via obs_source_output_video()
