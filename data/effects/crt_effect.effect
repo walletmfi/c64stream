@@ -18,7 +18,6 @@ uniform float pixel_width;
 uniform float pixel_height;
 uniform bool bloom_enable;
 uniform float bloom_strength;
-uniform float bloom_threshold;
 
 sampler_state textureSampler {
     Filter   = Linear;
@@ -43,13 +42,14 @@ float4 PSDefault(VertData v_in) : TARGET
 {
     float2 uv = v_in.uv;
     
-    // Apply pixel geometry distortion
+    // Apply pixel geometry scaling (inverted - larger values = larger image)
     float2 pixel_uv = uv;
     if (pixel_width != 1.0 || pixel_height != 1.0) {
         float2 center = float2(0.5, 0.5);
         float2 offset = uv - center;
-        offset.x *= pixel_width;
-        offset.y *= pixel_height;
+        // Invert the scaling: divide by pixel size to make larger values = larger image
+        offset.x /= pixel_width;
+        offset.y /= pixel_height;
         pixel_uv = center + offset;
         
         // Clamp to valid texture coordinates
@@ -61,20 +61,36 @@ float4 PSDefault(VertData v_in) : TARGET
     // Sample the texture
     float4 color = image.Sample(textureSampler, pixel_uv);
     
-    // Apply scanlines
+    // Apply scanlines - create actual row separation
     if (scanlines_enable) {
-        float scanline = frac(v_in.uv.y * 272.0 / float(scanlines_width));
-        if (scanline < 0.5) {
-            color.rgb *= (1.0 - scanlines_opacity);
+        // Get the actual screen position in pixels
+        // Assume PAL resolution of 384x272
+        float screen_y = v_in.uv.y * 272.0;
+        
+        // Calculate which scanline row we're in (each C64 row + black space)
+        float row_height = 1.0 + float(scanlines_width);
+        float row_position = frac(screen_y / row_height);
+        
+        // If we're in the black space part (after the first pixel)
+        if (row_position > (1.0 / row_height)) {
+            // Interpolate between black and the row color based on opacity
+            // opacity=0 means complete black, opacity=1 means copy of the pixel row
+            color.rgb *= scanlines_opacity;
         }
     }
     
-    // Apply bloom effect
+    // Apply bloom effect with 5x strength range
     if (bloom_enable) {
         float brightness = dot(color.rgb, float3(0.299, 0.587, 0.114));
-        if (brightness > bloom_threshold) {
-            float bloom_factor = (brightness - bloom_threshold) / (1.0 - bloom_threshold);
-            color.rgb += color.rgb * bloom_factor * bloom_strength;
+        
+        // Integrated threshold that decreases as strength increases
+        // At strength=0, threshold is high (0.9), at strength=1, threshold is low (0.3)
+        float threshold = 0.9 - (bloom_strength * 0.6);
+        
+        if (brightness > threshold) {
+            float bloom_factor = (brightness - threshold) / (1.0 - threshold);
+            // Apply 5x multiplier to bloom strength for more visible effect
+            color.rgb += color.rgb * bloom_factor * (bloom_strength * 5.0);
         }
     }
     

@@ -308,7 +308,6 @@ void *c64_create(obs_data_t *settings, obs_source_t *source)
     context->pixel_height = (float)obs_data_get_double(settings, "pixel_height");
     context->bloom_enable = obs_data_get_bool(settings, "bloom_enable");
     context->bloom_strength = (float)obs_data_get_double(settings, "bloom_strength");
-    context->bloom_threshold = (float)obs_data_get_double(settings, "bloom_threshold");
     context->render_texture = NULL;
     context->crt_effect = NULL;
 
@@ -490,7 +489,6 @@ void c64_update(void *data, obs_data_t *settings)
     context->pixel_height = (float)obs_data_get_double(settings, "pixel_height");
     context->bloom_enable = obs_data_get_bool(settings, "bloom_enable");
     context->bloom_strength = (float)obs_data_get_double(settings, "bloom_strength");
-    context->bloom_threshold = (float)obs_data_get_double(settings, "bloom_threshold");
 
     // Start streaming with current configuration (will create new sockets if needed)
     C64_LOG_INFO("Applying configuration and starting streaming");
@@ -652,7 +650,10 @@ void c64_video_tick(void *data, float seconds)
     if (!context)
         return;
 
-    // Always update texture from frame buffer for consistent rendering
+    // Only update texture when CRT effects are enabled
+    if (!context->crt_enable)
+        return;
+
     // Update render texture if needed (create or recreate on size change)
     if (!context->render_texture || gs_texture_get_width(context->render_texture) != context->width ||
         gs_texture_get_height(context->render_texture) != context->height) {
@@ -678,21 +679,19 @@ void c64_video_tick(void *data, float seconds)
 // Video render callback for CRT effects (GPU rendering)
 void c64_video_render(void *data, gs_effect_t *effect)
 {
+    UNUSED_PARAMETER(effect);
     struct c64_source *context = data;
-    if (!context || !context->render_texture)
+    if (!context)
         return;
 
-    // If CRT effects are disabled, use default rendering or simple texture draw
+    // If CRT effects are disabled, return early to let async video show through
     if (!context->crt_enable) {
-        // Draw texture without effects using provided effect
-        if (effect) {
-            gs_effect_set_texture(gs_effect_get_param_by_name(effect, "image"), context->render_texture);
-            while (gs_effect_loop(effect, "Draw")) {
-                gs_draw_sprite(context->render_texture, 0, context->width, context->height);
-            }
-        }
         return;
     }
+
+    // Check if texture is ready
+    if (!context->render_texture)
+        return;
 
     // Load CRT shader effect if not already loaded
     if (!context->crt_effect) {
@@ -702,13 +701,6 @@ void c64_video_render(void *data, gs_effect_t *effect)
             bfree(effect_path);
             if (!context->crt_effect) {
                 C64_LOG_ERROR("Failed to load CRT effect shader");
-                // Fall back to default rendering
-                if (effect) {
-                    gs_effect_set_texture(gs_effect_get_param_by_name(effect, "image"), context->render_texture);
-                    while (gs_effect_loop(effect, "Draw")) {
-                        gs_draw_sprite(context->render_texture, 0, context->width, context->height);
-                    }
-                }
                 return;
             }
         } else {
@@ -727,7 +719,6 @@ void c64_video_render(void *data, gs_effect_t *effect)
     gs_effect_set_float(gs_effect_get_param_by_name(context->crt_effect, "pixel_height"), context->pixel_height);
     gs_effect_set_bool(gs_effect_get_param_by_name(context->crt_effect, "bloom_enable"), context->bloom_enable);
     gs_effect_set_float(gs_effect_get_param_by_name(context->crt_effect, "bloom_strength"), context->bloom_strength);
-    gs_effect_set_float(gs_effect_get_param_by_name(context->crt_effect, "bloom_threshold"), context->bloom_threshold);
 
     // Render the texture with the CRT effect
     while (gs_effect_loop(context->crt_effect, "Draw")) {

@@ -15,8 +15,9 @@ See <https://www.gnu.org/licenses/> for details.
 #include "c64-file.h"
 #include <obs-module.h>
 
-// Forward declaration of callback
+// Forward declaration of callbacks
 static bool crt_enable_modified(obs_properties_t *props, obs_property_t *property, obs_data_t *settings);
+static bool crt_reset_defaults(obs_properties_t *props, obs_property_t *property, void *data);
 
 obs_properties_t *c64_create_properties(void *data)
 {
@@ -108,6 +109,11 @@ obs_properties_t *c64_create_properties(void *data)
     obs_property_set_long_description(crt_enable_prop, "Enable or disable all CRT visual effects");
     obs_property_set_modified_callback(crt_enable_prop, crt_enable_modified);
 
+    // Reset to defaults button
+    obs_property_t *reset_button =
+        obs_properties_add_button(effects_props, "crt_reset", "Reset to Defaults", crt_reset_defaults);
+    obs_property_set_long_description(reset_button, "Reset all CRT effect settings to their default values");
+
     // Section label
     obs_properties_add_text(effects_props, "crt_label", "CRT EFFECT CONFIGURATION", OBS_TEXT_INFO);
 
@@ -119,21 +125,22 @@ obs_properties_t *c64_create_properties(void *data)
 
     obs_property_t *scanlines_opacity_prop =
         obs_properties_add_float_slider(effects_props, "scanlines_opacity", "Opacity", 0.0, 1.0, 0.05);
-    obs_property_set_long_description(scanlines_opacity_prop, "Scanline opacity (0.0 = transparent, 1.0 = opaque)");
+    obs_property_set_long_description(scanlines_opacity_prop,
+                                      "Scanline darkness (0.0 = complete black, 1.0 = no separation)");
 
     obs_property_t *scanlines_width_prop =
         obs_properties_add_int_slider(effects_props, "scanlines_width", "Width (pixels)", 1, 6, 1);
-    obs_property_set_long_description(scanlines_width_prop, "Scanline width in pixels");
+    obs_property_set_long_description(scanlines_width_prop, "Height of black space between pixel rows");
 
     // Pixel Geometry
     obs_properties_add_text(effects_props, "pixel_geom_label", "▶ Pixel Geometry", OBS_TEXT_INFO);
     obs_property_t *pixel_width_prop =
         obs_properties_add_float_slider(effects_props, "pixel_width", "Pixel Width", 0.5, 3.0, 0.1);
-    obs_property_set_long_description(pixel_width_prop, "Horizontal pixel width multiplier");
+    obs_property_set_long_description(pixel_width_prop, "Horizontal pixel size multiplier");
 
     obs_property_t *pixel_height_prop =
         obs_properties_add_float_slider(effects_props, "pixel_height", "Pixel Height", 0.5, 3.0, 0.1);
-    obs_property_set_long_description(pixel_height_prop, "Vertical pixel height multiplier");
+    obs_property_set_long_description(pixel_height_prop, "Vertical pixel size multiplier");
 
     // CRT Bloom
     obs_properties_add_text(effects_props, "bloom_label", "▶ CRT Bloom", OBS_TEXT_INFO);
@@ -142,11 +149,7 @@ obs_properties_t *c64_create_properties(void *data)
 
     obs_property_t *bloom_strength_prop =
         obs_properties_add_float_slider(effects_props, "bloom_strength", "Strength", 0.0, 1.0, 0.05);
-    obs_property_set_long_description(bloom_strength_prop, "Bloom effect strength");
-
-    obs_property_t *bloom_threshold_prop =
-        obs_properties_add_float_slider(effects_props, "bloom_threshold", "Threshold", 0.0, 1.0, 0.05);
-    obs_property_set_long_description(bloom_threshold_prop, "Brightness threshold for bloom effect");
+    obs_property_set_long_description(bloom_strength_prop, "Bloom effect strength (0.0 = disabled, 1.0 = maximum)");
 
     return props;
 }
@@ -167,6 +170,7 @@ static bool crt_enable_modified(obs_properties_t *props, obs_property_t *propert
         return true;
 
     // Enable/disable all effect sub-controls
+    obs_property_t *reset_button = obs_properties_get(effects_props, "crt_reset");
     obs_property_t *scanlines_enable = obs_properties_get(effects_props, "scanlines_enable");
     obs_property_t *scanlines_opacity = obs_properties_get(effects_props, "scanlines_opacity");
     obs_property_t *scanlines_width = obs_properties_get(effects_props, "scanlines_width");
@@ -174,8 +178,9 @@ static bool crt_enable_modified(obs_properties_t *props, obs_property_t *propert
     obs_property_t *pixel_height = obs_properties_get(effects_props, "pixel_height");
     obs_property_t *bloom_enable = obs_properties_get(effects_props, "bloom_enable");
     obs_property_t *bloom_strength = obs_properties_get(effects_props, "bloom_strength");
-    obs_property_t *bloom_threshold = obs_properties_get(effects_props, "bloom_threshold");
 
+    if (reset_button)
+        obs_property_set_enabled(reset_button, enabled);
     if (scanlines_enable)
         obs_property_set_enabled(scanlines_enable, enabled);
     if (scanlines_opacity)
@@ -190,8 +195,38 @@ static bool crt_enable_modified(obs_properties_t *props, obs_property_t *propert
         obs_property_set_enabled(bloom_enable, enabled);
     if (bloom_strength)
         obs_property_set_enabled(bloom_strength, enabled);
-    if (bloom_threshold)
-        obs_property_set_enabled(bloom_threshold, enabled);
+
+    return true;
+}
+
+// Callback for Reset to Defaults button
+static bool crt_reset_defaults(obs_properties_t *props, obs_property_t *property, void *data)
+{
+    UNUSED_PARAMETER(props);
+    UNUSED_PARAMETER(property);
+
+    struct c64_source *context = data;
+    if (!context)
+        return false;
+
+    // Get the settings object from the source
+    obs_data_t *settings = obs_source_get_settings(context->source);
+    if (!settings)
+        return false;
+
+    // Reset all CRT effect settings to defaults
+    obs_data_set_bool(settings, "scanlines_enable", false);
+    obs_data_set_double(settings, "scanlines_opacity", 0.25);
+    obs_data_set_int(settings, "scanlines_width", 1);
+    obs_data_set_double(settings, "pixel_width", 1.0);
+    obs_data_set_double(settings, "pixel_height", 1.0);
+    obs_data_set_bool(settings, "bloom_enable", false);
+    obs_data_set_double(settings, "bloom_strength", 0.25);
+
+    // Apply the updated settings
+    obs_source_update(context->source, settings);
+
+    obs_data_release(settings);
 
     return true;
 }
@@ -243,10 +278,9 @@ void c64_set_property_defaults(obs_data_t *settings)
     obs_data_set_default_bool(settings, "crt_enable", false);
     obs_data_set_default_bool(settings, "scanlines_enable", false);
     obs_data_set_default_double(settings, "scanlines_opacity", 0.25);
-    obs_data_set_default_int(settings, "scanlines_width", 2);
+    obs_data_set_default_int(settings, "scanlines_width", 1);
     obs_data_set_default_double(settings, "pixel_width", 1.0);
     obs_data_set_default_double(settings, "pixel_height", 1.0);
     obs_data_set_default_bool(settings, "bloom_enable", false);
-    obs_data_set_default_double(settings, "bloom_strength", 0.4);
-    obs_data_set_default_double(settings, "bloom_threshold", 0.5);
+    obs_data_set_default_double(settings, "bloom_strength", 0.25);
 }
