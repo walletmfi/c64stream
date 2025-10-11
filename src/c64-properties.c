@@ -109,18 +109,21 @@ obs_properties_t *c64_create_properties(void *data)
     obs_property_set_long_description(reset_button, "Reset all CRT effect settings to their default values");
 
     // Scanlines
-    obs_properties_add_text(effects_props, "scanlines_label", "▶ Scanlines", OBS_TEXT_INFO);
-    obs_property_t *scanlines_enable_prop =
-        obs_properties_add_bool(effects_props, "scanlines_enable", "Enable Scanlines");
-    obs_property_set_long_description(scanlines_enable_prop, "Enable horizontal scanline effect");
+    obs_property_t *scanline_gap_prop = obs_properties_add_list(effects_props, "scanline_gap", "Scanline Gap",
+                                                                OBS_COMBO_TYPE_LIST, OBS_COMBO_FORMAT_INT);
+    obs_property_list_add_int(scanline_gap_prop, "0 (No scanlines)", 0);
+    obs_property_list_add_int(scanline_gap_prop, "1", 1);
+    obs_property_list_add_int(scanline_gap_prop, "2", 2);
+    obs_property_list_add_int(scanline_gap_prop, "3", 3);
+    obs_property_list_add_int(scanline_gap_prop, "4", 4);
+    obs_property_set_long_description(scanline_gap_prop, "Gap size between scanlines (0 = disabled, 1-4 = gap size)");
 
-    obs_property_t *scanlines_opacity_prop =
-        obs_properties_add_float_slider(effects_props, "scanlines_opacity", "Strength", 0.0, 1.0, 0.05);
-    obs_property_set_long_description(scanlines_opacity_prop,
-                                      "Scanline darkness (0.0 = complete black, 1.0 = no separation)");
+    obs_property_t *scanlines_strength_prop =
+        obs_properties_add_float_slider(effects_props, "scanlines_opacity", "Scanline Strength", 0.0, 1.0, 0.05);
+    obs_property_set_long_description(scanlines_strength_prop,
+                                      "Scanline darkness (0.0 = no reduction, 1.0 = black gaps)");
 
     // Pixel Geometry
-    obs_properties_add_text(effects_props, "pixel_geom_label", "▶ Pixel Geometry", OBS_TEXT_INFO);
     obs_property_t *pixel_width_prop =
         obs_properties_add_float_slider(effects_props, "pixel_width", "Pixel Width", 0.5, 3.0, 0.1);
     obs_property_set_long_description(pixel_width_prop, "Horizontal pixel size multiplier");
@@ -135,23 +138,14 @@ obs_properties_t *c64_create_properties(void *data)
                                       "Scaling blur (0.0 = precise scaling, 1.0 = very blurry with gaussian blur)");
 
     // CRT Bloom
-    obs_properties_add_text(effects_props, "bloom_label", "▶ CRT Bloom", OBS_TEXT_INFO);
-    obs_property_t *bloom_enable_prop = obs_properties_add_bool(effects_props, "bloom_enable", "Enable Bloom");
-    obs_property_set_long_description(bloom_enable_prop, "Enable brightness-based bloom effect");
-
     obs_property_t *bloom_strength_prop =
-        obs_properties_add_float_slider(effects_props, "bloom_strength", "Strength", 0.0, 1.0, 0.05);
-    obs_property_set_long_description(bloom_strength_prop, "Bloom effect strength (0.0 = disabled, 1.0 = maximum)");
+        obs_properties_add_float_slider(effects_props, "bloom_strength", "Bloom Strength", 0.0, 1.0, 0.05);
+    obs_property_set_long_description(bloom_strength_prop, "Bloom effect strength (0.0 = off, 1.0 = maximum)");
 
     // Afterglow
-    obs_properties_add_text(effects_props, "afterglow_label", "🟡 Afterglow", OBS_TEXT_INFO);
-    obs_property_t *afterglow_enable_prop =
-        obs_properties_add_bool(effects_props, "afterglow_enable", "Enable Afterglow");
-    obs_property_set_long_description(afterglow_enable_prop, "Enable phosphor persistence (lingering brightness)");
-
     obs_property_t *afterglow_duration_prop =
         obs_properties_add_int_slider(effects_props, "afterglow_duration_ms", "Afterglow Duration (ms)", 0, 3000, 10);
-    obs_property_set_long_description(afterglow_duration_prop, "Time for afterglow to fade completely");
+    obs_property_set_long_description(afterglow_duration_prop, "Phosphor persistence duration (0 = off)");
 
     obs_property_t *afterglow_curve_prop = obs_properties_add_list(effects_props, "afterglow_curve", "Decay Curve",
                                                                    OBS_COMBO_TYPE_LIST, OBS_COMBO_FORMAT_INT);
@@ -162,10 +156,6 @@ obs_properties_t *c64_create_properties(void *data)
     obs_property_set_long_description(afterglow_curve_prop, "How quickly the afterglow fades away");
 
     // Screen Tint
-    obs_properties_add_text(effects_props, "tint_label", "🟩 Screen Tint", OBS_TEXT_INFO);
-    obs_property_t *tint_enable_prop = obs_properties_add_bool(effects_props, "tint_enable", "Enable Screen Tint");
-    obs_property_set_long_description(tint_enable_prop, "Enable monochrome-style color tinting");
-
     obs_property_t *tint_mode_prop =
         obs_properties_add_list(effects_props, "tint_mode", "Tint Type", OBS_COMBO_TYPE_LIST, OBS_COMBO_FORMAT_INT);
     obs_property_list_add_int(tint_mode_prop, "None (colour)", 0);
@@ -176,7 +166,7 @@ obs_properties_t *c64_create_properties(void *data)
 
     obs_property_t *tint_strength_prop =
         obs_properties_add_float_slider(effects_props, "tint_strength", "Tint Strength", 0.0, 1.0, 0.05);
-    obs_property_set_long_description(tint_strength_prop, "Strength of tint effect (0.0 = disabled, 1.0 = full tint)");
+    obs_property_set_long_description(tint_strength_prop, "Strength of tint effect (0.0 = off, 1.0 = full tint)");
 
     return props;
 }
@@ -197,19 +187,16 @@ static bool crt_reset_defaults(obs_properties_t *props, obs_property_t *property
         return false;
 
     // Reset all CRT effect settings to defaults
-    obs_data_set_bool(settings, "scanlines_enable", false);
-    obs_data_set_double(settings, "scanlines_opacity", 0.25);
+    obs_data_set_int(settings, "scanline_gap", 0);
+    obs_data_set_double(settings, "scanlines_opacity", 0.75);
     obs_data_set_double(settings, "pixel_width", 1.0);
     obs_data_set_double(settings, "pixel_height", 1.0);
-    obs_data_set_double(settings, "blur_strength", 0.25);
-    obs_data_set_bool(settings, "bloom_enable", false);
-    obs_data_set_double(settings, "bloom_strength", 0.25);
-    obs_data_set_bool(settings, "afterglow_enable", false);
-    obs_data_set_int(settings, "afterglow_duration_ms", 300);
+    obs_data_set_double(settings, "blur_strength", 0.0);
+    obs_data_set_double(settings, "bloom_strength", 0.0);
+    obs_data_set_int(settings, "afterglow_duration_ms", 0);
     obs_data_set_int(settings, "afterglow_curve", 0);
-    obs_data_set_bool(settings, "tint_enable", false);
     obs_data_set_int(settings, "tint_mode", 0);
-    obs_data_set_double(settings, "tint_strength", 1.0);
+    obs_data_set_double(settings, "tint_strength", 0.0);
 
     // Apply the updated settings
     obs_source_update(context->source, settings);
@@ -263,17 +250,14 @@ void c64_set_property_defaults(obs_data_t *settings)
     obs_data_set_default_bool(settings, "record_video", false); // Disabled by default
 
     // CRT effects defaults
-    obs_data_set_default_bool(settings, "scanlines_enable", false);
-    obs_data_set_default_double(settings, "scanlines_opacity", 0.25);
+    obs_data_set_default_int(settings, "scanline_gap", 0);
+    obs_data_set_default_double(settings, "scanlines_opacity", 0.75);
     obs_data_set_default_double(settings, "pixel_width", 1.0);
     obs_data_set_default_double(settings, "pixel_height", 1.0);
-    obs_data_set_default_double(settings, "blur_strength", 0.25);
-    obs_data_set_default_bool(settings, "bloom_enable", false);
-    obs_data_set_default_double(settings, "bloom_strength", 0.25);
-    obs_data_set_default_bool(settings, "afterglow_enable", false);
-    obs_data_set_default_int(settings, "afterglow_duration_ms", 300);
+    obs_data_set_default_double(settings, "blur_strength", 0.0);
+    obs_data_set_default_double(settings, "bloom_strength", 0.0);
+    obs_data_set_default_int(settings, "afterglow_duration_ms", 0);
     obs_data_set_default_int(settings, "afterglow_curve", 0);
-    obs_data_set_default_bool(settings, "tint_enable", false);
     obs_data_set_default_int(settings, "tint_mode", 0);
-    obs_data_set_default_double(settings, "tint_strength", 1.0);
+    obs_data_set_default_double(settings, "tint_strength", 0.0);
 }

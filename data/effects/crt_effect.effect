@@ -11,21 +11,19 @@ uniform float4x4 ViewProj;
 uniform texture2d image;
 
 // CRT effect parameters
-uniform bool scanlines_enable;
+uniform int scanline_gap;
 uniform float scanlines_opacity;
 uniform float pixel_width;
 uniform float pixel_height;
 uniform float blur_strength;
-uniform bool bloom_enable;
 uniform float bloom_strength;
-uniform bool afterglow_enable;
 uniform int afterglow_duration_ms;
 uniform int afterglow_curve;
-uniform bool tint_enable;
 uniform int tint_mode;
 uniform float tint_strength;
 uniform float dt_ms;
 uniform texture2d texture_accum_prev;
+uniform float output_height; // Output resolution height for scanline calculation
 
 sampler_state textureSampler {
     Filter   = Linear;
@@ -75,24 +73,31 @@ float4 PSDefault(VertData v_in) : TARGET
 
     // === SCANLINES EFFECT (EARLY APPLICATION) ===
     // Apply scanlines early so other effects can bleed into them for authentic CRT look
-    if (scanlines_enable) {
-        // When scanlines are enabled, frame is scaled 2x in both dimensions
-        // Odd-numbered rows (1, 3, 5, etc.) are duplicates of even rows but darker
-        float scaled_y = uv.y * 2.0 * pixel_height; // Scale by 2x for scanlines + pixel geometry
-        int row_index = int(floor(scaled_y));
+    if (scanline_gap > 0 && scanlines_opacity > 0.0) {
+        // Calculate the actual output pixel row (0, 1, 2, 3, ...)
+        // output_height is the scaled output height
+        int pixel_row = int(floor(uv.y * output_height));
 
-        // Check if this is an odd-numbered row (scanline row)
-        if ((row_index % 2) == 1) {
-            // This is a scanline row (odd index) - apply darkness
-            // scanlines_opacity controls how dark the line is:
-            // 0.0 = completely black, 1.0 = same brightness as original
-            color.rgb *= scanlines_opacity;
+        // Create scanline pattern based on gap size
+        // Gap of 1: every other line (1, 3, 5...) is dark
+        // Gap of 2: 2 lines dark, 1 bright (pattern: 0=bright, 1=dark, 2=dark, 3=bright...)
+        // Gap of 3: 3 lines dark, 1 bright (pattern: 0=bright, 1,2,3=dark, 4=bright...)
+        // Gap of 4: 4 lines dark, 1 bright (pattern: 0=bright, 1,2,3,4=dark, 5=bright...)
+
+        int pattern_size = 1 + scanline_gap;  // Total pattern size
+        int position_in_pattern = pixel_row % pattern_size;
+
+        // First line in each pattern is the original (bright), rest are scanlines (dark)
+        if (position_in_pattern != 0) {
+            // This is a scanline row - apply darkness
+            // scanlines_opacity controls darkness: 0.0 = no reduction, 1.0 = completely black
+            color.rgb *= (1.0 - scanlines_opacity);
         }
-        // Even rows (0, 2, 4, etc.) remain unchanged (original brightness)
+        // position_in_pattern == 0 rows remain unchanged (original brightness)
     }
 
     // === ENHANCED BLOOM EFFECT WITH BLEEDING ===
-    if (bloom_enable) {
+    if (bloom_strength > 0.0) {
         // Sample current pixel and neighbors for bloom bleeding effect
         float4 center = color;
         float bloom_radius = bloom_strength * 0.002; // Radius scales with strength
@@ -142,7 +147,7 @@ float4 PSDefault(VertData v_in) : TARGET
 
     // === AFTERGLOW EFFECT ===
     // Temporal afterglow - blend with previous frame to create phosphor persistence
-    if (afterglow_enable && afterglow_duration_ms > 0) {
+    if (afterglow_duration_ms > 0) {
         // Sample the previous frame at the same UV coordinate
         float4 prev_frame = texture_accum_prev.Sample(textureSampler, uv);
 
@@ -175,7 +180,7 @@ float4 PSDefault(VertData v_in) : TARGET
 
     // === SCREEN TINT EFFECT ===
     // Emulate 1980s monochrome CRTs: first convert to monochrome, then apply tint
-    if (tint_enable && tint_strength > 0.0) {
+    if (tint_mode > 0 && tint_strength > 0.0) {
         // Step 1: Convert to monochrome (grayscale)
         float luminance = dot(color.rgb, float3(0.299, 0.587, 0.114));
         float3 monochrome = float3(luminance, luminance, luminance);

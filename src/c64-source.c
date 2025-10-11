@@ -300,20 +300,21 @@ void *c64_create(obs_data_t *settings, obs_source_t *source)
     c64_record_init(context);
 
     // Initialize CRT effect state from settings
-    context->scanlines_enable = obs_data_get_bool(settings, "scanlines_enable");
+    context->scanline_gap = (int)obs_data_get_int(settings, "scanline_gap");
     context->scanlines_opacity = (float)obs_data_get_double(settings, "scanlines_opacity");
+    context->scanlines_enable = (context->scanline_gap > 0);
     context->scanlines_width = (int)obs_data_get_int(settings, "scanlines_width");
     context->pixel_width = (float)obs_data_get_double(settings, "pixel_width");
     context->pixel_height = (float)obs_data_get_double(settings, "pixel_height");
     context->blur_strength = (float)obs_data_get_double(settings, "blur_strength");
-    context->bloom_enable = obs_data_get_bool(settings, "bloom_enable");
     context->bloom_strength = (float)obs_data_get_double(settings, "bloom_strength");
-    context->afterglow_enable = obs_data_get_bool(settings, "afterglow_enable");
+    context->bloom_enable = context->bloom_strength > 0.0f;
     context->afterglow_duration_ms = (int)obs_data_get_int(settings, "afterglow_duration_ms");
+    context->afterglow_enable = context->afterglow_duration_ms > 0;
     context->afterglow_curve = (int)obs_data_get_int(settings, "afterglow_curve");
-    context->tint_enable = obs_data_get_bool(settings, "tint_enable");
     context->tint_mode = (int)obs_data_get_int(settings, "tint_mode");
     context->tint_strength = (float)obs_data_get_double(settings, "tint_strength");
+    context->tint_enable = (context->tint_mode > 0 && context->tint_strength > 0.0f);
     context->render_texture = NULL;
     context->crt_effect = NULL;
     context->afterglow_accum_prev = NULL;
@@ -498,20 +499,21 @@ void c64_update(void *data, obs_data_t *settings)
     c64_record_update_settings(context, settings);
 
     // Update CRT effect settings
-    context->scanlines_enable = obs_data_get_bool(settings, "scanlines_enable");
+    context->scanline_gap = (int)obs_data_get_int(settings, "scanline_gap");
     context->scanlines_opacity = (float)obs_data_get_double(settings, "scanlines_opacity");
+    context->scanlines_enable = (context->scanline_gap > 0);
     context->scanlines_width = (int)obs_data_get_int(settings, "scanlines_width");
     context->pixel_width = (float)obs_data_get_double(settings, "pixel_width");
     context->pixel_height = (float)obs_data_get_double(settings, "pixel_height");
     context->blur_strength = (float)obs_data_get_double(settings, "blur_strength");
-    context->bloom_enable = obs_data_get_bool(settings, "bloom_enable");
     context->bloom_strength = (float)obs_data_get_double(settings, "bloom_strength");
-    context->afterglow_enable = obs_data_get_bool(settings, "afterglow_enable");
+    context->bloom_enable = context->bloom_strength > 0.0f;
     context->afterglow_duration_ms = (int)obs_data_get_int(settings, "afterglow_duration_ms");
+    context->afterglow_enable = context->afterglow_duration_ms > 0;
     context->afterglow_curve = (int)obs_data_get_int(settings, "afterglow_curve");
-    context->tint_enable = obs_data_get_bool(settings, "tint_enable");
     context->tint_mode = (int)obs_data_get_int(settings, "tint_mode");
     context->tint_strength = (float)obs_data_get_double(settings, "tint_strength");
+    context->tint_enable = (context->tint_mode > 0 && context->tint_strength > 0.0f);
 
     // Start streaming with current configuration (will create new sockets if needed)
     C64_LOG_INFO("Applying configuration and starting streaming");
@@ -685,6 +687,10 @@ void c64_video_tick(void *data, float seconds)
             gs_texture_create(context->width, context->height, GS_RGBA, 1, (const uint8_t **)&context->frame_buffer, 0);
 
         // Create afterglow accumulation textures (ping-pong buffers)
+        // Use render dimensions (which include scaling effects) not base dimensions
+        uint32_t render_width = c64_get_width(context);
+        uint32_t render_height = c64_get_height(context);
+
         if (context->afterglow_accum_prev) {
             gs_texture_destroy(context->afterglow_accum_prev);
         }
@@ -692,9 +698,9 @@ void c64_video_tick(void *data, float seconds)
             gs_texture_destroy(context->afterglow_accum_next);
         }
         context->afterglow_accum_prev =
-            gs_texture_create(context->width, context->height, GS_RGBA, 1, NULL, GS_RENDER_TARGET);
+            gs_texture_create(render_width, render_height, GS_RGBA, 1, NULL, GS_RENDER_TARGET);
         context->afterglow_accum_next =
-            gs_texture_create(context->width, context->height, GS_RGBA, 1, NULL, GS_RENDER_TARGET);
+            gs_texture_create(render_width, render_height, GS_RGBA, 1, NULL, GS_RENDER_TARGET);
 
         obs_leave_graphics();
         if (!context->render_texture) {
@@ -715,11 +721,15 @@ void c64_video_tick(void *data, float seconds)
 // Video render callback for CRT effects (GPU rendering)
 void c64_video_render(void *data, gs_effect_t *effect)
 {
+    UNUSED_PARAMETER(effect);
     struct c64_source *context = data;
-    if (!context || !context->render_texture)
+    if (!context)
         return;
 
-    // Calculate delta time for afterglow effect
+    // If no render texture available, fall back to default rendering
+    if (!context->render_texture) {
+        return;
+    } // Calculate delta time for afterglow effect
     uint64_t current_time_ns = obs_get_video_frame_time();
     float dt_ms = 0.0f;
     if (context->last_frame_time_ns != 0) {
@@ -727,44 +737,68 @@ void c64_video_render(void *data, gs_effect_t *effect)
     }
     context->last_frame_time_ns = current_time_ns;
 
-    // Load CRT shader effect if not already loaded
+    // Check if any CRT effects are enabled
+    bool any_effects_enabled =
+        (context->scanline_gap > 0) || (context->bloom_strength > 0.0f) || (context->afterglow_duration_ms > 0) ||
+        (context->tint_mode > 0 && context->tint_strength > 0.0f) ||
+        (context->pixel_width != 1.0f || context->pixel_height != 1.0f) || context->blur_strength > 0.0f;
+
+    // If no effects are enabled, use simple default rendering
+    if (!any_effects_enabled) {
+        gs_effect_t *default_effect = obs_get_base_effect(OBS_EFFECT_DEFAULT);
+        if (default_effect) {
+            gs_effect_set_texture(gs_effect_get_param_by_name(default_effect, "image"), context->render_texture);
+            while (gs_effect_loop(default_effect, "Draw")) {
+                gs_draw_sprite(context->render_texture, 0, context->width, context->height);
+            }
+        }
+        return;
+    }
+
+    // Load CRT shader effect if not already loaded (only when effects are enabled)
     if (!context->crt_effect) {
         char *effect_path = obs_module_file("effects/crt_effect.effect");
         if (effect_path) {
             context->crt_effect = gs_effect_create_from_file(effect_path, NULL);
             bfree(effect_path);
             if (!context->crt_effect) {
-                C64_LOG_ERROR("Failed to load CRT effect shader");
+                C64_LOG_ERROR("Failed to load CRT effect shader - falling back to default rendering");
                 // Fall back to default rendering
-                if (effect) {
-                    gs_effect_set_texture(gs_effect_get_param_by_name(effect, "image"), context->render_texture);
-                    while (gs_effect_loop(effect, "Draw")) {
+                gs_effect_t *default_effect = obs_get_base_effect(OBS_EFFECT_DEFAULT);
+                if (default_effect) {
+                    gs_effect_set_texture(gs_effect_get_param_by_name(default_effect, "image"),
+                                          context->render_texture);
+                    while (gs_effect_loop(default_effect, "Draw")) {
                         gs_draw_sprite(context->render_texture, 0, context->width, context->height);
                     }
                 }
                 return;
             }
         } else {
-            C64_LOG_ERROR("Failed to find CRT effect shader file");
+            C64_LOG_ERROR("Failed to find CRT effect shader file - falling back to default rendering");
+            gs_effect_t *default_effect = obs_get_base_effect(OBS_EFFECT_DEFAULT);
+            if (default_effect) {
+                gs_effect_set_texture(gs_effect_get_param_by_name(default_effect, "image"), context->render_texture);
+                while (gs_effect_loop(default_effect, "Draw")) {
+                    gs_draw_sprite(context->render_texture, 0, context->width, context->height);
+                }
+            }
             return;
         }
     }
 
     // Set CRT shader parameters
     gs_effect_set_texture(gs_effect_get_param_by_name(context->crt_effect, "image"), context->render_texture);
-    gs_effect_set_bool(gs_effect_get_param_by_name(context->crt_effect, "scanlines_enable"), context->scanlines_enable);
+    gs_effect_set_int(gs_effect_get_param_by_name(context->crt_effect, "scanline_gap"), context->scanline_gap);
     gs_effect_set_float(gs_effect_get_param_by_name(context->crt_effect, "scanlines_opacity"),
                         context->scanlines_opacity);
     gs_effect_set_float(gs_effect_get_param_by_name(context->crt_effect, "pixel_width"), context->pixel_width);
     gs_effect_set_float(gs_effect_get_param_by_name(context->crt_effect, "pixel_height"), context->pixel_height);
     gs_effect_set_float(gs_effect_get_param_by_name(context->crt_effect, "blur_strength"), context->blur_strength);
-    gs_effect_set_bool(gs_effect_get_param_by_name(context->crt_effect, "bloom_enable"), context->bloom_enable);
     gs_effect_set_float(gs_effect_get_param_by_name(context->crt_effect, "bloom_strength"), context->bloom_strength);
-    gs_effect_set_bool(gs_effect_get_param_by_name(context->crt_effect, "afterglow_enable"), context->afterglow_enable);
     gs_effect_set_int(gs_effect_get_param_by_name(context->crt_effect, "afterglow_duration_ms"),
                       context->afterglow_duration_ms);
     gs_effect_set_int(gs_effect_get_param_by_name(context->crt_effect, "afterglow_curve"), context->afterglow_curve);
-    gs_effect_set_bool(gs_effect_get_param_by_name(context->crt_effect, "tint_enable"), context->tint_enable);
     gs_effect_set_int(gs_effect_get_param_by_name(context->crt_effect, "tint_mode"), context->tint_mode);
     gs_effect_set_float(gs_effect_get_param_by_name(context->crt_effect, "tint_strength"), context->tint_strength);
 
@@ -779,14 +813,13 @@ void c64_video_render(void *data, gs_effect_t *effect)
     uint32_t render_width = c64_get_width(context);
     uint32_t render_height = c64_get_height(context);
 
-    while (gs_effect_loop(context->crt_effect, "Draw")) {
-        gs_draw_sprite(context->render_texture, 0, render_width, render_height);
-    }
+    // Set output resolution for scanline calculation
+    gs_effect_set_float(gs_effect_get_param_by_name(context->crt_effect, "output_height"), (float)render_height);
 
-    // Update afterglow accumulation texture (render current result to next buffer)
+    // If afterglow is enabled, we need to render to the accumulation buffer first,
+    // then display from that buffer (creating proper temporal feedback)
     if (context->afterglow_enable && context->afterglow_accum_prev && context->afterglow_accum_next) {
-        // Render the current frame result to the next accumulation buffer
-        // This creates the temporal history needed for proper afterglow
+        // === RENDER TO ACCUMULATION BUFFER (WITH AFTERGLOW APPLIED) ===
         gs_viewport_push();
         gs_projection_push();
 
@@ -798,19 +831,38 @@ void c64_video_render(void *data, gs_effect_t *effect)
         gs_ortho(0.0f, (float)render_width, 0.0f, (float)render_height, -100.0f, 100.0f);
         gs_set_viewport(0, 0, render_width, render_height);
 
-        // Copy the current render texture to the accumulation buffer
-        // This preserves the current frame for use as "previous frame" next time
-        gs_draw_sprite(context->render_texture, 0, render_width, render_height);
+        // Render with CRT effect (including afterglow) to accumulation buffer
+        // This captures the shader output which includes the blended afterglow
+        while (gs_effect_loop(context->crt_effect, "Draw")) {
+            gs_draw_sprite(context->render_texture, 0, render_width, render_height);
+        }
 
         // Restore previous render target and projection
         gs_set_render_target(NULL, NULL);
         gs_projection_pop();
         gs_viewport_pop();
 
+        // === DISPLAY FROM ACCUMULATION BUFFER ===
+        // Now draw the accumulated result (with afterglow) to the screen
+        // Use default effect for simple texture display
+        gs_effect_t *default_effect = obs_get_base_effect(OBS_EFFECT_DEFAULT);
+        if (default_effect) {
+            gs_effect_set_texture(gs_effect_get_param_by_name(default_effect, "image"), context->afterglow_accum_next);
+            while (gs_effect_loop(default_effect, "Draw")) {
+                gs_draw_sprite(context->afterglow_accum_next, 0, render_width, render_height);
+            }
+        }
+
         // Swap accumulation buffers for next frame
+        // Next frame will use this frame's output as its "previous frame"
         gs_texture_t *temp = context->afterglow_accum_prev;
         context->afterglow_accum_prev = context->afterglow_accum_next;
         context->afterglow_accum_next = temp;
+    } else {
+        // === NO AFTERGLOW: RENDER DIRECTLY ===
+        while (gs_effect_loop(context->crt_effect, "Draw")) {
+            gs_draw_sprite(context->render_texture, 0, render_width, render_height);
+        }
     }
 }
 
@@ -820,11 +872,18 @@ uint32_t c64_get_width(void *data)
     if (!context)
         return 0;
 
+    // Check if any effects that change dimensions are enabled
+    bool dimension_effects_enabled = context->scanlines_enable || context->pixel_width != 1.0f;
+
+    if (!dimension_effects_enabled) {
+        return context->width;
+    }
+
     // Apply pixel geometry scaling for CRT effects
     float width_scale = context->pixel_width;
-    // Scanlines require 2x scaling (both width and height) for proper effect
-    if (context->scanlines_enable) {
-        width_scale *= 2.0f;
+    // Scanlines require scaling based on gap size: 1+gap multiplier
+    if (context->scanlines_enable && context->scanline_gap > 0) {
+        width_scale *= (float)(1 + context->scanline_gap);
     }
     return (uint32_t)((float)context->width * width_scale);
 }
@@ -835,11 +894,18 @@ uint32_t c64_get_height(void *data)
     if (!context)
         return 0;
 
+    // Check if any effects that change dimensions are enabled
+    bool dimension_effects_enabled = context->scanlines_enable || context->pixel_height != 1.0f;
+
+    if (!dimension_effects_enabled) {
+        return context->height;
+    }
+
     // Apply pixel geometry scaling for CRT effects
     float height_scale = context->pixel_height;
-    // Scanlines require 2x scaling (both width and height) for proper effect
-    if (context->scanlines_enable) {
-        height_scale *= 2.0f;
+    // Scanlines require scaling based on gap size: 1+gap multiplier
+    if (context->scanlines_enable && context->scanline_gap > 0) {
+        height_scale *= (float)(1 + context->scanline_gap);
     }
     return (uint32_t)((float)context->height * height_scale);
 }
