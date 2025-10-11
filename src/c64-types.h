@@ -172,7 +172,6 @@ struct c64_source {
     size_t recording_buffer_size;  // Size of allocated recording buffers
 
     // CRT visual effects
-    bool crt_enable;                     // Master CRT effects enable
     bool scanlines_enable;               // Scanlines effect enable
     float scanlines_opacity;             // Scanlines opacity (0.0-1.0)
     int scanlines_width;                 // Scanlines width in pixels (1-6)

@@ -13,7 +13,6 @@ uniform texture2d image;
 // CRT effect parameters
 uniform bool scanlines_enable;
 uniform float scanlines_opacity;
-uniform int scanlines_width;
 uniform float pixel_width;
 uniform float pixel_height;
 uniform float blur_strength;
@@ -74,21 +73,22 @@ float4 PSDefault(VertData v_in) : TARGET
         color = image.Sample(textureSampler, uv);
     }
 
-    // === SCANLINES EFFECT (FIXED IMPLEMENTATION) ===
+    // === SCANLINES EFFECT (EARLY APPLICATION) ===
+    // Apply scanlines early so other effects can bleed into them for authentic CRT look
     if (scanlines_enable) {
-        // Calculate texture dimensions for proper scanline scaling
-        float texture_height = 272.0; // Base C64 height
-        float scaled_height = texture_height * pixel_height;
+        // When scanlines are enabled, frame is scaled 2x in both dimensions
+        // Odd-numbered rows (1, 3, 5, etc.) are duplicates of even rows but darker
+        float scaled_y = uv.y * 2.0 * pixel_height; // Scale by 2x for scanlines + pixel geometry
+        int row_index = int(floor(scaled_y));
 
-        // Get pixel row position
-        float pixel_row = uv.y * scaled_height;
-        float scanline_group_size = float(scanlines_width) + 1.0;
-        float row_in_group = fmod(pixel_row, scanline_group_size);
-
-        // Apply scanline effect: first row normal, subsequent rows dimmed
-        if (row_in_group >= 1.0) {
+        // Check if this is an odd-numbered row (scanline row)
+        if ((row_index % 2) == 1) {
+            // This is a scanline row (odd index) - apply darkness
+            // scanlines_opacity controls how dark the line is:
+            // 0.0 = completely black, 1.0 = same brightness as original
             color.rgb *= scanlines_opacity;
         }
+        // Even rows (0, 2, 4, etc.) remain unchanged (original brightness)
     }
 
     // === ENHANCED BLOOM EFFECT WITH BLEEDING ===
@@ -141,41 +141,36 @@ float4 PSDefault(VertData v_in) : TARGET
     }
 
     // === AFTERGLOW EFFECT ===
-    // Note: Simplified approach - full implementation would require render-to-texture
-    if (afterglow_enable && dt_ms > 0.0 && afterglow_duration_ms > 0) {
-        // Sample previous afterglow accumulation (simplified approach)
-        float4 prev_glow = float4(0.0, 0.0, 0.0, 0.0);
-        // Note: texture_accum_prev may not be properly initialized in current implementation
-        // This is a placeholder for future full afterglow implementation
+    // Temporal afterglow - blend with previous frame to create phosphor persistence
+    if (afterglow_enable && afterglow_duration_ms > 0) {
+        // Sample the previous frame at the same UV coordinate
+        float4 prev_frame = texture_accum_prev.Sample(textureSampler, uv);
 
-        // Calculate decay factor based on time and settings
-        float base_decay_rate = dt_ms / float(afterglow_duration_ms);
-        float decay_rate = base_decay_rate;
+        // Calculate decay factor based on duration (frame-to-frame persistence)
+        // Higher duration = slower decay = more persistent afterglow
+        float decay_factor = 1.0 - (dt_ms / float(afterglow_duration_ms));
+        decay_factor = max(0.0, min(0.95, decay_factor)); // Clamp to prevent infinite persistence
 
-        // Apply different decay curves
+        // Apply decay curve to modify the decay behavior
         if (afterglow_curve == 1) { // Gradual Fade (Slow Start)
-            decay_rate = base_decay_rate * base_decay_rate; // Quadratic - slower at start
+            decay_factor = decay_factor * decay_factor; // Quadratic - slower initial fade
         }
         else if (afterglow_curve == 2) { // Rapid Fade (Fast Start)
-            decay_rate = sqrt(base_decay_rate); // Square root - faster at start
+            decay_factor = sqrt(decay_factor); // Square root - faster initial fade
         }
         else if (afterglow_curve == 3) { // Long Tail (Exponential)
-            decay_rate = 1.0 - exp(-base_decay_rate * 2.5); // Exponential decay
+            decay_factor = pow(decay_factor, 0.5); // More persistent tail
         }
-        // afterglow_curve == 0 is linear (no change needed)
+        // Linear (0) uses decay_factor as-is
 
-        // Current frame luminance for phosphor persistence effect
-        float current_luminance = dot(color.rgb, float3(0.299, 0.587, 0.114));
-
-        // Brighter pixels decay slower (phosphor persistence effect)
-        float persistence_factor = 1.0 - (current_luminance * 0.4); // Bright areas persist longer
-        decay_rate *= max(0.1, persistence_factor); // Never decay too fast
-
-        // Decay previous glow
-        float3 decayed_glow = prev_glow.rgb * (1.0 - clamp(decay_rate, 0.0, 0.95)); // Never fully disappear instantly
-
-        // Blend current frame with decayed glow - additive for visible trails
-        color.rgb = max(color.rgb, decayed_glow * 0.8); // Scale down for more realistic effect
+        // Blend previous frame with current frame
+        // Only non-black pixels from previous frame should contribute to afterglow
+        float prev_brightness = dot(prev_frame.rgb, float3(0.299, 0.587, 0.114));
+        if (prev_brightness > 0.01) { // Threshold to avoid amplifying pure black
+            // Mix the previous frame's color with current color
+            // This creates true temporal persistence - red→blue becomes red→purple→blue
+            color.rgb = max(color.rgb, prev_frame.rgb * decay_factor);
+        }
     }
 
     // === SCREEN TINT EFFECT ===

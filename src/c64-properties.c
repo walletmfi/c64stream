@@ -16,7 +16,6 @@ See <https://www.gnu.org/licenses/> for details.
 #include <obs-module.h>
 
 // Forward declaration of callbacks
-static bool crt_enable_modified(obs_properties_t *props, obs_property_t *property, obs_data_t *settings);
 static bool crt_reset_defaults(obs_properties_t *props, obs_property_t *property, void *data);
 
 obs_properties_t *c64_create_properties(void *data)
@@ -104,11 +103,6 @@ obs_properties_t *c64_create_properties(void *data)
         obs_properties_add_group(props, "effects_group", "Effects", OBS_GROUP_NORMAL, obs_properties_create());
     obs_properties_t *effects_props = obs_property_group_content(effects_group);
 
-    // Master control
-    obs_property_t *crt_enable_prop = obs_properties_add_bool(effects_props, "crt_enable", "Enable CRT Visual Effects");
-    obs_property_set_long_description(crt_enable_prop, "Enable or disable all CRT visual effects");
-    obs_property_set_modified_callback(crt_enable_prop, crt_enable_modified);
-
     // Reset to defaults button
     obs_property_t *reset_button =
         obs_properties_add_button(effects_props, "crt_reset", "Reset to Defaults", crt_reset_defaults);
@@ -121,13 +115,9 @@ obs_properties_t *c64_create_properties(void *data)
     obs_property_set_long_description(scanlines_enable_prop, "Enable horizontal scanline effect");
 
     obs_property_t *scanlines_opacity_prop =
-        obs_properties_add_float_slider(effects_props, "scanlines_opacity", "Opacity", 0.0, 1.0, 0.05);
+        obs_properties_add_float_slider(effects_props, "scanlines_opacity", "Strength", 0.0, 1.0, 0.05);
     obs_property_set_long_description(scanlines_opacity_prop,
                                       "Scanline darkness (0.0 = complete black, 1.0 = no separation)");
-
-    obs_property_t *scanlines_width_prop =
-        obs_properties_add_int_slider(effects_props, "scanlines_width", "Width (pixels)", 1, 6, 1);
-    obs_property_set_long_description(scanlines_width_prop, "Height of black space between pixel rows");
 
     // Pixel Geometry
     obs_properties_add_text(effects_props, "pixel_geom_label", "▶ Pixel Geometry", OBS_TEXT_INFO);
@@ -191,72 +181,6 @@ obs_properties_t *c64_create_properties(void *data)
     return props;
 }
 
-// Callback for CRT enable checkbox - enables/disables all CRT effect controls
-static bool crt_enable_modified(obs_properties_t *props, obs_property_t *property, obs_data_t *settings)
-{
-    UNUSED_PARAMETER(property);
-    bool enabled = obs_data_get_bool(settings, "crt_enable");
-
-    // Get the effects group properties
-    obs_property_t *effects_group = obs_properties_get(props, "effects_group");
-    if (!effects_group)
-        return true;
-
-    obs_properties_t *effects_props = obs_property_group_content(effects_group);
-    if (!effects_props)
-        return true;
-
-    // Enable/disable all effect sub-controls
-    obs_property_t *reset_button = obs_properties_get(effects_props, "crt_reset");
-    obs_property_t *scanlines_enable = obs_properties_get(effects_props, "scanlines_enable");
-    obs_property_t *scanlines_opacity = obs_properties_get(effects_props, "scanlines_opacity");
-    obs_property_t *scanlines_width = obs_properties_get(effects_props, "scanlines_width");
-    obs_property_t *pixel_width = obs_properties_get(effects_props, "pixel_width");
-    obs_property_t *pixel_height = obs_properties_get(effects_props, "pixel_height");
-    obs_property_t *blur_strength = obs_properties_get(effects_props, "blur_strength");
-    obs_property_t *bloom_enable = obs_properties_get(effects_props, "bloom_enable");
-    obs_property_t *bloom_strength = obs_properties_get(effects_props, "bloom_strength");
-    obs_property_t *afterglow_enable = obs_properties_get(effects_props, "afterglow_enable");
-    obs_property_t *afterglow_duration = obs_properties_get(effects_props, "afterglow_duration_ms");
-    obs_property_t *afterglow_curve = obs_properties_get(effects_props, "afterglow_curve");
-    obs_property_t *tint_enable = obs_properties_get(effects_props, "tint_enable");
-    obs_property_t *tint_mode = obs_properties_get(effects_props, "tint_mode");
-    obs_property_t *tint_strength = obs_properties_get(effects_props, "tint_strength");
-
-    if (reset_button)
-        obs_property_set_enabled(reset_button, enabled);
-    if (scanlines_enable)
-        obs_property_set_enabled(scanlines_enable, enabled);
-    if (scanlines_opacity)
-        obs_property_set_enabled(scanlines_opacity, enabled);
-    if (scanlines_width)
-        obs_property_set_enabled(scanlines_width, enabled);
-    if (pixel_width)
-        obs_property_set_enabled(pixel_width, enabled);
-    if (pixel_height)
-        obs_property_set_enabled(pixel_height, enabled);
-    if (blur_strength)
-        obs_property_set_enabled(blur_strength, enabled);
-    if (bloom_enable)
-        obs_property_set_enabled(bloom_enable, enabled);
-    if (bloom_strength)
-        obs_property_set_enabled(bloom_strength, enabled);
-    if (afterglow_enable)
-        obs_property_set_enabled(afterglow_enable, enabled);
-    if (afterglow_duration)
-        obs_property_set_enabled(afterglow_duration, enabled);
-    if (afterglow_curve)
-        obs_property_set_enabled(afterglow_curve, enabled);
-    if (tint_enable)
-        obs_property_set_enabled(tint_enable, enabled);
-    if (tint_mode)
-        obs_property_set_enabled(tint_mode, enabled);
-    if (tint_strength)
-        obs_property_set_enabled(tint_strength, enabled);
-
-    return true;
-}
-
 // Callback for Reset to Defaults button
 static bool crt_reset_defaults(obs_properties_t *props, obs_property_t *property, void *data)
 {
@@ -275,7 +199,6 @@ static bool crt_reset_defaults(obs_properties_t *props, obs_property_t *property
     // Reset all CRT effect settings to defaults
     obs_data_set_bool(settings, "scanlines_enable", false);
     obs_data_set_double(settings, "scanlines_opacity", 0.25);
-    obs_data_set_int(settings, "scanlines_width", 1);
     obs_data_set_double(settings, "pixel_width", 1.0);
     obs_data_set_double(settings, "pixel_height", 1.0);
     obs_data_set_double(settings, "blur_strength", 0.25);
@@ -340,10 +263,8 @@ void c64_set_property_defaults(obs_data_t *settings)
     obs_data_set_default_bool(settings, "record_video", false); // Disabled by default
 
     // CRT effects defaults
-    obs_data_set_default_bool(settings, "crt_enable", false);
     obs_data_set_default_bool(settings, "scanlines_enable", false);
     obs_data_set_default_double(settings, "scanlines_opacity", 0.25);
-    obs_data_set_default_int(settings, "scanlines_width", 1);
     obs_data_set_default_double(settings, "pixel_width", 1.0);
     obs_data_set_default_double(settings, "pixel_height", 1.0);
     obs_data_set_default_double(settings, "blur_strength", 0.25);
