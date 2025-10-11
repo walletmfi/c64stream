@@ -109,19 +109,25 @@ obs_properties_t *c64_create_properties(void *data)
     obs_property_set_long_description(reset_button, "Reset all CRT effect settings to their default values");
 
     // Scanlines
-    obs_property_t *scanline_gap_prop = obs_properties_add_list(effects_props, "scanline_gap", "Scanline Gap",
-                                                                OBS_COMBO_TYPE_LIST, OBS_COMBO_FORMAT_INT);
-    obs_property_list_add_int(scanline_gap_prop, "0 (No scanlines)", 0);
-    obs_property_list_add_int(scanline_gap_prop, "1", 1);
-    obs_property_list_add_int(scanline_gap_prop, "2", 2);
-    obs_property_list_add_int(scanline_gap_prop, "3", 3);
-    obs_property_list_add_int(scanline_gap_prop, "4", 4);
-    obs_property_set_long_description(scanline_gap_prop, "Gap size between scanlines (0 = disabled, 1-4 = gap size)");
+    obs_property_t *scanline_distance_prop =
+        obs_properties_add_list(effects_props, "scan_line_distance", "Scan Line Distance",
+                                OBS_COMBO_TYPE_LIST, OBS_COMBO_FORMAT_FLOAT);
+    obs_property_list_add_float(scanline_distance_prop, "None (0%)", 0.0);
+    obs_property_list_add_float(scanline_distance_prop, "Tight (25%)", 0.25);
+    obs_property_list_add_float(scanline_distance_prop, "Normal (50%)", 0.50);
+    obs_property_list_add_float(scanline_distance_prop, "Wide (100%)", 1.0);
+    obs_property_list_add_float(scanline_distance_prop, "Extra Wide (200%)", 2.0);
+    obs_property_set_long_description(
+        scanline_distance_prop,
+        "Gap between consecutive scan lines as a percentage of a scan line width. Controls the spacing between bright "
+        "scan lines. 0% = no gaps (continuous lines), 100% = gap equals line height.");
 
-    obs_property_t *scanlines_strength_prop =
-        obs_properties_add_float_slider(effects_props, "scanlines_opacity", "Scanline Strength", 0.0, 1.0, 0.05);
-    obs_property_set_long_description(scanlines_strength_prop,
-                                      "Scanline darkness (0.0 = no reduction, 1.0 = black gaps)");
+    obs_property_t *scanline_strength_prop =
+        obs_properties_add_float_slider(effects_props, "scan_line_strength", "Scan Line Strength", 0.0, 1.0, 0.05);
+    obs_property_set_long_description(
+        scanline_strength_prop,
+        "Controls how dark the gaps between scan lines appear. 0.0 = gaps are as bright as scan lines (no effect), "
+        "1.0 = gaps are completely black.");
 
     // Pixel Geometry
     obs_property_t *pixel_width_prop =
@@ -187,8 +193,8 @@ static bool crt_reset_defaults(obs_properties_t *props, obs_property_t *property
         return false;
 
     // Reset all CRT effect settings to defaults
-    obs_data_set_int(settings, "scanline_gap", 0);
-    obs_data_set_double(settings, "scanlines_opacity", 0.75);
+    obs_data_set_double(settings, "scan_line_distance", 0.0);
+    obs_data_set_double(settings, "scan_line_strength", 0.0);
     obs_data_set_double(settings, "pixel_width", 1.0);
     obs_data_set_double(settings, "pixel_height", 1.0);
     obs_data_set_double(settings, "blur_strength", 0.0);
@@ -250,8 +256,8 @@ void c64_set_property_defaults(obs_data_t *settings)
     obs_data_set_default_bool(settings, "record_video", false); // Disabled by default
 
     // CRT effects defaults
-    obs_data_set_default_int(settings, "scanline_gap", 0);
-    obs_data_set_default_double(settings, "scanlines_opacity", 0.75);
+    obs_data_set_default_double(settings, "scan_line_distance", 0.0);
+    obs_data_set_default_double(settings, "scan_line_strength", 0.0);
     obs_data_set_default_double(settings, "pixel_width", 1.0);
     obs_data_set_default_double(settings, "pixel_height", 1.0);
     obs_data_set_default_double(settings, "blur_strength", 0.0);

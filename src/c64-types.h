@@ -172,10 +172,8 @@ struct c64_source {
     size_t recording_buffer_size;  // Size of allocated recording buffers
 
     // CRT visual effects
-    bool scanlines_enable;               // Scanlines effect enable (derived from scanline_gap)
-    int scanline_gap;                    // Scanline gap size (0=off, 1-4=gap size)
-    float scanlines_opacity;             // Scanlines opacity (0.0-1.0)
-    int scanlines_width;                 // Scanlines width in pixels (1-6)
+    float scan_line_distance;            // Scan line distance (0.0-2.0, percentage of scan line width)
+    float scan_line_strength;            // Scan line strength (0.0-1.0, darkness of gaps)
     float pixel_width;                   // Pixel geometry width (0.5-3.0)
     float pixel_height;                  // Pixel geometry height (0.5-3.0)
     float blur_strength;                 // Blur strength for pixel geometry (0.0-1.0)

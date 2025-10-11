@@ -300,10 +300,8 @@ void *c64_create(obs_data_t *settings, obs_source_t *source)
     c64_record_init(context);
 
     // Initialize CRT effect state from settings
-    context->scanline_gap = (int)obs_data_get_int(settings, "scanline_gap");
-    context->scanlines_opacity = (float)obs_data_get_double(settings, "scanlines_opacity");
-    context->scanlines_enable = (context->scanline_gap > 0);
-    context->scanlines_width = (int)obs_data_get_int(settings, "scanlines_width");
+    context->scan_line_distance = (float)obs_data_get_double(settings, "scan_line_distance");
+    context->scan_line_strength = (float)obs_data_get_double(settings, "scan_line_strength");
     context->pixel_width = (float)obs_data_get_double(settings, "pixel_width");
     context->pixel_height = (float)obs_data_get_double(settings, "pixel_height");
     context->blur_strength = (float)obs_data_get_double(settings, "blur_strength");
@@ -499,10 +497,8 @@ void c64_update(void *data, obs_data_t *settings)
     c64_record_update_settings(context, settings);
 
     // Update CRT effect settings
-    context->scanline_gap = (int)obs_data_get_int(settings, "scanline_gap");
-    context->scanlines_opacity = (float)obs_data_get_double(settings, "scanlines_opacity");
-    context->scanlines_enable = (context->scanline_gap > 0);
-    context->scanlines_width = (int)obs_data_get_int(settings, "scanlines_width");
+    context->scan_line_distance = (float)obs_data_get_double(settings, "scan_line_distance");
+    context->scan_line_strength = (float)obs_data_get_double(settings, "scan_line_strength");
     context->pixel_width = (float)obs_data_get_double(settings, "pixel_width");
     context->pixel_height = (float)obs_data_get_double(settings, "pixel_height");
     context->blur_strength = (float)obs_data_get_double(settings, "blur_strength");
@@ -739,7 +735,7 @@ void c64_video_render(void *data, gs_effect_t *effect)
 
     // Check if any CRT effects are enabled
     bool any_effects_enabled =
-        (context->scanline_gap > 0) || (context->bloom_strength > 0.0f) || (context->afterglow_duration_ms > 0) ||
+        (context->scan_line_distance > 0.0f) || (context->bloom_strength > 0.0f) || (context->afterglow_duration_ms > 0) ||
         (context->tint_mode > 0 && context->tint_strength > 0.0f) ||
         (context->pixel_width != 1.0f || context->pixel_height != 1.0f) || context->blur_strength > 0.0f;
 
@@ -789,9 +785,8 @@ void c64_video_render(void *data, gs_effect_t *effect)
 
     // Set CRT shader parameters
     gs_effect_set_texture(gs_effect_get_param_by_name(context->crt_effect, "image"), context->render_texture);
-    gs_effect_set_int(gs_effect_get_param_by_name(context->crt_effect, "scanline_gap"), context->scanline_gap);
-    gs_effect_set_float(gs_effect_get_param_by_name(context->crt_effect, "scanlines_opacity"),
-                        context->scanlines_opacity);
+    gs_effect_set_float(gs_effect_get_param_by_name(context->crt_effect, "scan_line_distance"), context->scan_line_distance);
+    gs_effect_set_float(gs_effect_get_param_by_name(context->crt_effect, "scan_line_strength"), context->scan_line_strength);
     gs_effect_set_float(gs_effect_get_param_by_name(context->crt_effect, "pixel_width"), context->pixel_width);
     gs_effect_set_float(gs_effect_get_param_by_name(context->crt_effect, "pixel_height"), context->pixel_height);
     gs_effect_set_float(gs_effect_get_param_by_name(context->crt_effect, "blur_strength"), context->blur_strength);
@@ -873,7 +868,7 @@ uint32_t c64_get_width(void *data)
         return 0;
 
     // Check if any effects that change dimensions are enabled
-    bool dimension_effects_enabled = context->scanlines_enable || context->pixel_width != 1.0f;
+    bool dimension_effects_enabled = (context->scan_line_distance > 0.0f) || context->pixel_width != 1.0f;
 
     if (!dimension_effects_enabled) {
         return context->width;
@@ -881,10 +876,13 @@ uint32_t c64_get_width(void *data)
 
     // Apply pixel geometry scaling for CRT effects
     float width_scale = context->pixel_width;
-    // Scanlines require scaling based on gap size: 1+gap multiplier
-    if (context->scanlines_enable && context->scanline_gap > 0) {
-        width_scale *= (float)(1 + context->scanline_gap);
+    
+    // Scanlines require upscaling to accommodate gaps
+    // Scale factor: 1.0 + scan_line_distance (e.g., 0.5 distance = 50% upscale = 1.5x)
+    if (context->scan_line_distance > 0.0f) {
+        width_scale *= (1.0f + context->scan_line_distance);
     }
+    
     return (uint32_t)((float)context->width * width_scale);
 }
 
@@ -895,7 +893,7 @@ uint32_t c64_get_height(void *data)
         return 0;
 
     // Check if any effects that change dimensions are enabled
-    bool dimension_effects_enabled = context->scanlines_enable || context->pixel_height != 1.0f;
+    bool dimension_effects_enabled = (context->scan_line_distance > 0.0f) || context->pixel_height != 1.0f;
 
     if (!dimension_effects_enabled) {
         return context->height;
@@ -903,10 +901,13 @@ uint32_t c64_get_height(void *data)
 
     // Apply pixel geometry scaling for CRT effects
     float height_scale = context->pixel_height;
-    // Scanlines require scaling based on gap size: 1+gap multiplier
-    if (context->scanlines_enable && context->scanline_gap > 0) {
-        height_scale *= (float)(1 + context->scanline_gap);
+    
+    // Scanlines require upscaling to accommodate gaps
+    // Scale factor: 1.0 + scan_line_distance (e.g., 0.5 distance = 50% upscale = 1.5x)
+    if (context->scan_line_distance > 0.0f) {
+        height_scale *= (1.0f + context->scan_line_distance);
     }
+    
     return (uint32_t)((float)context->height * height_scale);
 }
 
