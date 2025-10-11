@@ -23,6 +23,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include "c64-protocol.h"
 #include "c64-source.h"
 #include "c64-version.h"
+#include "c64-presets.h"
 
 // Logging control - define the global variable
 bool c64_debug_logging = true;
@@ -34,6 +35,11 @@ bool obs_module_load(void)
 {
     C64_LOG_INFO("Loading %s", c64_get_version_string());
     C64_LOG_INFO("Build info: %s", c64_get_build_info());
+
+    // Initialize the presets system
+    if (!c64_presets_init()) {
+        C64_LOG_WARNING("Failed to load CRT effect presets - continuing without presets");
+    }
 
     struct obs_source_info c64_info = {.id = "c64_source",
                                        .type = OBS_SOURCE_TYPE_INPUT,
@@ -59,5 +65,6 @@ bool obs_module_load(void)
 void obs_module_unload(void)
 {
     C64_LOG_INFO("Unloading C64 Stream plugin");
+    c64_presets_cleanup();
     c64_cleanup_networking();
 }

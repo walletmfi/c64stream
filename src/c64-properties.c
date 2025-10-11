@@ -13,10 +13,12 @@ See <https://www.gnu.org/licenses/> for details.
 #include "c64-video.h"
 #include "c64-logging.h" // For Windows snprintf compatibility
 #include "c64-file.h"
+#include "c64-presets.h"
 #include <obs-module.h>
 
 // Forward declaration of callbacks
 static bool crt_reset_defaults(obs_properties_t *props, obs_property_t *property, void *data);
+static bool crt_preset_changed(obs_properties_t *props, obs_property_t *property, obs_data_t *settings);
 
 obs_properties_t *c64_create_properties(void *data)
 {
@@ -102,6 +104,18 @@ obs_properties_t *c64_create_properties(void *data)
     obs_property_t *effects_group =
         obs_properties_add_group(props, "effects_group", "Effects", OBS_GROUP_NORMAL, obs_properties_create());
     obs_properties_t *effects_props = obs_property_group_content(effects_group);
+
+    // Presets dropdown at the top
+    obs_property_t *preset_prop =
+        obs_properties_add_list(effects_props, "crt_preset", "Presets", OBS_COMBO_TYPE_LIST, OBS_COMBO_FORMAT_STRING);
+    obs_property_set_long_description(preset_prop,
+                                      "Select a visual effect preset to apply predefined CRT simulation settings");
+
+    // Populate presets from the loaded presets file
+    c64_presets_populate_list(preset_prop);
+
+    // Add modified callback to apply preset when selected
+    obs_property_set_modified_callback(preset_prop, crt_preset_changed);
 
     // Reset to defaults button
     obs_property_t *reset_button =
@@ -210,6 +224,28 @@ static bool crt_reset_defaults(obs_properties_t *props, obs_property_t *property
     obs_data_release(settings);
 
     return true;
+}
+
+// Callback for preset selection
+static bool crt_preset_changed(obs_properties_t *props, obs_property_t *property, obs_data_t *settings)
+{
+    UNUSED_PARAMETER(props);
+    UNUSED_PARAMETER(property);
+
+    if (!settings)
+        return false;
+
+    const char *preset_name = obs_data_get_string(settings, "crt_preset");
+    if (!preset_name || preset_name[0] == '\0')
+        return false;
+
+    // Apply the preset
+    if (c64_presets_apply(settings, preset_name)) {
+        C64_LOG_INFO("Applied CRT preset: %s", preset_name);
+        return true;
+    }
+
+    return false;
 }
 
 void c64_set_property_defaults(obs_data_t *settings)
