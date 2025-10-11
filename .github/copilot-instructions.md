@@ -51,18 +51,31 @@ See <https://www.gnu.org/licenses/> for details.
 
 ## Linux Build (MANDATORY)
 
-### Prerequisites
+### For CI/GitHub Actions Builds
+
+**See [.github/build-instructions.md](.github/build-instructions.md) for complete CI build instructions.**
+
+When working in a Copilot session with GitHub Actions runner:
+1. Follow the build instructions in `.github/build-instructions.md`
+2. Use the build script: `.github/scripts/build-ubuntu --target ubuntu-x86_64 --config RelWithDebInfo`
+3. Run in a **"build → verify logs → fix issues"** loop
+4. **Only announce completion after build passes with zero errors**
+5. Never terminate a Copilot session with a failing build
+
+### For Local Development
+
+#### Prerequisites
 - CMake 3.28.3+, build-essential, ninja-build, pkg-config
 - clang-format 21.1.1+ for code formatting
 - zsh for build scripts
 
-### Quick Build
+#### Quick Build
 ```bash
 cmake --preset ubuntu-x86_64
 cmake --build build_x86_64
 ```
 
-### Dependencies
+#### Dependencies
 Auto-downloaded from `buildspec.json`: OBS Studio SDK 31.1.1, obs-deps, Qt6 (optional).
 Cached in `.deps/` directory.
 
