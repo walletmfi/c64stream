@@ -134,10 +134,10 @@ float4 PSDefault(VertData v_in) : TARGET
     // === REALISTIC CRT BLOOM EFFECT ===
     if (bloom_strength > 0.0f) {
         float4 center = color;
-        
+
         // Create multiple bloom rings with different intensities for realistic falloff
         float3 bloom_result = center.rgb;
-        
+
         // Ring 1: Inner glow (closest to pixel) - strongest
         float radius1 = bloom_strength * 0.0015f;
         float4 ring1 = float4(0, 0, 0, 0);
@@ -150,7 +150,7 @@ float4 PSDefault(VertData v_in) : TARGET
         ring1 += image.Sample(textureSampler, saturate(uv + float2(radius1 * 0.7f, -radius1 * 0.7f)));
         ring1 += image.Sample(textureSampler, saturate(uv + float2(-radius1 * 0.7f, -radius1 * 0.7f)));
         ring1 /= 8.0f;
-        
+
         // Ring 2: Medium glow
         float radius2 = bloom_strength * 0.003f;
         float4 ring2 = float4(0, 0, 0, 0);
@@ -159,7 +159,7 @@ float4 PSDefault(VertData v_in) : TARGET
         ring2 += image.Sample(textureSampler, saturate(uv + float2(0.0f, radius2)));
         ring2 += image.Sample(textureSampler, saturate(uv - float2(0.0f, radius2)));
         ring2 /= 4.0f;
-        
+
         // Ring 3: Outer halo (softest, widest)
         float radius3 = bloom_strength * 0.006f;
         float4 ring3 = float4(0, 0, 0, 0);
@@ -168,42 +168,40 @@ float4 PSDefault(VertData v_in) : TARGET
         ring3 += image.Sample(textureSampler, saturate(uv + float2(0.0f, radius3)));
         ring3 += image.Sample(textureSampler, saturate(uv - float2(0.0f, radius3)));
         ring3 /= 4.0f;
-        
+
         // Calculate per-channel bloom contribution (CRT phosphors respond differently)
         // Red phosphor: More persistent, wider bloom
-        // Green phosphor: Brightest, tighter bloom  
+        // Green phosphor: Brightest, tighter bloom
         // Blue phosphor: Fastest decay, narrower bloom
         float3 phosphor_response = float3(1.2f, 1.0f, 0.8f); // Red, Green, Blue response
-        
-        // Calculate luminance-based bloom threshold (much lower than before)
+
+        // Calculate luminance for smooth bloom intensity calculation
         float center_luma = dot(center.rgb, float3(0.299f, 0.587f, 0.114f));
-        float bloom_threshold = 0.3f - (bloom_strength * 0.25f); // Start blooming at much lower brightness
-        
-        if (center_luma > bloom_threshold) {
-            // Smooth bloom factor based on brightness curve
-            float bloom_factor = smoothstep(bloom_threshold, 1.0f, center_luma);
-            
-            // Combine rings with realistic falloff (inverse square-like)
-            float3 combined_bloom = (ring1.rgb * 0.6f + ring2.rgb * 0.25f + ring3.rgb * 0.15f);
-            
-            // Apply phosphor response characteristics
-            combined_bloom *= phosphor_response;
-            
-            // Create realistic bloom intensity that doesn't clip to white
-            float bloom_intensity = bloom_factor * bloom_strength * 2.0f;
-            
-            // Add bloom as additive glow (key to realistic CRT bloom)
-            bloom_result = center.rgb + (combined_bloom * bloom_intensity);
-            
-            // Simulate phosphor saturation (bright pixels don't go pure white, they saturate per channel)
-            bloom_result = bloom_result / (1.0f + bloom_result * 0.3f); // Tone mapping to prevent clipping
-        }
-        
-        // Apply subtle bloom bleeding even for darker pixels (characteristic of CRT)
+
+        // Smooth bloom factor - no hard threshold, perfectly continuous
+        // Use a smooth curve that starts at 0 and gradually rises
+        float bloom_factor = smoothstep(0.0f, 1.0f, center_luma);
+
+        // Combine rings with realistic falloff (inverse square-like)
+        float3 combined_bloom = (ring1.rgb * 0.6f + ring2.rgb * 0.25f + ring3.rgb * 0.15f);
+
+        // Apply phosphor response characteristics
+        combined_bloom *= phosphor_response;
+
+        // Create smooth bloom intensity scaling - no discontinuities
+        float bloom_intensity = bloom_factor * bloom_strength * 2.0f;
+
+        // Add bloom as additive glow (key to realistic CRT bloom)
+        bloom_result = center.rgb + (combined_bloom * bloom_intensity);
+
+        // Simulate phosphor saturation (bright pixels don't go pure white, they saturate per channel)
+        bloom_result = bloom_result / (1.0f + bloom_result * 0.3f); // Tone mapping to prevent clipping
+
+        // Apply subtle bloom bleeding for all pixels (characteristic of CRT) - smooth scaling
         float subtle_bloom = bloom_strength * 0.15f;
         float3 neighbor_average = (ring1.rgb * 0.7f + ring2.rgb * 0.3f);
         bloom_result = lerp(bloom_result, bloom_result + neighbor_average * subtle_bloom, bloom_strength * 0.2f);
-        
+
         color.rgb = bloom_result;
     }
 
