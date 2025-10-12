@@ -71,27 +71,27 @@ float4 PSDefault(VertData v_in) : TARGET
         color = image.Sample(textureSampler, uv);
     }
 
-    // === SCANLINES EFFECT (DISTANCE-BASED) ===
-    // scan_line_distance: percentage of a scan line width (0.0 = no gap, 0.5 = 50% gap, 1.0 = 100% gap)
+    // === SCANLINES EFFECT (CRT-ACCURATE ALTERNATING PATTERN) ===
+    // scan_line_distance: height ratio of gap to scanline (0.0 = no gap, 0.5 = gap half as tall as scanline, 1.0 = gap same height as scanline)
     // scan_line_strength: darkness of the gap (0.0 = no darkness, 1.0 = completely black)
     if (scan_line_distance > 0.0 && scan_line_strength > 0.0) {
         // Calculate which row we're in within the scaled output
         float pixel_row = uv.y * output_height;
-        
-        // Pattern size: 1 bright line + distance worth of dark lines
-        // For distance=0.5: pattern is 1.5 pixels (1 bright, 0.5 dark)
-        // For distance=1.0: pattern is 2.0 pixels (1 bright, 1.0 dark)
-        float pattern_size = 1.0 + scan_line_distance;
-        
-        // Position within the current pattern
-        float position_in_pattern = fmod(pixel_row, pattern_size);
-        
-        // First portion (0 to 1) is the bright scan line, rest is the gap
-        if (position_in_pattern >= 1.0) {
-            // This is in the gap between scan lines - darken it
+
+        // Each scanline unit consists of: 1.0 scanline + scan_line_distance gap
+        // This ensures perfect alternation: scanline → gap → scanline → gap
+        float scanline_unit_size = 1.0 + scan_line_distance;
+
+        // Determine which scanline unit we're in and position within that unit
+        float scanline_index = floor(pixel_row / scanline_unit_size);
+        float position_in_unit = pixel_row - (scanline_index * scanline_unit_size);
+
+        // CRT-accurate logic: each individual scanline followed by exactly one gap
+        if (position_in_unit >= 1.0) {
+            // This pixel is in the gap between scanlines - darken it
             color.rgb *= (1.0 - scan_line_strength);
         }
-        // position_in_pattern < 1.0 rows remain at full brightness (the scan line itself)
+        // position_in_unit < 1.0: This pixel is part of the scanline itself (remains bright)
     }
 
     // === ENHANCED BLOOM EFFECT WITH BLEEDING ===
