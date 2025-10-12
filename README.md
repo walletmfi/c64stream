@@ -11,8 +11,8 @@ The plugin connects directly to the Ultimate's network interface, eliminating th
 
 ![C64 Stream Main Screen](./docs/images/main-screen.png "C64 Stream Main Screen")
 
-
 **Features:**
+
 - Native OBS integration as a standard video source
 - Real-time video streaming (PAL 384x272, NTSC 384x240)
 - Synchronized audio streaming (16-bit stereo, ~48kHz)
@@ -21,10 +21,10 @@ The plugin connects directly to the Ultimate's network interface, eliminating th
 - **Authentic CRT effects** with configurable presets (scan lines, bloom, tint, pixel geometry)
 - Built-in recording capabilities (BMP frames, AVI video, WAV audio)
 
-
 ## Getting Started 🚀
 
 ### What You'll Need
+
 - [OBS Studio 32.0.1](https://obsproject.com/download) or above
 - [C64 Ultimate](https://www.commodore.net/) or [Ultimate 64](https://ultimate64.com/)
 - Network connection between your OBS computer and Ultimate device
@@ -34,6 +34,7 @@ The plugin connects directly to the Ultimate's network interface, eliminating th
 Grab the right package for your system from the [Releases page](../../releases):
 
 **Windows:**
+
 1. Close OBS Studio
 2. Extract `c64stream-*-windows-x64.zip` to `C:\ProgramData\obs-studio\plugins`
 3. Restart OBS Studio
@@ -48,6 +49,7 @@ New-NetFirewallRule -DisplayName "C64 Stream" -Direction Inbound -Protocol UDP -
 ```
 
 **macOS:**
+
 1. Close OBS Studio
 2. Install `c64stream-*-macos-universal.pkg` to `~/Library/Application Support/obs-studio/plugins`
 3. Restart OBS Studio
@@ -56,15 +58,16 @@ New-NetFirewallRule -DisplayName "C64 Stream" -Direction Inbound -Protocol UDP -
 > macOS support is currently under active development and is not yet fully functional. We're working to resolve compatibility issues and will update this documentation when macOS builds are stable.
 
 **Linux (Ubuntu/Debian):**
+
 1. Close OBS Studio
 2. Install `c64stream-*-x86_64-linux-gnu.deb` to `~/.config/obs-studio/plugins` by running:
+
 ```bash
 sudo dpkg -i c64stream-plugin-linux.deb
 ```
 
 **Further Details:**
 See the [OBS Plugins Guide](https://obsproject.com/kb/plugins-guide).
-
 
 ### Configuration ⚙️
 
@@ -86,14 +89,15 @@ A new window opens. Keep the default settings and click "OK":
 
 🎉 **DONE!** Enjoy streaming from your C64 Ultimate.
 
-
 ## Plugin Setup
 
 ### General
+
 - **Version:**: Information about release version, Git ID, and build time.
 - **Debug Logging**: Check this to see debug logs
 
 ### Network
+
 - **DNS Resolution Details:**
 
 - **Default:** `192.168.1.1` (most common home router DNS server)
@@ -111,8 +115,8 @@ Recreate the authentic look and feel of classic CRT monitors and TVs with config
 
 ![C64 Stream Effects](./docs/images/properties-effects.png "C64 Stream Effects")
 
-
 **Presets:** One-click configurations for different display types
+
 - **[Classic CRT](./docs/images/effects/classic-crt.png)** - Balanced scan lines and bloom for general retro appeal
 - **[Amber Monitor](./docs/images/effects/amber-monitor.png)** - Warm amber tint reminiscent of early computer monitors
 - **[Green Monitor](./docs/images/effects/green-monitor.png)** - Classic green phosphor terminal look
@@ -121,6 +125,7 @@ Recreate the authentic look and feel of classic CRT monitors and TVs with config
 - **[Arcade Cabinet](./docs/images/effects/arcade-cabinet.png)** - High-contrast effects for authentic arcade experience
 
 **Customizable Effects:**
+
 - **Scan Lines:** Adjustable spacing and intensity to simulate CRT raster lines
 - **Bloom:** Configurable glow effect that makes bright pixels bleed into darker areas
 - **Pixel Geometry:** Independent width/height scaling for authentic pixel aspect ratios
@@ -246,6 +251,7 @@ The plugin supports both **hostnames** and **IP addresses** for the C64 Ultimate
 - **FQDN Support:** The plugin automatically tries both `hostname` and `hostname.` (with trailing dot) for proper DNS resolution
 
 **Using IP Addresses:**
+
 - **Direct IP:** `192.168.1.64` - Standard IPv4 address format
 - **Fallback:** `0.0.0.0` - Accept streams from any C64 Ultimate (no automatic control)
 
@@ -261,18 +267,21 @@ The plugin offers hostname resolution that works reliably on Linux and macOS whe
 4. **Cross-Platform:** Windows uses system DNS (which works reliably), Linux/macOS use enhanced resolution
 
 **DNS Server Configuration:**
+
 - **Default:** `192.168.1.1` (most common home router DNS server)
 - **Custom:** Set to your router's IP or a specific DNS server (e.g., `192.168.0.1`, `10.0.0.1`)
 - **Automatic Fallback:** If the configured DNS server fails, tries other common router IPs
 - **Why This Helps:** Solves Linux/macOS issues where `c64u` hostname doesn't resolve through system DNS but works via direct router queries
 
 **Examples:**
+
 - `c64u` → resolves to `192.168.1.64` via enhanced DNS resolution
 - `192.168.1.64` → used directly as IP address
 - `retro-basement.local` → resolves via mDNS/Bonjour or direct DNS
 - `ultimate64` → tries system DNS first, then direct router DNS queries
 
 **Platform-Specific Behavior:**
+
 - **Windows:** Uses system DNS (typically works without issues)
 - **Linux/macOS:** Uses enhanced DNS resolution to bypass systemd-resolved limitations
 - **All Platforms:** Support both hostname and IP address formats seamlessly
@@ -282,6 +291,7 @@ The plugin offers hostname resolution that works reliably on Linux and macOS whe
 **Automatic Configuration (Recommended):** The OBS plugin automatically controls streaming on the Ultimate device. When you configure the Ultimate's hostname or IP address in the OBS plugin settings, the plugin tells the Ultimate device where to send streams and sends start commands automatically. Thus, no manual streaming adjustments are needed on the Ultimate device.
 
 **Manual Configuration:**
+
 1. Press F2 to access the Ultimate's configuration menu
 2. Navigate to "Data Streams" section
 3. Set "Stream VIC to" field: `your-obs-ip:11000` (e.g., `192.168.1.100:11000`)
@@ -291,43 +301,49 @@ The plugin offers hostname resolution that works reliably on Linux and macOS whe
 
 For comprehensive configuration details, refer to the [official C64 Ultimate documentation](https://1541u-documentation.readthedocs.io/en/latest/data_streams.html).
 
-
 ## Technical Details 🔧
 
 This plugin implements the [C64 Ultimate Data Streams specification](https://1541u-documentation.readthedocs.io/en/latest/data_streams.html#data_streams) to receive video and audio streams from Ultimate devices via UDP/TCP network protocols.
 
 **Supported Platforms:**
+
 - Windows 10/11 (x64) - verified on Windows 11
 - Linux with X window system or Wayland - verified on Kubuntu 24.04
 - macOS 11+ (Intel/Apple Silicon) - yet to be verified
 
 **Software Requirements:**
+
 - [OBS Studio 32.0.1](https://obsproject.com/download) or above
 
 **Hardware Requirements:**
 
 One of:
+
 - [Ultimate 64 Elite](https://ultimate64.com/Ultimate-64-Elite) - verified
 - [Ultimate 64 Elite MK2](https://ultimate64.com/Ultimate-64-Elite-MK2) - yet to be verified
 - [C64 Ultimate](https://www.commodore.net/) - yet to be verified since not released yet
 
 **Video Formats:**
+
 - PAL: 384x272 @ 50Hz
 - NTSC: 384x240 @ 60Hz
 - Color space: VIC-II palette with automatic RGB conversion
 - **CRT Effects:** GPU-accelerated shader-based post-processing with configurable presets
 
 **Audio Format:**
+
 - 16-bit stereo PCM
 - Sample rate: ~48kHz (device dependent)
 - Low-latency streaming
 
 **Network Requirements:**
+
 - UDP/TCP connectivity to Ultimate device
 - Bandwidth: ~22 Mbps total (21.7 Mbps video + 1.4 Mbps audio, uncompressed streams)
 - Built-in UDP jitter compensation via configurable frame buffering
 
 **DNS Resolution:**
+
 - **Cross-platform hostname support:** Works reliably on Windows, Linux, and macOS
 - **Enhanced Linux/macOS resolution:** Bypasses systemd-resolved limitations using direct DNS queries
 - **Configurable DNS server:** Set custom DNS server IP for hostname resolution (default: 192.168.1.1)
@@ -335,46 +351,54 @@ One of:
 - **FQDN support:** Tries both standard hostname and FQDN (with trailing dot) resolution
 
 **Recording Formats:**
+
 - BMP frames: 24-bit uncompressed bitmap images
 - AVI video: Uncompressed BGR24 format with precise timing
 - WAV audio: 16-bit stereo PCM, sample rate matches C64 Ultimate output
 - Session organization: Automatic timestamped folder creation
 
-
 ## Troubleshooting 🔍
 
-**No video stream? 📺**
+### No video stream? 📺**
+
 - Verify that both IP addresses are correct
 - Check Ultimate device has data streaming enabled
 - Confirm firewall allows UDP traffic on configured ports
 
-**Audio sync issues? 🔊**
+### Audio sync issues? 🔊
+
 - Check audio port configuration (default 11001)
 - Verify OBS audio monitoring settings
+- **Buffer delay changes:** If you first increase the network buffer delay (e.g., to 500ms) and then decrease it (e.g., to 200ms), audio may become delayed relative to video. **Workaround:** Remove and re-add the C64 Stream source, or restart OBS Studio to reset the audio timing reference. For best results, set your desired buffer delay when initially configuring the source.
 
-**Plugin missing from OBS? 🤔**
+### Plugin missing from OBS? 🤔
+
 - Confirm OBS Studio version 32.0.1+
 - Verify plugin installed to correct directory
 - Check OBS logs for plugin loading errors
 - Restart OBS completely after installation
 
-**Connection acting up? 📡**
+### Connection acting up? 📡
+
 - Network latency should be <100ms for optimal performance
 - Check for network congestion or WiFi interference
 - Consider wired Ethernet connection for stability
 
-**Hostname not resolving? 🌐**
+### Hostname not resolving? 🌐
 
 If the plugin can't resolve your C64 Ultimate hostname (e.g., `c64u`), try these solutions:
 
 *Quick Fix:*
+
 1. **Use IP Address:** Instead of `c64u`, enter the device's IP address directly (e.g., `192.168.1.64`)
 2. **Check DNS Server IP:** Verify the DNS Server IP setting matches your router's IP address
    - Common router IPs: `192.168.1.1`, `192.168.0.1`, `10.0.0.1`
    - Find your router IP: Run `ip route | grep default` (Linux) or `ipconfig` (Windows)
 
 *Advanced Troubleshooting:*
+
 1. **Test DNS Resolution Manually:**
+
    ```bash
    # Linux/macOS - Test if router can resolve the hostname
    dig @192.168.1.1 c64u
@@ -399,26 +423,27 @@ If the plugin can't resolve your C64 Ultimate hostname (e.g., `c64u`), try these
    - Messages show which DNS resolution method succeeded
 
 *Alternative Solutions:*
+
 - **Static DNS Entry:** Add `192.168.1.64 c64u` to your system's hosts file
 - **mDNS/Bonjour:** Use `.local` suffix (e.g., `c64u.local`) if your network supports it
 - **Router Configuration:** Ensure your router's DNS server has the device hostname registered
 
-**Effects not working? 📺**
+### Effects not working? 📺
+
 - **No visual change:** Ensure source is active and receiving video data
 - **Performance drops:** Complex effects (high bloom/blur) may impact frame rate on older hardware
 - **Preset not applying:** Try manually adjusting individual effect settings
 
-**Recording troubles? 💾**
+### Recording troubles? 💾
+
 - **Files not created:** Verify output folder path exists and is writable
 - **Performance drops with BMP saving:** Frame saving impacts performance significantly; disable if not needed
 - **Large disk usage:** AVI recording creates uncompressed files (~50MB/minute); monitor disk space
 - **Recording stops unexpectedly:** Check disk space and folder permissions
 
-
 ## For Developers 🔧
 
 See the [Developer Documentation](doc/developer.md) for build instructions, testing procedures, and contribution guidelines.
-
 
 ## License
 

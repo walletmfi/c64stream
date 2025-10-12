@@ -499,18 +499,9 @@ void c64_update(void *data, obs_data_t *settings)
 
         // Update network buffer delay (this adjusts UDP packet buffering only)
         if (context->network_buffer) {
-            // Temporarily pause audio delivery to reset OBS audio timing reference
-            // This prevents OBS from getting confused by timestamp changes
-            bool was_audio_active = os_atomic_load_bool(&context->audio_thread_active);
-            if (was_audio_active) {
-                os_atomic_set_bool(&context->audio_thread_active, false);
-                C64_LOG_DEBUG("🔇 Audio delivery paused for buffer delay change");
-                os_sleep_ms(50); // Brief pause to let OBS flush its buffers
-            }
-
-            c64_network_buffer_set_delay(context->network_buffer, new_buffer_delay_ms, new_buffer_delay_ms);
-
-            // Adjust timing bases forward to maintain monotonic timestamps for OBS
+            c64_network_buffer_set_delay(
+                context->network_buffer, new_buffer_delay_ms,
+                new_buffer_delay_ms); // Adjust timing bases forward to maintain monotonic timestamps for OBS
             // This prevents audio pipeline confusion while correcting for buffer delay changes
             uint64_t delay_adjustment_ns = (uint64_t)(old_buffer_delay_ms - new_buffer_delay_ms) * 1000000ULL;
 
@@ -528,12 +519,6 @@ void c64_update(void *data, obs_data_t *settings)
 
             C64_LOG_INFO("🔄 A/V timing bases adjusted forward due to buffer delay change (%ums -> %ums)",
                          old_buffer_delay_ms, new_buffer_delay_ms);
-
-            // Resume audio delivery with new timing reference
-            if (was_audio_active) {
-                os_atomic_set_bool(&context->audio_thread_active, true);
-                C64_LOG_DEBUG("🔊 Audio delivery resumed with new timing");
-            }
 
             // Force render texture refresh to prevent display freeze after buffer changes
             // Buffer delay changes can cause frame buffer desynchronization
