@@ -182,7 +182,9 @@ void c64_process_audio_packet(struct c64_source *context, const uint8_t *audio_d
         return;
     }
 
-    // Use the original packet timestamp to maintain sync with video through network buffer
+    // Generate synthetic audio timestamp for smooth monotonic progression
+    // Coordinated with video timing base resets to maintain A/V sync during buffer changes
+    uint64_t audio_timestamp = generate_monotonic_audio_timestamp(context);
 
     // Skip the 2-byte sequence number header to get to audio samples
     const uint8_t *samples = audio_data + 2;
@@ -195,20 +197,16 @@ void c64_process_audio_packet(struct c64_source *context, const uint8_t *audio_d
         return;
     }
 
-    // Generate synthetic audio timestamp with exactly 4ms intervals
-    // This ensures monotonic progression independent of network jitter
-    uint64_t audio_timestamp = generate_monotonic_audio_timestamp(context);
-
     // Validate timestamp progression for debugging
     validate_audio_timestamp_progression(context, audio_timestamp);
 
-    // Set up OBS audio data structure
+    // Set up OBS audio data structure - optimized for minimal latency
     struct obs_source_audio audio_output = {0};
-    audio_output.frames = 192;            // 192 stereo samples per packet
-    audio_output.samples_per_sec = 48000; // Close to C64 Ultimate's ~47.98kHz
+    audio_output.frames = 192;            // 192 stereo samples per packet (4ms at C64 rate)
+    audio_output.samples_per_sec = 47976; // Exact C64 Ultimate sample rate to avoid resampling
     audio_output.format = AUDIO_FORMAT_16BIT;
     audio_output.speakers = SPEAKERS_STEREO;
-    audio_output.timestamp = audio_timestamp; // Use original packet timestamp from network buffer
+    audio_output.timestamp = audio_timestamp; // Use synthetic timestamp for smooth playback
 
     // Point to the audio data (OBS expects planar format, but we have interleaved)
     // For now, send interleaved data directly - OBS can handle it
@@ -230,10 +228,10 @@ void c64_process_audio_packet(struct c64_source *context, const uint8_t *audio_d
     uint64_t now = os_gettime_ns();
     if ((++audio_timestamp_debug_count % 50000) == 0 ||
         (now - last_audio_log_time >= 600000000000ULL)) { // Every 50k packets OR 10 minutes
-        C64_LOG_DEBUG("🎵 AUDIO SPOT CHECK: audio_ts=%" PRIu64 ", packet_ts=%" PRIu64 ", delta=%+" PRId64
-                      " (processed: %d)",
-                      audio_timestamp, timestamp_ns, (int64_t)(audio_timestamp - timestamp_ns),
-                      audio_timestamp_debug_count);
+        uint64_t delivery_delay = now - audio_timestamp;
+        C64_LOG_DEBUG("🎵 AUDIO SPOT CHECK: audio_ts=%" PRIu64 ", packet_ts=%" PRIu64 ", delivery_delay=%" PRIu64
+                      "ms (processed: %d)",
+                      audio_timestamp, timestamp_ns, delivery_delay / 1000000, audio_timestamp_debug_count);
         last_audio_log_time = now;
     }
 

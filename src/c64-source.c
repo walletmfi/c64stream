@@ -228,10 +228,10 @@ void *c64_create(obs_data_t *settings, obs_source_t *source)
         return NULL;
     }
 
-    // Initialize buffer delay from settings
+    // Initialize buffer delay from settings - optimized for low latency
     context->buffer_delay_ms = (uint32_t)obs_data_get_int(settings, "buffer_delay_ms");
     if (context->buffer_delay_ms == 0) {
-        context->buffer_delay_ms = 10; // Default 10ms
+        context->buffer_delay_ms = 10;
     }
 
     // Initialize network buffer for packet jitter correction
@@ -262,6 +262,15 @@ void *c64_create(obs_data_t *settings, obs_source_t *source)
     os_atomic_set_bool(&context->video_processor_thread_active, false);
     os_atomic_set_bool(&context->audio_thread_active, false);
     context->auto_start_attempted = false;
+
+    // Initialize audio info for low-latency audio processing hints to OBS
+    context->audio_info.samples_per_sec = 47976; // Exact C64 Ultimate sample rate
+    context->audio_info.format = AUDIO_FORMAT_16BIT;
+    context->audio_info.speakers = SPEAKERS_STEREO;
+
+    // Log low-latency configuration
+    C64_LOG_INFO("Low-latency mode: buffer_delay=%ums, audio_rate=%uHz", context->buffer_delay_ms,
+                 context->audio_info.samples_per_sec);
 
     // Initialize statistics counters
     os_atomic_set_long(&context->video_packets_received, 0);
@@ -490,7 +499,51 @@ void c64_update(void *data, obs_data_t *settings)
 
         // Update network buffer delay (this adjusts UDP packet buffering only)
         if (context->network_buffer) {
+            // Temporarily pause audio delivery to reset OBS audio timing reference
+            // This prevents OBS from getting confused by timestamp changes
+            bool was_audio_active = os_atomic_load_bool(&context->audio_thread_active);
+            if (was_audio_active) {
+                os_atomic_set_bool(&context->audio_thread_active, false);
+                C64_LOG_DEBUG("🔇 Audio delivery paused for buffer delay change");
+                os_sleep_ms(50); // Brief pause to let OBS flush its buffers
+            }
+
             c64_network_buffer_set_delay(context->network_buffer, new_buffer_delay_ms, new_buffer_delay_ms);
+
+            // Adjust timing bases forward to maintain monotonic timestamps for OBS
+            // This prevents audio pipeline confusion while correcting for buffer delay changes
+            uint64_t delay_adjustment_ns = (uint64_t)(old_buffer_delay_ms - new_buffer_delay_ms) * 1000000ULL;
+
+            // Adjust video timing base forward by the delay difference
+            if (context->timestamp_base_set) {
+                context->stream_start_time_ns += delay_adjustment_ns;
+                C64_LOG_DEBUG("📐 Video timing base adjusted forward by %llu ms", delay_adjustment_ns / 1000000ULL);
+            }
+
+            // Adjust audio timing base forward by the delay difference
+            if (context->audio_base_time != 0) {
+                context->audio_base_time += delay_adjustment_ns;
+                C64_LOG_DEBUG("🎵 Audio timing base adjusted forward by %llu ms", delay_adjustment_ns / 1000000ULL);
+            }
+
+            C64_LOG_INFO("🔄 A/V timing bases adjusted forward due to buffer delay change (%ums -> %ums)",
+                         old_buffer_delay_ms, new_buffer_delay_ms);
+
+            // Resume audio delivery with new timing reference
+            if (was_audio_active) {
+                os_atomic_set_bool(&context->audio_thread_active, true);
+                C64_LOG_DEBUG("🔊 Audio delivery resumed with new timing");
+            }
+
+            // Force render texture refresh to prevent display freeze after buffer changes
+            // Buffer delay changes can cause frame buffer desynchronization
+            if (context->render_texture) {
+                obs_enter_graphics();
+                gs_texture_destroy(context->render_texture);
+                context->render_texture = NULL;
+                obs_leave_graphics();
+                C64_LOG_DEBUG("🔄 Render texture invalidated due to buffer delay change");
+            }
         }
     }
 
@@ -731,10 +784,15 @@ void c64_video_tick(void *data, float seconds)
 
     } else {
         // Update texture with latest frame data
-        obs_enter_graphics();
-        gs_texture_set_image(context->render_texture, (const uint8_t *)context->frame_buffer, context->width * 4,
-                             false);
-        obs_leave_graphics();
+        // Validate frame buffer integrity before updating texture
+        if (context->frame_buffer && context->width > 0 && context->height > 0) {
+            obs_enter_graphics();
+            gs_texture_set_image(context->render_texture, (const uint8_t *)context->frame_buffer, context->width * 4,
+                                 false);
+            obs_leave_graphics();
+        } else {
+            C64_LOG_WARNING("Frame buffer validation failed in video_tick - skipping texture update");
+        }
     }
 }
 

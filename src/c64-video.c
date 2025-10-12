@@ -115,17 +115,17 @@ void c64_render_frame_direct(struct c64_source *context, struct frame_assembly *
         c64_record_video_frame(context, context->frame_buffer);
     }
 
-    // Direct async video output - ALWAYS output frames via async path
+    // Direct async video output - optimized for low latency
     // This ensures the source always shows video regardless of CRT effects
     struct obs_source_frame obs_frame = {0};
 
-    // Set up frame data - RGBA format (4 bytes per pixel)
+    // Set up frame data - RGBA format optimized for immediate display
     obs_frame.data[0] = (uint8_t *)context->frame_buffer;
     obs_frame.linesize[0] = context->width * 4; // 4 bytes per pixel (RGBA)
     obs_frame.width = context->width;
     obs_frame.height = context->height;
     obs_frame.format = VIDEO_FORMAT_RGBA;
-    obs_frame.timestamp = monotonic_timestamp; // Use monotonic timestamp instead of packet timestamp
+    obs_frame.timestamp = monotonic_timestamp; // Synthetic timestamp for smooth low-latency playback
     obs_frame.flip = false;                    // No vertical flip needed
 
     // Output frame directly to OBS
