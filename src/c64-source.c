@@ -563,6 +563,12 @@ void c64_start_streaming(struct c64_source *context)
     os_sleep_ms(100);
 #endif
 
+    // Reset audio timestamp state for clean reconnection
+    context->audio_base_time = 0;
+    context->audio_packet_count = 0;
+    context->last_audio_timestamp_validation = 0;
+    C64_LOG_DEBUG("Audio timestamp state reset for reconnection");
+
     // Send start commands to C64 Ultimate
     c64_send_control_command(context, true, 0); // Start video
     c64_send_control_command(context, true, 1); // Start audio

@@ -241,26 +241,34 @@ float4 PSDefault(VertData v_in) : TARGET
 
     // === SCREEN TINT EFFECT ===
     // Emulate 1980s monochrome CRTs: first convert to monochrome, then apply tint
-    if (tint_mode > 0 && tint_strength > 0.0f) {
-        // Step 1: Convert to monochrome (grayscale)
+    if (tint_mode > 0) {
+        // Step 1: ALWAYS convert to monochrome first (grayscale) using proper luminance calculation
         float luminance = dot(color.rgb, float3(0.299f, 0.587f, 0.114f));
         float3 monochrome = float3(luminance, luminance, luminance);
 
-        // Step 2: Apply tint to the monochrome image
-        float3 tinted_color = color.rgb;
+        // Step 2: Apply tint based on mode and strength
+        float3 tinted_color;
 
         if (tint_mode == 1) { // Amber CRT
             float3 amber_tint = float3(1.0f, 0.75f, 0.3f);
-            tinted_color = lerp(color.rgb, monochrome * amber_tint, saturate(tint_strength));
+            // Blend between pure monochrome and tinted monochrome based on tint_strength
+            float3 tinted_mono = monochrome * amber_tint;
+            tinted_color = lerp(monochrome, tinted_mono, saturate(tint_strength));
         }
         else if (tint_mode == 2) { // Green CRT
             float3 green_tint = float3(0.5f, 0.95f, 0.35f);
-            tinted_color = lerp(color.rgb, monochrome * green_tint, saturate(tint_strength));
+            // Blend between pure monochrome and tinted monochrome based on tint_strength
+            float3 tinted_mono = monochrome * green_tint;
+            tinted_color = lerp(monochrome, tinted_mono, saturate(tint_strength));
         }
         else if (tint_mode == 3) { // Pure Monochrome
-            tinted_color = lerp(color.rgb, monochrome, saturate(tint_strength));
+            // Always pure monochrome (tint_strength has no effect)
+            tinted_color = monochrome;
         }
-        // tint_mode == 0 (None) - no change
+        else {
+            // tint_mode == 0 (None) - should not reach here, but fallback to original
+            tinted_color = color.rgb;
+        }
 
         color.rgb = tinted_color;
     }
