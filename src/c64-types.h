@@ -111,8 +111,10 @@ struct c64_source {
     bool timestamp_base_set;        // Flag indicating if base timestamp is established
 
     // Monotonic audio timestamp generation
-    uint64_t audio_packet_count;  // Total audio packets processed since stream start
-    uint64_t audio_interval_ns;   // Nanoseconds per audio packet (4ms for 192 samples at 48kHz)
+    uint64_t audio_packet_count;               // Total audio packets processed since stream start
+    uint64_t audio_interval_ns;                // Nanoseconds per audio packet (4ms for 192 samples at 48kHz)
+    uint64_t audio_base_time;                  // Base timestamp for synthetic audio timestamps
+    uint64_t last_audio_timestamp_validation;  // Last timestamp for progression validation
 
     // Logo texture for no-connection display
     gs_texture_t *logo_texture;  // Loaded logo texture for async video output
@@ -154,6 +156,7 @@ struct c64_source {
 
     // Video recording for analysis
     bool record_video;
+    bool record_csv;  // CSV recording control (network and OBS events)
     FILE *video_file;
     FILE *audio_file;
     FILE *timing_file;
@@ -170,6 +173,26 @@ struct c64_source {
     uint8_t *bmp_row_buffer;       // Pre-allocated BMP row buffer for frame saving
     uint8_t *bgr_frame_buffer;     // Pre-allocated BGR buffer for video recording
     size_t recording_buffer_size;  // Size of allocated recording buffers
+
+    // CRT visual effects
+    float scan_line_distance;            // Scan line distance (0.0-2.0, percentage of scan line width)
+    float scan_line_strength;            // Scan line strength (0.0-1.0, darkness of gaps)
+    float pixel_width;                   // Pixel geometry width (0.5-3.0)
+    float pixel_height;                  // Pixel geometry height (0.5-3.0)
+    float blur_strength;                 // Blur strength for pixel geometry (0.0-1.0)
+    bool bloom_enable;                   // Bloom effect enable
+    float bloom_strength;                // Bloom strength (0.0-1.0, internally scaled 7.5x)
+    bool afterglow_enable;               // Afterglow effect enable
+    int afterglow_duration_ms;           // Afterglow duration in milliseconds
+    int afterglow_curve;                 // Afterglow decay curve (0=linear, 1=exponential)
+    bool tint_enable;                    // Screen tint effect enable
+    int tint_mode;                       // Tint mode (0=none, 1=amber, 2=green, 3=monochrome)
+    float tint_strength;                 // Tint strength (0.0-1.0)
+    gs_texture_t *render_texture;        // GPU texture for rendering with effects
+    gs_effect_t *crt_effect;             // CRT shader effect
+    gs_texture_t *afterglow_accum_prev;  // Ping-pong texture for afterglow accumulation
+    gs_texture_t *afterglow_accum_next;  // Ping-pong texture for afterglow accumulation
+    uint64_t last_frame_time_ns;         // Last frame timestamp for afterglow delta calculation
 };
 
 #endif  // C64_TYPES_H

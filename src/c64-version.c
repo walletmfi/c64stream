@@ -24,7 +24,7 @@ const char *c64_get_version_string(void)
 const char *c64_get_build_info(void)
 {
     if (build_info_string[0] == '\0') {
-        snprintf(build_info_string, sizeof(build_info_string), "Version: %s | Git: %s | Built: %s UTC", C64_VERSION_TAG,
+        snprintf(build_info_string, sizeof(build_info_string), "%s (Git ID: %s, Built: %s UTC)", C64_VERSION_TAG,
                  C64_GIT_HASH, C64_BUILD_TIME);
     }
     return build_info_string;

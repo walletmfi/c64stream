@@ -11,19 +11,20 @@ The plugin connects directly to the Ultimate's network interface, eliminating th
 
 ![C64 Stream Main Screen](./docs/images/main-screen.png "C64 Stream Main Screen")
 
-
 **Features:**
+
 - Native OBS integration as a standard video source
 - Real-time video streaming (PAL 384x272, NTSC 384x240)
 - Synchronized audio streaming (16-bit stereo, ~48kHz)
 - Network-based connection (UDP/TCP)
 - Automatic VIC-II color space conversion
+- **Authentic CRT effects** with configurable presets (scan lines, bloom, tint, pixel geometry)
 - Built-in recording capabilities (BMP frames, AVI video, WAV audio)
-
 
 ## Getting Started 🚀
 
 ### What You'll Need
+
 - [OBS Studio 32.0.1](https://obsproject.com/download) or above
 - [C64 Ultimate](https://www.commodore.net/) or [Ultimate 64](https://ultimate64.com/)
 - Ethernet connection between your OBS computer and Ultimate device. Wifi is [not supported](https://1541u-documentation.readthedocs.io/en/latest/howto/wifi.html#functionality-available-on-wifi).
@@ -33,6 +34,7 @@ The plugin connects directly to the Ultimate's network interface, eliminating th
 Grab the right package for your system from the [Releases page](../../releases):
 
 **Windows:**
+
 1. Close OBS Studio
 2. Extract `c64stream-*-windows-x64.zip` to `C:\ProgramData\obs-studio\plugins`
 3. Restart OBS Studio
@@ -47,6 +49,7 @@ New-NetFirewallRule -DisplayName "C64 Stream" -Direction Inbound -Protocol UDP -
 ```
 
 **macOS:**
+
 1. Close OBS Studio
 2. Install `c64stream-*-macos-universal.pkg` to `~/Library/Application Support/obs-studio/plugins`
 3. Restart OBS Studio
@@ -55,15 +58,16 @@ New-NetFirewallRule -DisplayName "C64 Stream" -Direction Inbound -Protocol UDP -
 > macOS support is currently under active development and is not yet fully functional. We're working to resolve compatibility issues and will update this documentation when macOS builds are stable.
 
 **Linux (Ubuntu/Debian):**
+
 1. Close OBS Studio
 2. Install `c64stream-*-x86_64-linux-gnu.deb` to `~/.config/obs-studio/plugins` by running:
+
 ```bash
 sudo dpkg -i c64stream-plugin-linux.deb
 ```
 
 **Further Details:**
 See the [OBS Plugins Guide](https://obsproject.com/kb/plugins-guide).
-
 
 ### Configuration ⚙️
 
@@ -85,20 +89,52 @@ A new window opens. Keep the default settings and click "OK":
 
 🎉 **DONE!** Enjoy streaming from your C64 Ultimate.
 
-
 ## Plugin Setup
 
 ### General
-- **Version:**: Information about release version, Git ID, and build time. 
+
+- **Version:**: Information about release version, Git ID, and build time.
 - **Debug Logging**: Check this to see debug logs
 
 ### Network
-- **DNS Server IP:** IP address of DNS server for resolving device hostnames (default: `192.168.1.1` for most home routers). Used when the C64 Ultimate Host is a hostname rather than an IP address.
+
+- **DNS Resolution Details:**
+
+- **Default:** `192.168.1.1` (most common home router DNS server)
+- **Fallback:** If router DNS fails, the plugin tries standard DNS servers
+- **Enhanced Resolution:** The plugin uses multiple resolution strategies for maximum compatibility
 - **C64 Ultimate Host:** Enter your Ultimate device's hostname (default: `c64u`) or IP address to enable automatic streaming control from OBS (recommended for convenience), or set to `0.0.0.0` to accept streams from any C64 Ultimate on your network (requires manual control from the device)
 - **OBS Server IP:** IP address where C64 Ultimate sends streams (auto-detected by default)
 - **Auto-detect OBS IP:** Automatically detect and use OBS server IP in streaming commands (recommended)
 - **Configure Ports** Use the default ports (video: 11000, audio: 11001) unless network conflicts require different values
-- **Buffer Delay:** Sets the network buffer for incoming UDP packets arriving from the C64 Ultimate (0–500 ms, default 10 ms). The buffer size is expressed in milliseconds to represent the time-based delay it introduces, compensating for packet loss, reordering, and variable network latency. Larger buffers improve stability under high-latency or congested conditions but increase end-to-end delay.
+- **Buffer Delay:** Sets the network buffer for incoming UDP packets arriving from the C64 Ultimate (0–500 ms, default 10 ms). The buffer size is expressed in milliseconds to represent the time-based delay it introduces, compensating for packet loss, reordering, and variable network latency. Larger buffers improve stability under high-latency or congested conditions but increase end-to-end delay.
+
+### CRT Effects 📺
+
+Recreate the authentic look and feel of classic CRT monitors and TVs with configurable visual effects that simulate the characteristics of vintage displays.
+
+![C64 Stream Effects](./docs/images/properties-effects.png "C64 Stream Effects")
+
+**Presets:** One-click configurations for different display types
+
+- **[Classic CRT](./docs/images/effects/classic-crt.png)** - Balanced scan lines and bloom for general retro appeal
+- **[Amber Monitor](./docs/images/effects/amber-monitor.png)** - Warm amber tint reminiscent of early computer monitors
+- **[Green Monitor](./docs/images/effects/green-monitor.png)** - Classic green phosphor terminal look
+- **[Sharp Pixels](./docs/images/effects/sharp-pixels.png)** - Crisp pixel doubling for arcade-style clarity
+- **[Vintage TV](./docs/images/effects/vintage-tv.png)** - Softer look with prominent scan lines for old television feel
+- **[Arcade Cabinet](./docs/images/effects/arcade-cabinet.png)** - High-contrast effects for authentic arcade experience
+
+**Customizable Effects:**
+
+- **Scan Lines:** Adjustable spacing and intensity to simulate CRT raster lines
+- **Bloom:** Configurable glow effect that makes bright pixels bleed into darker areas
+- **Pixel Geometry:** Independent width/height scaling for authentic pixel aspect ratios
+- **Blur Control:** Fine-tune between crisp pixels and soft scaling
+- **Screen Tint:** Amber, green, or monochrome overlays for period-accurate monitor simulation
+
+**Usage:** Access via the **Effects** group in plugin properties. Select a preset for instant results, or customize individual settings to create your perfect retro display aesthetic.
+
+**Reset:** To reset to default values, simply select the "Default" preset. If you have changed individual effects whilst the "Default" preset was active, select any other preset first and then re-select the "Default" preset.
 
 ### Recording Features 📹
 
@@ -106,13 +142,25 @@ The plugin includes built-in recording capabilities that work independently of O
 
 ### Recording Options
 
-**Frame Saving (BMP):**
+The plugin offers three independent recording options that can be enabled separately or together:
+
+**📊 Network and Streaming Events (CSV):**
+
+- Records detailed timing data for network packets and OBS processing events
+- Creates `obs.csv` (OBS processing timeline) and `network.csv` (UDP packet analysis)
+- **Minimal Performance Impact:** Lightweight logging with microsecond precision
+- **Use Cases:** Debug performance issues, analyze network jitter, validate frame timing
+- Files: `session_YYYYMMDD_HHMMSS/obs.csv` and `session_YYYYMMDD_HHMMSS/network.csv`
+
+**🖼️ Raw Frames (BMP):**
+
 - Saves individual video frames as uncompressed BMP files
 - Useful for debugging video issues or creating frame-by-frame analysis
 - **Performance Impact:** Enabling this feature will reduce streaming performance due to disk I/O
 - Files saved as: `session_YYYYMMDD_HHMMSS/frames/frame_NNNNNN.bmp`
 
-**Video Recording (AVI + WAV):**
+**🎬 Raw Video and Audio (AVI + WAV):**
+
 - Records uncompressed AVI video and separate WAV audio files
 - Captures the raw data stream without OBS processing
 - **High Disk Usage:** Uncompressed video files are very large (~50MB per minute)
@@ -122,14 +170,15 @@ The plugin includes built-in recording capabilities that work independently of O
 #### File Organization
 
 All recording files are organized into session folders with timestamps:
-```
+
+```text
 ~/Documents/obs-studio/c64stream/recordings/
 ├── session_20240929_143052/
-│   ├── frames/           # BMP frame files (if enabled)
-│   ├── network.csv       # Network timings
-│   ├── obs.csv           # OBS timings
-│   ├── video.avi         # Uncompressed video (if enabled)
-│   └── audio.wav         # Uncompressed audio (if enabled)
+│   ├── frames/           # BMP frame files (if "Raw Frames" enabled)
+│   ├── network.csv       # Network timings (if "CSV Events" enabled)
+│   ├── obs.csv           # OBS timings (if "CSV Events" enabled)
+│   ├── video.avi         # Uncompressed video (if "Raw Video" enabled)
+│   └── audio.wav         # Uncompressed audio (if "Raw Video" enabled)
 └── session_20240929_151234/
     └── ...
 ```
@@ -145,22 +194,25 @@ All recording files are organized into session folders with timestamps:
 
 #### Usage Notes
 
-- Recording operates independently of OBS Studio's built-in recording
-- Both recording options can be enabled simultaneously
-- **Recording starts immediately when a checkbox is checked and continues until unchecked**
-- **⚠️ Checkbox states persist across OBS restarts - uncheck to stop recording or risk filling disk space**
-- Files are written in real-time as data is received from the C64 Ultimate
-- Session folders are created automatically with proper directory structure
+- **Independent Operation:** All recording operates independently of OBS Studio's built-in recording
+- **Mix and Match:** All three recording options can be enabled simultaneously
+- **Instant Recording:** Recording starts immediately when a checkbox is checked and continues until unchecked
+- **⚠️ Persistent State:** Checkbox states persist across OBS restarts - uncheck to stop recording or risk filling disk space
+- **Real-Time Writing:** Files are written in real-time as data is received from the C64 Ultimate
+- **Auto-Organization:** Session folders are created automatically with proper directory structure
+- **Recommended:** Enable **CSV recording** for debugging and **disable** BMP/AVI recording for normal streaming
 
 #### Debug & Analysis CSV Logs 📊
 
-The plugin automatically generates detailed CSV logs for debugging OBS performance and analyzing C64 Ultimate network streams. These logs enable bit-accurate recording analysis and precise frame timing measurements.
+When **"Network and Streaming Events (CSV)"** recording is enabled, the plugin generates detailed CSV logs for debugging OBS performance and analyzing C64 Ultimate network streams. These logs enable bit-accurate recording analysis and precise frame timing measurements.
 
 **Generated CSV Files:**
+
 - `obs.csv` - OBS processing timeline with microsecond precision
 - `network.csv` - UDP packet reception log with network timing analysis
 
 **Sample OBS Timeline (obs.csv):**
+
 ```csv
 event_type,frame_num,elapsed_us,calculated_timestamp_ms,actual_timestamp_ms,data_size_bytes,fps
 video,0,1443,6385631,6385625,368640,59.826
@@ -168,6 +220,7 @@ audio,0,15234,6385646,6385640,1536,48000
 ```
 
 **Sample Network Analysis (network.csv):**
+
 ```csv
 packet_type,elapsed_us,sequence_num,frame_num,line_num,packet_size,jitter_us
 video,225,1510,7671,8,780,0
@@ -175,6 +228,7 @@ audio,2341,847,0,0,192,125
 ```
 
 **Use Cases:**
+
 - **Debug OBS Performance:** Analyze frame processing delays and audio sync issues
 - **Network Stream Analysis:** Monitor UDP packet timing, jitter, and sequence errors
 - **Bit-Accurate Recordings:** Capture every frame with precise timing for forensic analysis
@@ -182,7 +236,7 @@ audio,2341,847,0,0,192,125
 
 **Sample Recording:** See [docs/recordings/session_19700101_024625](docs/recordings/session_19700101_024625) for complete examples with all file types.
 
-**Activation:** CSV logging is automatically enabled whenever any recording option is active. No additional configuration required.
+**Activation:** Enable the **"Network and Streaming Events (CSV)"** checkbox in the Recording properties. CSV files are generated only when this option is explicitly enabled.
 
 ## Network Details
 
@@ -191,11 +245,13 @@ audio,2341,847,0,0,192,125
 The plugin supports both **hostnames** and **IP addresses** for the C64 Ultimate Host field with enhanced DNS resolution that works reliably across all platforms:
 
 **Using Hostnames (Recommended):**
+
 - **Default:** `c64u` - The plugin will try to resolve this hostname to an IP address
 - **Custom:** `my-c64u` or `retro-pc` - Use any hostname your C64 Ultimate device is known by
 - **FQDN Support:** The plugin automatically tries both `hostname` and `hostname.` (with trailing dot) for proper DNS resolution
 
 **Using IP Addresses:**
+
 - **Direct IP:** `192.168.1.64` - Standard IPv4 address format
 - **Fallback:** `0.0.0.0` - Accept streams from any C64 Ultimate (no automatic control)
 
@@ -211,18 +267,21 @@ The plugin offers hostname resolution that works reliably on Linux and macOS whe
 4. **Cross-Platform:** Windows uses system DNS (which works reliably), Linux/macOS use enhanced resolution
 
 **DNS Server Configuration:**
+
 - **Default:** `192.168.1.1` (most common home router DNS server)
 - **Custom:** Set to your router's IP or a specific DNS server (e.g., `192.168.0.1`, `10.0.0.1`)
 - **Automatic Fallback:** If the configured DNS server fails, tries other common router IPs
 - **Why This Helps:** Solves Linux/macOS issues where `c64u` hostname doesn't resolve through system DNS but works via direct router queries
 
 **Examples:**
+
 - `c64u` → resolves to `192.168.1.64` via enhanced DNS resolution
 - `192.168.1.64` → used directly as IP address
 - `retro-basement.local` → resolves via mDNS/Bonjour or direct DNS
 - `ultimate64` → tries system DNS first, then direct router DNS queries
 
 **Platform-Specific Behavior:**
+
 - **Windows:** Uses system DNS (typically works without issues)
 - **Linux/macOS:** Uses enhanced DNS resolution to bypass systemd-resolved limitations
 - **All Platforms:** Support both hostname and IP address formats seamlessly
@@ -232,6 +291,7 @@ The plugin offers hostname resolution that works reliably on Linux and macOS whe
 **Automatic Configuration (Recommended):** The OBS plugin automatically controls streaming on the Ultimate device. When you configure the Ultimate's hostname or IP address in the OBS plugin settings, the plugin tells the Ultimate device where to send streams and sends start commands automatically. Thus, no manual streaming adjustments are needed on the Ultimate device.
 
 **Manual Configuration:**
+
 1. Press F2 to access the Ultimate's configuration menu
 2. Navigate to "Data Streams" section
 3. Set "Stream VIC to" field: `your-obs-ip:11000` (e.g., `192.168.1.100:11000`)
@@ -241,42 +301,49 @@ The plugin offers hostname resolution that works reliably on Linux and macOS whe
 
 For comprehensive configuration details, refer to the [official C64 Ultimate documentation](https://1541u-documentation.readthedocs.io/en/latest/data_streams.html).
 
-
 ## Technical Details 🔧
 
 This plugin implements the [C64 Ultimate Data Streams specification](https://1541u-documentation.readthedocs.io/en/latest/data_streams.html#data_streams) to receive video and audio streams from Ultimate devices via UDP/TCP network protocols.
 
 **Supported Platforms:**
+
 - Windows 10/11 (x64) - verified on Windows 11
 - Linux with X window system or Wayland - verified on Kubuntu 24.04
 - macOS 11+ (Intel/Apple Silicon) - yet to be verified
 
 **Software Requirements:**
+
 - [OBS Studio 32.0.1](https://obsproject.com/download) or above
 
 **Hardware Requirements:**
 
 One of:
+
 - [Ultimate 64 Elite](https://ultimate64.com/Ultimate-64-Elite) - verified
 - [Ultimate 64 Elite MK2](https://ultimate64.com/Ultimate-64-Elite-MK2) - yet to be verified
 - [C64 Ultimate](https://www.commodore.net/) - yet to be verified since not released yet
 
 **Video Formats:**
+
 - PAL: 384x272 @ 50Hz
 - NTSC: 384x240 @ 60Hz
 - Color space: VIC-II palette with automatic RGB conversion
+- **CRT Effects:** GPU-accelerated shader-based post-processing with configurable presets
 
 **Audio Format:**
+
 - 16-bit stereo PCM
 - Sample rate: ~48kHz (device dependent)
 - Low-latency streaming
 
 **Network Requirements:**
+
 - UDP/TCP connectivity to Ultimate device
 - Bandwidth: ~22 Mbps total (21.7 Mbps video + 1.4 Mbps audio, uncompressed streams)
 - Built-in UDP jitter compensation via configurable frame buffering
 
 **DNS Resolution:**
+
 - **Cross-platform hostname support:** Works reliably on Windows, Linux, and macOS
 - **Enhanced Linux/macOS resolution:** Bypasses systemd-resolved limitations using direct DNS queries
 - **Configurable DNS server:** Set custom DNS server IP for hostname resolution (default: 192.168.1.1)
@@ -284,46 +351,54 @@ One of:
 - **FQDN support:** Tries both standard hostname and FQDN (with trailing dot) resolution
 
 **Recording Formats:**
+
 - BMP frames: 24-bit uncompressed bitmap images
 - AVI video: Uncompressed BGR24 format with precise timing
 - WAV audio: 16-bit stereo PCM, sample rate matches C64 Ultimate output
 - Session organization: Automatic timestamped folder creation
 
-
 ## Troubleshooting 🔍
 
-**No video stream? 📺**
+### No video stream? 📺**
+
 - Verify that both IP addresses are correct
 - Check Ultimate device has data streaming enabled
 - Confirm firewall allows UDP traffic on configured ports
 
-**Audio sync issues? 🔊**
+### Audio sync issues? 🔊
+
 - Check audio port configuration (default 11001)
 - Verify OBS audio monitoring settings
+- **Buffer delay changes:** If you first increase the network buffer delay (e.g., to 500ms) and then decrease it (e.g., to 200ms), audio may become delayed relative to video. **Workaround:** Remove and re-add the C64 Stream source, or restart OBS Studio to reset the audio timing reference. For best results, set your desired buffer delay when initially configuring the source.
 
-**Plugin missing from OBS? 🤔**
+### Plugin missing from OBS? 🤔
+
 - Confirm OBS Studio version 32.0.1+
 - Verify plugin installed to correct directory
 - Check OBS logs for plugin loading errors
 - Restart OBS completely after installation
 
-**Connection acting up? 📡**
+### Connection acting up? 📡
+
 - Network latency should be <100ms for optimal performance
 - Check for network congestion or WiFi interference
 - Consider wired Ethernet connection for stability
 
-**Hostname not resolving? 🌐**
+### Hostname not resolving? 🌐
 
 If the plugin can't resolve your C64 Ultimate hostname (e.g., `c64u`), try these solutions:
 
 *Quick Fix:*
+
 1. **Use IP Address:** Instead of `c64u`, enter the device's IP address directly (e.g., `192.168.1.64`)
 2. **Check DNS Server IP:** Verify the DNS Server IP setting matches your router's IP address
    - Common router IPs: `192.168.1.1`, `192.168.0.1`, `10.0.0.1`
    - Find your router IP: Run `ip route | grep default` (Linux) or `ipconfig` (Windows)
 
 *Advanced Troubleshooting:*
+
 1. **Test DNS Resolution Manually:**
+
    ```bash
    # Linux/macOS - Test if router can resolve the hostname
    dig @192.168.1.1 c64u
@@ -348,21 +423,27 @@ If the plugin can't resolve your C64 Ultimate hostname (e.g., `c64u`), try these
    - Messages show which DNS resolution method succeeded
 
 *Alternative Solutions:*
+
 - **Static DNS Entry:** Add `192.168.1.64 c64u` to your system's hosts file
 - **mDNS/Bonjour:** Use `.local` suffix (e.g., `c64u.local`) if your network supports it
 - **Router Configuration:** Ensure your router's DNS server has the device hostname registered
 
-**Recording troubles? 💾**
+### Effects not working? 📺
+
+- **No visual change:** Ensure source is active and receiving video data
+- **Performance drops:** Complex effects (high bloom/blur) may impact frame rate on older hardware
+- **Preset not applying:** Try manually adjusting individual effect settings
+
+### Recording troubles? 💾
+
 - **Files not created:** Verify output folder path exists and is writable
 - **Performance drops with BMP saving:** Frame saving impacts performance significantly; disable if not needed
 - **Large disk usage:** AVI recording creates uncompressed files (~50MB/minute); monitor disk space
 - **Recording stops unexpectedly:** Check disk space and folder permissions
 
-
 ## For Developers 🔧
 
 See the [Developer Documentation](doc/developer.md) for build instructions, testing procedures, and contribution guidelines.
-
 
 ## License
 

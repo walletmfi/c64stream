@@ -65,11 +65,11 @@ void c64_session_ensure_exists(struct c64_source *context)
 /**
  * Check if any recording type is currently active
  * @param context Source context
- * @return true if frame saving or video recording is enabled
+ * @return true if frame saving, video recording, or CSV recording is enabled
  */
 bool c64_session_any_recording_active(struct c64_source *context)
 {
-    return context->save_frames || context->record_video;
+    return context->save_frames || context->record_video || context->record_csv;
 }
 
 /**
@@ -226,13 +226,18 @@ void c64_start_video_recording(struct c64_source *context)
         return;
     }
 
-    // Start CSV and network recording (creates session if needed)
-    c64_start_csv_recording(context);
-    c64_start_network_recording(context);
+    // Ensure session exists for video recording
+    c64_session_ensure_exists(context);
     if (context->session_folder[0] == '\0') {
         C64_LOG_ERROR("Failed to create recording session for video recording");
         pthread_mutex_unlock(&context->recording_mutex);
         return;
+    }
+
+    // Start CSV and network recording if enabled
+    if (context->record_csv) {
+        c64_start_csv_recording(context);
+        c64_start_network_recording(context);
     }
 
     // Create filenames in the session folder
@@ -389,6 +394,25 @@ void c64_record_update_settings(struct c64_source *context, void *settings_ptr)
     if (old_save_frames && !context->save_frames) {
         // Frame saving stopped, cleanup session if no other recording active
         c64_session_cleanup_if_needed(context);
+    }
+
+    // Update CSV recording setting
+    bool new_record_csv = obs_data_get_bool(settings, "record_csv");
+    if (new_record_csv != context->record_csv) {
+        context->record_csv = new_record_csv;
+
+        if (new_record_csv) {
+            // Start CSV recording independently
+            c64_start_csv_recording(context);
+            c64_start_network_recording(context);
+            C64_LOG_INFO("CSV recording started");
+        } else {
+            // Stop CSV recording
+            c64_stop_csv_recording(context);
+            c64_stop_network_recording(context);
+            c64_session_cleanup_if_needed(context);
+            C64_LOG_INFO("CSV recording stopped");
+        }
     }
 
     // Update video recording settings

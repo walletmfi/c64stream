@@ -114,46 +114,64 @@ void *audio_thread_func(void *data)
 }
 
 // Audio timestamp validation to prevent OBS TS_SMOOTHING_THRESHOLD warnings
-static void validate_audio_timestamp_progression(uint64_t current_timestamp)
+static void validate_audio_timestamp_progression(struct c64_source *context, uint64_t current_timestamp)
 {
-    static uint64_t last_audio_timestamp = 0;
-    if (last_audio_timestamp > 0) {
-        int64_t timestamp_delta = (int64_t)(current_timestamp - last_audio_timestamp);
+    if (context->last_audio_timestamp_validation > 0) {
+        int64_t timestamp_delta = (int64_t)(current_timestamp - context->last_audio_timestamp_validation);
         // Expected delta is ~4ms (4,000,000 ns), warn if significantly off
         if (timestamp_delta < 2000000 || timestamp_delta > 6000000) {
-            C64_LOG_DEBUG("Audio timestamp jump detected: delta=%" PRId64 "ns (expected ~4000000ns)", timestamp_delta);
+            C64_LOG_DEBUG("Audio timestamp jump detected [%s]: delta=%" PRId64 "ns (expected ~4000000ns)",
+                          obs_source_get_name(context->source), timestamp_delta);
         }
     }
-    last_audio_timestamp = current_timestamp;
+    context->last_audio_timestamp_validation = current_timestamp;
 }
 
-// Generate monotonic audio timestamps at exactly 4ms intervals
-static uint64_t generate_monotonic_audio_timestamp(void)
+// Generate monotonic audio timestamps at exactly 4ms intervals with drift correction
+static uint64_t generate_monotonic_audio_timestamp(struct c64_source *context)
 {
     // Audio packets must have exactly 4ms intervals (192 samples at 48kHz = 4000000ns)
-    // This creates synthetic timestamps independent of network jitter
-    static uint64_t audio_base_time = 0;
-    static uint64_t audio_packet_count = 0;
+    // This creates synthetic timestamps with periodic drift correction
+
+    uint64_t current_real_time = os_gettime_ns();
 
     // Initialize on first call using system time
-    if (audio_base_time == 0) {
-        audio_base_time = os_gettime_ns();
-        C64_LOG_DEBUG("Audio synthetic timestamps initialized: base=%" PRIu64, audio_base_time);
+    if (context->audio_base_time == 0) {
+        context->audio_base_time = current_real_time;
+        context->audio_packet_count = 0;
+        C64_LOG_DEBUG("Audio synthetic timestamps initialized for source '%s': base=%" PRIu64,
+                      obs_source_get_name(context->source), context->audio_base_time);
     }
 
     // Calculate current timestamp: base + (packet_count * 4ms)
-    uint64_t current_timestamp = audio_base_time + (audio_packet_count * 4000000ULL);
-    audio_packet_count++;
+    uint64_t synthetic_timestamp = context->audio_base_time + (context->audio_packet_count * 4000000ULL);
+    context->audio_packet_count++;
 
-    // Debug logging every 100 packets to verify progression
-    static int debug_count = 0;
-    if ((++debug_count % 100) == 0) {
-        C64_LOG_DEBUG("Audio synthetic TS: count=%" PRIu64 ", timestamp=%" PRIu64 " (+%dms from base)",
-                      audio_packet_count - 1, current_timestamp,
-                      (int)((current_timestamp - audio_base_time) / 1000000));
+    // Drift correction: periodically adjust base time to prevent excessive drift
+    // Check every 250 packets (1 second of audio) to see if we're drifting too far
+    if ((context->audio_packet_count % 250) == 0) {
+        int64_t drift_ns = (int64_t)(synthetic_timestamp - current_real_time);
+        const int64_t MAX_DRIFT_NS = 100000000LL; // 100ms maximum drift
+
+        if (llabs(drift_ns) > MAX_DRIFT_NS) {
+            // Adjust base time to reduce drift while maintaining monotonic progression
+            int64_t adjustment = drift_ns / 2; // Correct half the drift gradually
+            context->audio_base_time -= adjustment;
+            synthetic_timestamp -= adjustment;
+
+            C64_LOG_DEBUG("Audio drift correction [%s]: drift=%" PRId64 "ms, adjusted by %" PRId64 "ms",
+                          obs_source_get_name(context->source), drift_ns / 1000000, adjustment / 1000000);
+        }
     }
 
-    return current_timestamp;
+    // Debug logging every 100 packets to verify progression
+    if ((context->audio_packet_count % 1000) == 0) {
+        int64_t drift_ms = (int64_t)(synthetic_timestamp - current_real_time) / 1000000;
+        C64_LOG_DEBUG("Audio synthetic TS [%s]: count=%" PRIu64 ", drift=%" PRId64 "ms",
+                      obs_source_get_name(context->source), context->audio_packet_count - 1, drift_ms);
+    }
+
+    return synthetic_timestamp;
 }
 
 // Process audio packet and send to OBS for playback
@@ -164,7 +182,9 @@ void c64_process_audio_packet(struct c64_source *context, const uint8_t *audio_d
         return;
     }
 
-    // Use the original packet timestamp to maintain sync with video through network buffer
+    // Generate synthetic audio timestamp for smooth monotonic progression
+    // Coordinated with video timing base resets to maintain A/V sync during buffer changes
+    uint64_t audio_timestamp = generate_monotonic_audio_timestamp(context);
 
     // Skip the 2-byte sequence number header to get to audio samples
     const uint8_t *samples = audio_data + 2;
@@ -177,20 +197,16 @@ void c64_process_audio_packet(struct c64_source *context, const uint8_t *audio_d
         return;
     }
 
-    // Generate synthetic audio timestamp with exactly 4ms intervals
-    // This ensures monotonic progression independent of network jitter
-    uint64_t audio_timestamp = generate_monotonic_audio_timestamp();
-
     // Validate timestamp progression for debugging
-    validate_audio_timestamp_progression(audio_timestamp);
+    validate_audio_timestamp_progression(context, audio_timestamp);
 
-    // Set up OBS audio data structure
+    // Set up OBS audio data structure - optimized for minimal latency
     struct obs_source_audio audio_output = {0};
-    audio_output.frames = 192;            // 192 stereo samples per packet
-    audio_output.samples_per_sec = 48000; // Close to C64 Ultimate's ~47.98kHz
+    audio_output.frames = 192;            // 192 stereo samples per packet (4ms at C64 rate)
+    audio_output.samples_per_sec = 47976; // Exact C64 Ultimate sample rate to avoid resampling
     audio_output.format = AUDIO_FORMAT_16BIT;
     audio_output.speakers = SPEAKERS_STEREO;
-    audio_output.timestamp = audio_timestamp; // Use original packet timestamp from network buffer
+    audio_output.timestamp = audio_timestamp; // Use synthetic timestamp for smooth playback
 
     // Point to the audio data (OBS expects planar format, but we have interleaved)
     // For now, send interleaved data directly - OBS can handle it
@@ -199,16 +215,23 @@ void c64_process_audio_packet(struct c64_source *context, const uint8_t *audio_d
     // Send audio to OBS for playback
     obs_source_output_audio(context->source, &audio_output);
 
+    // Log audio delivery to CSV if enabled (high-level event: audio samples delivered to OBS)
+    if (context->timing_file) {
+        uint64_t calculated_timestamp_ms = audio_timestamp / 1000000; // Convert ns to ms
+        uint64_t actual_timestamp_ms = os_gettime_ns() / 1000000;
+        c64_obs_log_audio_event(context, calculated_timestamp_ms, actual_timestamp_ms, samples_size);
+    }
+
     // Very rare spot checks for audio timestamp debugging (every 10 minutes)
     static int audio_timestamp_debug_count = 0;
     static uint64_t last_audio_log_time = 0;
     uint64_t now = os_gettime_ns();
     if ((++audio_timestamp_debug_count % 50000) == 0 ||
         (now - last_audio_log_time >= 600000000000ULL)) { // Every 50k packets OR 10 minutes
-        C64_LOG_DEBUG("🎵 AUDIO SPOT CHECK: audio_ts=%" PRIu64 ", packet_ts=%" PRIu64 ", delta=%+" PRId64
-                      " (processed: %d)",
-                      audio_timestamp, timestamp_ns, (int64_t)(audio_timestamp - timestamp_ns),
-                      audio_timestamp_debug_count);
+        uint64_t delivery_delay = now - audio_timestamp;
+        C64_LOG_DEBUG("🎵 AUDIO SPOT CHECK: audio_ts=%" PRIu64 ", packet_ts=%" PRIu64 ", delivery_delay=%" PRIu64
+                      "ms (processed: %d)",
+                      audio_timestamp, timestamp_ns, delivery_delay / 1000000, audio_timestamp_debug_count);
         last_audio_log_time = now;
     }
 

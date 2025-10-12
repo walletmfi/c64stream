@@ -107,13 +107,7 @@ void c64_render_frame_direct(struct c64_source *context, struct frame_assembly *
     if (context->save_frames) {
         c64_save_frame_as_bmp(context, context->frame_buffer);
 
-        // Log frame saving timing to CSV if enabled
-        if (context->timing_file) {
-            uint64_t calculated_timestamp_ms = monotonic_timestamp / 1000000; // Convert ns to ms
-            uint64_t actual_timestamp_ms = os_gettime_ns() / 1000000;
-            size_t frame_size = context->width * context->height * 4; // RGBA bytes
-            c64_obs_log_video_event(context, calculated_timestamp_ms, actual_timestamp_ms, frame_size);
-        }
+        // Note: CSV logging for video events is now handled independently in the video processor thread
     }
 
     // Record frame to video file if recording is enabled
@@ -121,20 +115,29 @@ void c64_render_frame_direct(struct c64_source *context, struct frame_assembly *
         c64_record_video_frame(context, context->frame_buffer);
     }
 
-    // Direct async video output - no buffer swapping needed
+    // Direct async video output - optimized for low latency
+    // This ensures the source always shows video regardless of CRT effects
     struct obs_source_frame obs_frame = {0};
 
-    // Set up frame data - RGBA format (4 bytes per pixel)
+    // Set up frame data - RGBA format optimized for immediate display
     obs_frame.data[0] = (uint8_t *)context->frame_buffer;
     obs_frame.linesize[0] = context->width * 4; // 4 bytes per pixel (RGBA)
     obs_frame.width = context->width;
     obs_frame.height = context->height;
     obs_frame.format = VIDEO_FORMAT_RGBA;
-    obs_frame.timestamp = monotonic_timestamp; // Use monotonic timestamp instead of packet timestamp
+    obs_frame.timestamp = monotonic_timestamp; // Synthetic timestamp for smooth low-latency playback
     obs_frame.flip = false;                    // No vertical flip needed
 
     // Output frame directly to OBS
     obs_source_output_video(context->source, &obs_frame);
+
+    // Log video frame delivery to CSV if enabled (high-level event: complete frame delivered to OBS)
+    if (context->timing_file) {
+        uint64_t calculated_timestamp_ms = monotonic_timestamp / 1000000; // Convert ns to ms
+        uint64_t actual_timestamp_ms = os_gettime_ns() / 1000000;
+        size_t frame_size = context->width * context->height * 4; // RGBA bytes
+        c64_obs_log_video_event(context, frame->frame_num, calculated_timestamp_ms, actual_timestamp_ms, frame_size);
+    }
 
     // Update timing and status
     context->last_frame_time = monotonic_timestamp;
@@ -497,7 +500,7 @@ static void c64_render_black_screen(struct c64_source *context, uint64_t timesta
     // Black screen: 0x00000000 (fully transparent black in RGBA)
     memset(buffer, 0, width * height * sizeof(uint32_t));
 
-    // Output black frame via async video
+    // Output black frame via async video - ALWAYS output to maintain video stream
     struct obs_source_frame obs_frame = {0};
     obs_frame.data[0] = (uint8_t *)context->frame_buffer;
     obs_frame.linesize[0] = context->width * 4; // 4 bytes per pixel (RGBA)
@@ -515,8 +518,8 @@ static void c64_render_black_screen(struct c64_source *context, uint64_t timesta
     uint64_t now = os_gettime_ns();
     if ((++black_screen_debug_count % 10000) == 0 ||
         (now - last_black_screen_log_time >= 600000000000ULL)) { // Every 10k renders OR 10 minutes
-        C64_LOG_DEBUG("⚫ BLACK SCREEN SPOT CHECK: %ux%u RGBA, timestamp=%" PRIu64 " (total count: %d)",
-                      obs_frame.width, obs_frame.height, obs_frame.timestamp, black_screen_debug_count);
+        C64_LOG_DEBUG("⚫ BLACK SCREEN SPOT CHECK: %ux%u RGBA, timestamp=%" PRIu64 " (total count: %d)", context->width,
+                      context->height, timestamp_ns, black_screen_debug_count);
         last_black_screen_log_time = now;
     }
 }
@@ -655,20 +658,8 @@ void c64_process_video_packet_direct(struct c64_source *context, const uint8_t *
             }
         }
 
-        if (c64_is_frame_complete(&context->current_frame)) {
-            if (context->last_completed_frame != context->current_frame.frame_num) {
-                // Direct rendering - assembly and output in one call!
-                c64_render_frame_direct(context, &context->current_frame, capture_time);
-                context->last_completed_frame = context->current_frame.frame_num;
-
-                // Track diagnostics
-                context->frames_completed++;
-                context->total_pipeline_latency += (os_gettime_ns() - capture_time);
-            }
-
-            // Reset for next frame
-            c64_init_frame_assembly(&context->current_frame, 0);
-        }
+        // Note: Frame completion is handled by the "complete previous frame" logic
+        // when transitioning to a new frame. This avoids duplicate frame deliveries.
 
         pthread_mutex_unlock(&context->assembly_mutex);
     }
@@ -748,8 +739,9 @@ void *c64_video_processor_thread_func(void *data)
                 time_since_last_video = 0;
             }
 
-            // Show logo if no frames for 1 second AND we haven't shown logo recently
-            if (time_since_last_frame > 1000000000ULL && time_since_last_logo >= logo_frame_interval_ns) {
+            // Show logo if no frames for 3 seconds AND we haven't shown logo recently
+            // Increased from 1s to 3s to reduce logo flashing during slider adjustments
+            if (time_since_last_frame > 3000000000ULL && time_since_last_logo >= logo_frame_interval_ns) {
                 if (c64_logo_is_available(context)) {
                     c64_logo_render_to_frame(context, current_time);
                 } else {
