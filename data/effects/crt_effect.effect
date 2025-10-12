@@ -78,14 +78,16 @@ float4 PSDefault(VertData v_in) : TARGET
         // Calculate which row we're in within the scaled output
         float pixel_row = uv.y * output_height;
 
-        // Correct CRT behavior: scan_line_distance controls actual gap WIDTH
-        // Each C64 scanline should be 1 pixel wide, gaps should be scan_line_distance pixels wide
-        // 0.25 = 4 pixels per unit (3 scanline + 1 gap), 0.5 = 3 pixels per unit (2 scanline + 1 gap)
-        // 1.0 = 2 pixels per unit (1 scanline + 1 gap), 2.0 = 3 pixels per unit (1 scanline + 2 gap)
+        // Fixed CRT behavior: ALWAYS ensure separation between consecutive C64 scanlines
+        // Every scanline gets exactly 1 pixel, followed by a gap of variable width
+        // scan_line_distance controls the gap width: minimum 1 pixel gap always present
+        
+        float min_gap = 1.0;  // Always at least 1 pixel gap between scanlines
+        float additional_gap = scan_line_distance;  // Additional gap width based on setting
+        float total_gap_width = min_gap + additional_gap;
         
         float scanline_width = 1.0;
-        float gap_width = scan_line_distance;
-        float total_period = scanline_width + gap_width;
+        float total_period = scanline_width + total_gap_width;
         
         float position_in_period = fmod(pixel_row, total_period);
         
