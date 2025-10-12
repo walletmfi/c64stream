@@ -47,8 +47,8 @@ void c64_obs_write_header(struct c64_source *context)
  * @param actual_timestamp_ms Actual timestamp when frame was processed
  * @param frame_size Size of frame data in bytes
  */
-void c64_obs_log_video_event(struct c64_source *context, uint64_t calculated_timestamp_ms, uint64_t actual_timestamp_ms,
-                             size_t frame_size)
+void c64_obs_log_video_event(struct c64_source *context, uint16_t frame_num, uint64_t calculated_timestamp_ms,
+                             uint64_t actual_timestamp_ms, size_t frame_size)
 {
     if (!context || !context->timing_file) {
         return; // Silently ignore if timing file not available
@@ -58,16 +58,16 @@ void c64_obs_log_video_event(struct c64_source *context, uint64_t calculated_tim
     uint64_t current_ns = os_gettime_ns();
     uint64_t elapsed_us = (current_ns - context->csv_timing_base_ns) / 1000;
 
-    // Write video timing event to CSV
+    // Write video timing event to CSV with actual frame number
     uint64_t video_packets = (uint64_t)os_atomic_load_long(&context->video_packets_received);
     uint64_t audio_packets = (uint64_t)os_atomic_load_long(&context->audio_packets_received);
     uint64_t sequence_errors = (uint64_t)os_atomic_load_long(&context->video_sequence_errors);
 
-    fprintf(context->timing_file, "video,%ld,%llu,%llu,%llu,%zu,%.3f,%ld,%llu,%llu,%llu\n",
-            os_atomic_load_long(&context->recorded_frames), (unsigned long long)elapsed_us,
-            (unsigned long long)calculated_timestamp_ms, (unsigned long long)actual_timestamp_ms, frame_size,
-            context->expected_fps, os_atomic_load_long(&context->recorded_audio_samples),
-            (unsigned long long)video_packets, (unsigned long long)audio_packets, (unsigned long long)sequence_errors);
+    fprintf(context->timing_file, "video,%u,%llu,%llu,%llu,%zu,%.3f,%ld,%llu,%llu,%llu\n", frame_num,
+            (unsigned long long)elapsed_us, (unsigned long long)calculated_timestamp_ms,
+            (unsigned long long)actual_timestamp_ms, frame_size, context->expected_fps,
+            os_atomic_load_long(&context->recorded_audio_samples), (unsigned long long)video_packets,
+            (unsigned long long)audio_packets, (unsigned long long)sequence_errors);
 
     // Flush immediately for real-time analysis
     fflush(context->timing_file);
@@ -91,7 +91,7 @@ void c64_obs_log_audio_event(struct c64_source *context, uint64_t calculated_tim
     uint64_t current_ns = os_gettime_ns();
     uint64_t elapsed_us = (current_ns - context->csv_timing_base_ns) / 1000;
 
-    // Write audio timing event to CSV
+    // Write audio timing event to CSV (frame_num = 0 since audio doesn't correspond to specific video frames)
     uint64_t video_packets = (uint64_t)os_atomic_load_long(&context->video_packets_received);
     uint64_t audio_packets = (uint64_t)os_atomic_load_long(&context->audio_packets_received);
     uint64_t sequence_errors = (uint64_t)os_atomic_load_long(&context->video_sequence_errors);

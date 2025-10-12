@@ -79,12 +79,7 @@ void c64_audio_record_data(struct c64_source *context, const uint8_t *audio_data
             new_total_samples = old_samples + new_samples;
         } while (!os_atomic_compare_swap_long(&context->recorded_audio_samples, old_samples, new_total_samples));
 
-        // Log audio timing information to CSV
-        uint64_t actual_timestamp_ms = os_gettime_ns() / 1000000;
-        // For audio, calculated timestamp is based on sample rate progression (4ms intervals for C64 Ultimate)
-        uint64_t calculated_timestamp_ms =
-            context->recording_start_time + (new_total_samples * 1000) / 12000; // 48kHz stereo = 12k samples/sec
-        c64_obs_log_audio_event(context, calculated_timestamp_ms, actual_timestamp_ms, data_size);
+        // Note: CSV logging for audio events is now handled independently in the video processor thread
     } else {
         C64_LOG_WARNING("Failed to write audio data to WAV recording");
     }

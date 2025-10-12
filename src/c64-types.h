@@ -154,6 +154,7 @@ struct c64_source {
 
     // Video recording for analysis
     bool record_video;
+    bool record_csv;  // CSV recording control (network and OBS events)
     FILE *video_file;
     FILE *audio_file;
     FILE *timing_file;

@@ -199,6 +199,13 @@ void c64_process_audio_packet(struct c64_source *context, const uint8_t *audio_d
     // Send audio to OBS for playback
     obs_source_output_audio(context->source, &audio_output);
 
+    // Log audio delivery to CSV if enabled (high-level event: audio samples delivered to OBS)
+    if (context->timing_file) {
+        uint64_t calculated_timestamp_ms = audio_timestamp / 1000000; // Convert ns to ms
+        uint64_t actual_timestamp_ms = os_gettime_ns() / 1000000;
+        c64_obs_log_audio_event(context, calculated_timestamp_ms, actual_timestamp_ms, samples_size);
+    }
+
     // Very rare spot checks for audio timestamp debugging (every 10 minutes)
     static int audio_timestamp_debug_count = 0;
     static uint64_t last_audio_log_time = 0;

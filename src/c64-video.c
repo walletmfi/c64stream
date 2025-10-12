@@ -107,13 +107,7 @@ void c64_render_frame_direct(struct c64_source *context, struct frame_assembly *
     if (context->save_frames) {
         c64_save_frame_as_bmp(context, context->frame_buffer);
 
-        // Log frame saving timing to CSV if enabled
-        if (context->timing_file) {
-            uint64_t calculated_timestamp_ms = monotonic_timestamp / 1000000; // Convert ns to ms
-            uint64_t actual_timestamp_ms = os_gettime_ns() / 1000000;
-            size_t frame_size = context->width * context->height * 4; // RGBA bytes
-            c64_obs_log_video_event(context, calculated_timestamp_ms, actual_timestamp_ms, frame_size);
-        }
+        // Note: CSV logging for video events is now handled independently in the video processor thread
     }
 
     // Record frame to video file if recording is enabled
@@ -136,6 +130,14 @@ void c64_render_frame_direct(struct c64_source *context, struct frame_assembly *
 
     // Output frame directly to OBS
     obs_source_output_video(context->source, &obs_frame);
+
+    // Log video frame delivery to CSV if enabled (high-level event: complete frame delivered to OBS)
+    if (context->timing_file) {
+        uint64_t calculated_timestamp_ms = monotonic_timestamp / 1000000; // Convert ns to ms
+        uint64_t actual_timestamp_ms = os_gettime_ns() / 1000000;
+        size_t frame_size = context->width * context->height * 4; // RGBA bytes
+        c64_obs_log_video_event(context, frame->frame_num, calculated_timestamp_ms, actual_timestamp_ms, frame_size);
+    }
 
     // Update timing and status
     context->last_frame_time = monotonic_timestamp;
@@ -656,20 +658,8 @@ void c64_process_video_packet_direct(struct c64_source *context, const uint8_t *
             }
         }
 
-        if (c64_is_frame_complete(&context->current_frame)) {
-            if (context->last_completed_frame != context->current_frame.frame_num) {
-                // Direct rendering - assembly and output in one call!
-                c64_render_frame_direct(context, &context->current_frame, capture_time);
-                context->last_completed_frame = context->current_frame.frame_num;
-
-                // Track diagnostics
-                context->frames_completed++;
-                context->total_pipeline_latency += (os_gettime_ns() - capture_time);
-            }
-
-            // Reset for next frame
-            c64_init_frame_assembly(&context->current_frame, 0);
-        }
+        // Note: Frame completion is handled by the "complete previous frame" logic
+        // when transitioning to a new frame. This avoids duplicate frame deliveries.
 
         pthread_mutex_unlock(&context->assembly_mutex);
     }

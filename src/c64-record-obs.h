@@ -16,8 +16,8 @@ struct c64_source;
 
 // OBS timing management functions
 void c64_obs_write_header(struct c64_source *context);
-void c64_obs_log_video_event(struct c64_source *context, uint64_t calculated_timestamp_ms, uint64_t actual_timestamp_ms,
-                             size_t frame_size);
+void c64_obs_log_video_event(struct c64_source *context, uint16_t frame_num, uint64_t calculated_timestamp_ms,
+                             uint64_t actual_timestamp_ms, size_t frame_size);
 void c64_obs_log_audio_event(struct c64_source *context, uint64_t calculated_timestamp_ms, uint64_t actual_timestamp_ms,
                              size_t data_size);
 

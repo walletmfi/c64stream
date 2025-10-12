@@ -79,23 +79,30 @@ obs_properties_t *c64_create_properties(void *data)
                                                                OBS_GROUP_NORMAL, obs_properties_create());
     obs_properties_t *recording_props = obs_property_group_content(recording_group);
 
-    obs_property_t *save_frames_prop =
-        obs_properties_add_bool(recording_props, "save_frames", obs_module_text("SaveBMPFrames"));
-    obs_property_set_long_description(save_frames_prop, obs_module_text("SaveBMPFrames.Description"));
-
-    obs_property_t *record_video_prop =
-        obs_properties_add_bool(recording_props, "record_video", obs_module_text("RecordAVIWAV"));
-    obs_property_set_long_description(record_video_prop, obs_module_text("RecordAVIWAV.Description"));
-
-    // Save Folder
+    // Output Folder
     obs_property_t *save_folder_prop = obs_properties_add_path(
         recording_props, "save_folder", obs_module_text("OutputFolder"), OBS_PATH_DIRECTORY, NULL, NULL);
     obs_property_set_long_description(save_folder_prop, obs_module_text("OutputFolder.Description"));
 
-    // Debug logging toggle
+    // Record Raw Video (AVI) and Audio (WAV)
+    obs_property_t *record_video_prop =
+        obs_properties_add_bool(recording_props, "record_video", obs_module_text("RecordRawVideo"));
+    obs_property_set_long_description(record_video_prop, obs_module_text("RecordRawVideo.Description"));
+
+    // Record Raw Frames (BMP)
+    obs_property_t *save_frames_prop =
+        obs_properties_add_bool(recording_props, "save_frames", obs_module_text("RecordRawFrames"));
+    obs_property_set_long_description(save_frames_prop, obs_module_text("RecordRawFrames.Description"));
+
+    // Record Network and Streaming Events (CSV)
+    obs_property_t *record_csv_prop =
+        obs_properties_add_bool(recording_props, "record_csv", obs_module_text("RecordNetworkEvents"));
+    obs_property_set_long_description(record_csv_prop, obs_module_text("RecordNetworkEvents.Description"));
+
+    // Show Debug Messages in OBS Logs
     obs_property_t *debug_prop =
-        obs_properties_add_bool(recording_props, "debug_logging", obs_module_text("DebugLogging"));
-    obs_property_set_long_description(debug_prop, obs_module_text("DebugLogging.Description"));
+        obs_properties_add_bool(recording_props, "debug_logging", obs_module_text("ShowDebugMessages"));
+    obs_property_set_long_description(debug_prop, obs_module_text("ShowDebugMessages.Description"));
 
     // Effects Group
     obs_property_t *effects_group = obs_properties_add_group(props, "effects_group", obs_module_text("Effects"),
@@ -239,6 +246,9 @@ void c64_set_property_defaults(obs_data_t *settings)
 
     // Video recording defaults
     obs_data_set_default_bool(settings, "record_video", false); // Disabled by default
+
+    // CSV recording defaults
+    obs_data_set_default_bool(settings, "record_csv", false); // Disabled by default
 
     // CRT effects defaults
     obs_data_set_default_double(settings, "scan_line_distance", 0.0);
