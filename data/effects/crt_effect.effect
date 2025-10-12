@@ -78,17 +78,21 @@ float4 PSDefault(VertData v_in) : TARGET
         // Calculate which row we're in within the scaled output
         float pixel_row = uv.y * output_height;
 
-        // Perfect alternating pattern: 1 pixel scanline + scan_line_distance pixels gap
-        // This creates: scanline → gap → scanline → gap (no consecutive scanlines ever)
-        float pattern_size = 1.0 + scan_line_distance;
-        float position_in_pattern = fmod(pixel_row, pattern_size);
-
-        // CRT-accurate logic: EXACTLY one scanline pixel followed by gap pixels
-        if (position_in_pattern >= 1.0) {
-            // This pixel is in the gap portion - darken it
-            color.rgb *= (1.0 - scan_line_strength);
+        // Fundamental fix: Every output pixel should alternate between scanline and gap
+        // scan_line_distance controls gap WIDTH, not gap FREQUENCY
+        // For ALL settings, pattern should be: S G S G S G (single scanline, single gap)
+        
+        // Simple integer-based approach: every 2nd pixel is a gap
+        int pixel_index = int(pixel_row);
+        bool is_even_pixel = (pixel_index % 2) == 0;
+        
+        if (!is_even_pixel) {
+            // Odd pixels are gaps - darken them based on scan_line_distance
+            // scan_line_distance controls how dark the gap is, not its frequency
+            float gap_darkness = scan_line_distance * scan_line_strength;
+            color.rgb *= (1.0 - gap_darkness);
         }
-        // position_in_pattern < 1.0: This pixel is the single scanline pixel (remains bright)
+        // Even pixels remain bright (scanlines)
     }
 
     // === ENHANCED BLOOM EFFECT WITH BLEEDING ===
