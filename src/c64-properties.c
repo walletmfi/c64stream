@@ -17,7 +17,6 @@ See <https://www.gnu.org/licenses/> for details.
 #include <obs-module.h>
 
 // Forward declaration of callbacks
-static bool crt_reset_defaults(obs_properties_t *props, obs_property_t *property, void *data);
 static bool crt_preset_changed(obs_properties_t *props, obs_property_t *property, obs_data_t *settings);
 
 obs_properties_t *c64_create_properties(void *data)
@@ -117,15 +116,9 @@ obs_properties_t *c64_create_properties(void *data)
     // Add modified callback to apply preset when selected
     obs_property_set_modified_callback(preset_prop, crt_preset_changed);
 
-    // Reset to defaults button
-    obs_property_t *reset_button =
-        obs_properties_add_button(effects_props, "crt_reset", "Reset to Defaults", crt_reset_defaults);
-    obs_property_set_long_description(reset_button, "Reset all CRT effect settings to their default values");
-
     // Scanlines
-    obs_property_t *scanline_distance_prop =
-        obs_properties_add_list(effects_props, "scan_line_distance", "Scan Line Distance",
-                                OBS_COMBO_TYPE_LIST, OBS_COMBO_FORMAT_FLOAT);
+    obs_property_t *scanline_distance_prop = obs_properties_add_list(
+        effects_props, "scan_line_distance", "Scan Line Distance", OBS_COMBO_TYPE_LIST, OBS_COMBO_FORMAT_FLOAT);
     obs_property_list_add_float(scanline_distance_prop, "None (0%)", 0.0);
     obs_property_list_add_float(scanline_distance_prop, "Tight (25%)", 0.25);
     obs_property_list_add_float(scanline_distance_prop, "Normal (50%)", 0.50);
@@ -159,7 +152,7 @@ obs_properties_t *c64_create_properties(void *data)
 
     // CRT Bloom
     obs_property_t *bloom_strength_prop =
-        obs_properties_add_float_slider(effects_props, "bloom_strength", "Bloom Strength", 0.0, 1.0, 0.05);
+        obs_properties_add_float_slider(effects_props, "bloom_strength", "Bloom", 0.0, 1.0, 0.05);
     obs_property_set_long_description(bloom_strength_prop, "Bloom effect strength (0.0 = off, 1.0 = maximum)");
 
     // Afterglow
@@ -167,7 +160,7 @@ obs_properties_t *c64_create_properties(void *data)
         obs_properties_add_int_slider(effects_props, "afterglow_duration_ms", "Afterglow Duration (ms)", 0, 3000, 10);
     obs_property_set_long_description(afterglow_duration_prop, "Phosphor persistence duration (0 = off)");
 
-    obs_property_t *afterglow_curve_prop = obs_properties_add_list(effects_props, "afterglow_curve", "Decay Curve",
+    obs_property_t *afterglow_curve_prop = obs_properties_add_list(effects_props, "afterglow_curve", "Afterglow Curve",
                                                                    OBS_COMBO_TYPE_LIST, OBS_COMBO_FORMAT_INT);
     obs_property_list_add_int(afterglow_curve_prop, "Instant Fade (Linear)", 0);
     obs_property_list_add_int(afterglow_curve_prop, "Gradual Fade (Slow Start)", 1);
@@ -189,41 +182,6 @@ obs_properties_t *c64_create_properties(void *data)
     obs_property_set_long_description(tint_strength_prop, "Strength of tint effect (0.0 = off, 1.0 = full tint)");
 
     return props;
-}
-
-// Callback for Reset to Defaults button
-static bool crt_reset_defaults(obs_properties_t *props, obs_property_t *property, void *data)
-{
-    UNUSED_PARAMETER(props);
-    UNUSED_PARAMETER(property);
-
-    struct c64_source *context = data;
-    if (!context)
-        return false;
-
-    // Get the settings object from the source
-    obs_data_t *settings = obs_source_get_settings(context->source);
-    if (!settings)
-        return false;
-
-    // Reset all CRT effect settings to defaults
-    obs_data_set_double(settings, "scan_line_distance", 0.0);
-    obs_data_set_double(settings, "scan_line_strength", 0.0);
-    obs_data_set_double(settings, "pixel_width", 1.0);
-    obs_data_set_double(settings, "pixel_height", 1.0);
-    obs_data_set_double(settings, "blur_strength", 0.0);
-    obs_data_set_double(settings, "bloom_strength", 0.0);
-    obs_data_set_int(settings, "afterglow_duration_ms", 0);
-    obs_data_set_int(settings, "afterglow_curve", 0);
-    obs_data_set_int(settings, "tint_mode", 0);
-    obs_data_set_double(settings, "tint_strength", 0.0);
-
-    // Apply the updated settings
-    obs_source_update(context->source, settings);
-
-    obs_data_release(settings);
-
-    return true;
 }
 
 // Callback for preset selection
