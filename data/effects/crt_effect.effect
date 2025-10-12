@@ -79,11 +79,19 @@ float4 PSDefault(VertData v_in) : TARGET
         float pixel_row = uv.y * output_height;
 
         // Match C code integer-based scaling for pixel-perfect scanlines
-        // C code rounds up pixels_per_scanline to ensure integer pixel boundaries
+        // Map scanline distance to distinct integer scaling ratios (same as C code)
         // This ensures crisp scanlines and gaps with no fractional scaling
 
-        float requested_pixels_per_scanline = 1.0 + scan_line_distance;
-        float integer_pixels_per_scanline = ceil(requested_pixels_per_scanline);
+        float integer_pixels_per_scanline;
+        if (scan_line_distance <= 0.25) {       // Tight
+            integer_pixels_per_scanline = 4.0;
+        } else if (scan_line_distance <= 0.5) { // Normal
+            integer_pixels_per_scanline = 3.0;
+        } else if (scan_line_distance <= 1.0) { // Wide
+            integer_pixels_per_scanline = 2.0;
+        } else {                                // Extra Wide (2.0)
+            integer_pixels_per_scanline = 3.0;
+        }
 
         float scanline_index = floor(pixel_row / integer_pixels_per_scanline);
         float position_in_scanline_unit = pixel_row - (scanline_index * integer_pixels_per_scanline);

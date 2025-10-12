@@ -882,11 +882,16 @@ uint32_t c64_get_width(void *data)
     // Scanlines require upscaling to accommodate gaps with integer pixel alignment
     // Each C64 pixel column needs an integer number of output pixels for crisp rendering
     if (context->scan_line_distance > 0.0f) {
-        // Calculate pixels per scanline to ensure integer boundaries
-        float pixels_per_scanline = 1.0f + context->scan_line_distance;
-
-        // Round up to ensure each scanline gets at least the minimum pixels needed
-        uint32_t integer_pixels_per_scanline = (uint32_t)ceilf(pixels_per_scanline);
+        uint32_t integer_pixels_per_scanline;
+        if (context->scan_line_distance <= 0.25f) {       // Tight
+            integer_pixels_per_scanline = 5;              // spacing (Scanline, Gap): S1S1S1S1G1 S2S2S2S2G2 ...
+        } else if (context->scan_line_distance <= 0.5f) { // Normal
+            integer_pixels_per_scanline = 3;              // spacing (Scanline, Gap): S1S1G1 S2S2G2 ...
+        } else if (context->scan_line_distance <= 1.0f) { // Wide
+            integer_pixels_per_scanline = 4;              // spacing (Scanline, Gap): S1G1 S1G1 ...
+        } else {                                          // Extra Wide (2.0f) // spacing (Scanline, Gap): SGG
+            integer_pixels_per_scanline = 3;              // spacing (Scanline, Gap, Gap): S1G1G1 S2G2G2 ...
+        }
 
         // Total width = original_pixels * integer_pixels_per_scanline
         width_scale *= (float)integer_pixels_per_scanline;
@@ -914,11 +919,16 @@ uint32_t c64_get_height(void *data)
     // Scanlines require upscaling to accommodate gaps with integer pixel alignment
     // Each C64 scanline needs an integer number of output pixels for crisp rendering
     if (context->scan_line_distance > 0.0f) {
-        // Calculate pixels per scanline to ensure integer boundaries
-        float pixels_per_scanline = 1.0f + context->scan_line_distance;
-
-        // Round up to ensure each scanline gets at least the minimum pixels needed
-        uint32_t integer_pixels_per_scanline = (uint32_t)ceilf(pixels_per_scanline);
+        uint32_t integer_pixels_per_scanline;
+        if (context->scan_line_distance <= 0.25f) {       // Tight
+            integer_pixels_per_scanline = 5;              // spacing (Scanline, Gap): S1S1S1S1G1 S2S2S2S2G2 ...
+        } else if (context->scan_line_distance <= 0.5f) { // Normal
+            integer_pixels_per_scanline = 3;              // spacing (Scanline, Gap): S1S1G1 S2S2G2 ...
+        } else if (context->scan_line_distance <= 1.0f) { // Wide
+            integer_pixels_per_scanline = 4;              // spacing (Scanline, Gap): S1G1 S1G1 ...
+        } else {                                          // Extra Wide (2.0f) // spacing (Scanline, Gap): SGG
+            integer_pixels_per_scanline = 3;              // spacing (Scanline, Gap, Gap): S1G1G1 S2G2G2 ...
+        }
 
         // Total height = original_scanlines * integer_pixels_per_scanline
         height_scale *= (float)integer_pixels_per_scanline;
