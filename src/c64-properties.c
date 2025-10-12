@@ -35,10 +35,6 @@ obs_properties_t *c64_create_properties(void *data)
     obs_property_set_long_description(version_prop, c64_get_build_info());
     obs_property_text_set_info_type(version_prop, OBS_TEXT_INFO_NORMAL);
 
-    // Debug logging toggle
-    obs_property_t *debug_prop = obs_properties_add_bool(info_props, "debug_logging", obs_module_text("DebugLogging"));
-    obs_property_set_long_description(debug_prop, obs_module_text("DebugLogging.Description"));
-
     // Network Configuration Group
     obs_property_t *network_group = obs_properties_add_group(
         props, "network_group", obs_module_text("NetworkConfiguration"), OBS_GROUP_NORMAL, obs_properties_create());
@@ -95,6 +91,11 @@ obs_properties_t *c64_create_properties(void *data)
     obs_property_t *save_folder_prop = obs_properties_add_path(
         recording_props, "save_folder", obs_module_text("OutputFolder"), OBS_PATH_DIRECTORY, NULL, NULL);
     obs_property_set_long_description(save_folder_prop, obs_module_text("OutputFolder.Description"));
+
+    // Debug logging toggle
+    obs_property_t *debug_prop =
+        obs_properties_add_bool(recording_props, "debug_logging", obs_module_text("DebugLogging"));
+    obs_property_set_long_description(debug_prop, obs_module_text("DebugLogging.Description"));
 
     // Effects Group
     obs_property_t *effects_group = obs_properties_add_group(props, "effects_group", obs_module_text("Effects"),
