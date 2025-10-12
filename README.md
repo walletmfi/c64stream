@@ -18,6 +18,7 @@ The plugin connects directly to the Ultimate's network interface, eliminating th
 - Synchronized audio streaming (16-bit stereo, ~48kHz)
 - Network-based connection (UDP/TCP)
 - Automatic VIC-II color space conversion
+- **Authentic CRT effects** with configurable presets (scan lines, bloom, tint, pixel geometry)
 - Built-in recording capabilities (BMP frames, AVI video, WAV audio)
 
 
@@ -89,7 +90,7 @@ A new window opens. Keep the default settings and click "OK":
 ## Plugin Setup
 
 ### General
-- **Version:**: Information about release version, Git ID, and build time. 
+- **Version:**: Information about release version, Git ID, and build time.
 - **Debug Logging**: Check this to see debug logs
 
 ### Network
@@ -98,7 +99,32 @@ A new window opens. Keep the default settings and click "OK":
 - **OBS Server IP:** IP address where C64 Ultimate sends streams (auto-detected by default)
 - **Auto-detect OBS IP:** Automatically detect and use OBS server IP in streaming commands (recommended)
 - **Configure Ports** Use the default ports (video: 11000, audio: 11001) unless network conflicts require different values
-- **Buffer Delay:** Sets the network buffer for incoming UDP packets arriving from the C64 Ultimate (0–500 ms, default 10 ms). The buffer size is expressed in milliseconds to represent the time-based delay it introduces, compensating for packet loss, reordering, and variable network latency. Larger buffers improve stability under high-latency or congested conditions but increase end-to-end delay.
+- **Buffer Delay:** Sets the network buffer for incoming UDP packets arriving from the C64 Ultimate (0–500 ms, default 10 ms). The buffer size is expressed in milliseconds to represent the time-based delay it introduces, compensating for packet loss, reordering, and variable network latency. Larger buffers improve stability under high-latency or congested conditions but increase end-to-end delay.
+
+### CRT Effects 📺
+
+Recreate the authentic look and feel of classic CRT monitors and TVs with configurable visual effects that simulate the characteristics of vintage displays.
+
+**Quick Setup:** Choose from ready-made presets or customize individual effects:
+
+- **🎛️ Presets:** One-click configurations for different display types
+  - **[Classic CRT](./docs/images/effects/classic-crt.png)** - Balanced scan lines and bloom for general retro appeal
+  - **[Amber Monitor](./docs/images/effects/amber-monitor.png)** - Warm amber tint reminiscent of early computer monitors
+  - **[Green Monitor](./docs/images/effects/green-monitor.png)** - Classic green phosphor terminal look
+  - **[Sharp Pixels](./docs/images/effects/sharp-pixels.png)** - Crisp pixel doubling for arcade-style clarity
+  - **[Vintage TV](./docs/images/effects/vintage-tv.png)** - Softer look with prominent scan lines for old television feel
+  - **[Arcade Cabinet](./docs/images/effects/arcade-cabinet.png)** - High-contrast effects for authentic arcade experience
+
+**Customizable Effects:**
+- **Scan Lines:** Adjustable spacing and intensity to simulate CRT raster lines
+- **Bloom:** Configurable glow effect that makes bright pixels bleed into darker areas
+- **Pixel Geometry:** Independent width/height scaling for authentic pixel aspect ratios
+- **Blur Control:** Fine-tune between crisp pixels and soft scaling
+- **Screen Tint:** Amber, green, or monochrome overlays for period-accurate monitor simulation
+
+**Usage:** Access via the **Effects** group in plugin properties. Select a preset for instant results, or customize individual settings to create your perfect retro display aesthetic.
+
+**Reset:** To reset to default values, simply select the "Default" preset. If you have changed individual effects whilst the "Default" preset was active, select any other preset first and then re-select the "Default" preset.
 
 ### Recording Features 📹
 
@@ -265,6 +291,7 @@ One of:
 - PAL: 384x272 @ 50Hz
 - NTSC: 384x240 @ 60Hz
 - Color space: VIC-II palette with automatic RGB conversion
+- **CRT Effects:** GPU-accelerated shader-based post-processing with configurable presets
 
 **Audio Format:**
 - 16-bit stereo PCM
@@ -351,6 +378,11 @@ If the plugin can't resolve your C64 Ultimate hostname (e.g., `c64u`), try these
 - **Static DNS Entry:** Add `192.168.1.64 c64u` to your system's hosts file
 - **mDNS/Bonjour:** Use `.local` suffix (e.g., `c64u.local`) if your network supports it
 - **Router Configuration:** Ensure your router's DNS server has the device hostname registered
+
+**Effects not working? 📺**
+- **No visual change:** Ensure source is active and receiving video data
+- **Performance drops:** Complex effects (high bloom/blur) may impact frame rate on older hardware
+- **Preset not applying:** Try manually adjusting individual effect settings
 
 **Recording troubles? 💾**
 - **Files not created:** Verify output folder path exists and is writable
