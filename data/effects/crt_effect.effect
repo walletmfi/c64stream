@@ -6,6 +6,9 @@ Licensed under the GNU General Public License v2.0 or later.
 See <https://www.gnu.org/licenses/> for details.
 */
 
+// Platform detection for shader compilation
+static const bool obs_glsl_compile = false; // DirectX 11 by default, overridden by OBS for OpenGL
+
 // Uniforms
 uniform float4x4 ViewProj;
 uniform texture2d image;
@@ -29,6 +32,8 @@ sampler_state textureSampler {
     Filter   = Linear;
     AddressU = Clamp;
     AddressV = Clamp;
+    MinLOD   = 0.0;
+    MaxLOD   = 0.0;
 };
 
 struct VertData {
@@ -46,26 +51,40 @@ VertData VSDefault(VertData v_in)
 
 float4 PSDefault(VertData v_in) : TARGET
 {
-    float2 uv = v_in.uv;
+    // Ensure UV coordinates are properly normalized (Windows DirectX fix)
+    float2 uv = saturate(v_in.uv);
 
     // === PIXEL GEOMETRY WITH BLUR CONTROL ===
     // Pixel geometry scaling is handled by matrix transforms
     // Here we apply blur control for crisp vs soft scaling
     float4 color;
-    if (blur_strength > 0.0) {
+    if (blur_strength > 0.0f) {
         // Gaussian-style blur with multiple taps for soft scaling
-        float blur_radius = blur_strength * 0.003;
+        // Use precise float for DirectX 11 compatibility
+        float blur_radius = blur_strength * 0.003f;
 
-        // 9-tap gaussian-style sampling
-        color  = image.Sample(textureSampler, uv) * 0.25;                                    // Center (main weight)
-        color += image.Sample(textureSampler, uv + float2(blur_radius, 0.0)) * 0.125;       // Right
-        color += image.Sample(textureSampler, uv - float2(blur_radius, 0.0)) * 0.125;       // Left
-        color += image.Sample(textureSampler, uv + float2(0.0, blur_radius)) * 0.125;       // Up
-        color += image.Sample(textureSampler, uv - float2(0.0, blur_radius)) * 0.125;       // Down
-        color += image.Sample(textureSampler, uv + float2(blur_radius, blur_radius)) * 0.0625;   // Top-right
-        color += image.Sample(textureSampler, uv - float2(blur_radius, blur_radius)) * 0.0625;   // Bottom-left
-        color += image.Sample(textureSampler, uv + float2(-blur_radius, blur_radius)) * 0.0625;  // Top-left
-        color += image.Sample(textureSampler, uv - float2(-blur_radius, blur_radius)) * 0.0625;  // Bottom-right
+        // Clamp UV coordinates to prevent sampling outside texture bounds
+        // This fixes garbled output on Windows DirectX 11
+        float2 uv_center = uv;
+        float2 uv_right = saturate(uv + float2(blur_radius, 0.0f));
+        float2 uv_left = saturate(uv - float2(blur_radius, 0.0f));
+        float2 uv_up = saturate(uv + float2(0.0f, blur_radius));
+        float2 uv_down = saturate(uv - float2(0.0f, blur_radius));
+        float2 uv_tr = saturate(uv + float2(blur_radius, blur_radius));
+        float2 uv_bl = saturate(uv - float2(blur_radius, blur_radius));
+        float2 uv_tl = saturate(uv + float2(-blur_radius, blur_radius));
+        float2 uv_br = saturate(uv - float2(-blur_radius, blur_radius));
+
+        // 9-tap gaussian-style sampling with clamped coordinates
+        color  = image.Sample(textureSampler, uv_center) * 0.25f;  // Center (main weight)
+        color += image.Sample(textureSampler, uv_right) * 0.125f;  // Right
+        color += image.Sample(textureSampler, uv_left) * 0.125f;   // Left
+        color += image.Sample(textureSampler, uv_up) * 0.125f;     // Up
+        color += image.Sample(textureSampler, uv_down) * 0.125f;   // Down
+        color += image.Sample(textureSampler, uv_tr) * 0.0625f;    // Top-right
+        color += image.Sample(textureSampler, uv_bl) * 0.0625f;    // Bottom-left
+        color += image.Sample(textureSampler, uv_tl) * 0.0625f;    // Top-left
+        color += image.Sample(textureSampler, uv_br) * 0.0625f;    // Bottom-right
     } else {
         // Precise sampling for crisp scaling (no blur)
         color = image.Sample(textureSampler, uv);
@@ -74,9 +93,10 @@ float4 PSDefault(VertData v_in) : TARGET
     // === SCANLINES EFFECT (CRT-ACCURATE ALTERNATING PATTERN) ===
     // scan_line_distance: height ratio of gap to scanline (0.0 = no gap, 0.5 = gap half as tall as scanline, 1.0 = gap same height as scanline)
     // scan_line_strength: darkness of the gap (0.0 = no darkness, 1.0 = completely black)
-    if (scan_line_distance > 0.0 && scan_line_strength > 0.0) {
+    if (scan_line_distance > 0.0f && scan_line_strength > 0.0f) {
         // Calculate which row we're in within the scaled output
-        float pixel_row = uv.y * output_height;
+        // Use precise float arithmetic for DirectX 11 compatibility
+        float pixel_row = uv.y * max(output_height, 1.0f);
 
         // Match C code integer-based scaling for pixel-perfect scanlines
         // Map scanline distance to distinct scaling ratios with correct spacing patterns
@@ -84,107 +104,112 @@ float4 PSDefault(VertData v_in) : TARGET
 
         float total_pixels_per_unit;
         float scanline_pixels_per_unit;
-        if (scan_line_distance <= 0.25) {       // Tight: S1S1S1S1G1
-            total_pixels_per_unit = 5.0;
-            scanline_pixels_per_unit = 4.0;
-        } else if (scan_line_distance <= 0.5) { // Normal: S1S1G1
-            total_pixels_per_unit = 3.0;
-            scanline_pixels_per_unit = 2.0;
-        } else if (scan_line_distance <= 1.0) { // Wide: S1S1G1G1
-            total_pixels_per_unit = 4.0;
-            scanline_pixels_per_unit = 2.0;
-        } else {                                // Extra Wide: S1G1G1
-            total_pixels_per_unit = 3.0;
-            scanline_pixels_per_unit = 1.0;
+        if (scan_line_distance <= 0.25f) {       // Tight: S1S1S1S1G1
+            total_pixels_per_unit = 5.0f;
+            scanline_pixels_per_unit = 4.0f;
+        } else if (scan_line_distance <= 0.5f) { // Normal: S1S1G1
+            total_pixels_per_unit = 3.0f;
+            scanline_pixels_per_unit = 2.0f;
+        } else if (scan_line_distance <= 1.0f) { // Wide: S1S1G1G1
+            total_pixels_per_unit = 4.0f;
+            scanline_pixels_per_unit = 2.0f;
+        } else {                                 // Extra Wide: S1G1G1
+            total_pixels_per_unit = 3.0f;
+            scanline_pixels_per_unit = 1.0f;
         }
 
+        // Use precise floor operation for DirectX 11
         float scanline_index = floor(pixel_row / total_pixels_per_unit);
         float position_in_scanline_unit = pixel_row - (scanline_index * total_pixels_per_unit);
 
         // Check if this pixel is in the scanline portion or gap portion
-        if (position_in_scanline_unit >= scanline_pixels_per_unit) {
+        // Add small epsilon for floating point precision on DirectX 11
+        if (position_in_scanline_unit >= (scanline_pixels_per_unit - 0.001f)) {
             // This pixel is in the gap portion - darken it
-            color.rgb *= (1.0 - scan_line_strength);
+            color.rgb = lerp(color.rgb, color.rgb * (1.0f - scan_line_strength), 1.0f);
         }
-        // position_in_scanline_unit < 1.0: This pixel is the scanline itself (remains bright)
+        // position_in_scanline_unit < scanline_pixels_per_unit: This pixel is the scanline itself (remains bright)
     }
 
     // === ENHANCED BLOOM EFFECT WITH BLEEDING ===
-    if (bloom_strength > 0.0) {
+    if (bloom_strength > 0.0f) {
         // Sample current pixel and neighbors for bloom bleeding effect
         float4 center = color;
-        float bloom_radius = bloom_strength * 0.002; // Radius scales with strength
+        float bloom_radius = bloom_strength * 0.002f; // Radius scales with strength
 
         // Multi-tap sampling for bloom bleeding - more taps = more bleeding at higher strength
-        float4 bloom_sum = center * 0.4; // Center weight
+        float4 bloom_sum = center * 0.4f; // Center weight
 
-        // Cross pattern sampling (4 directions)
-        bloom_sum += image.Sample(textureSampler, uv + float2(bloom_radius, 0.0)) * 0.15;
-        bloom_sum += image.Sample(textureSampler, uv - float2(bloom_radius, 0.0)) * 0.15;
-        bloom_sum += image.Sample(textureSampler, uv + float2(0.0, bloom_radius)) * 0.15;
-        bloom_sum += image.Sample(textureSampler, uv - float2(0.0, bloom_radius)) * 0.15;
+        // Cross pattern sampling (4 directions) with clamped UVs for DirectX 11
+        bloom_sum += image.Sample(textureSampler, saturate(uv + float2(bloom_radius, 0.0f))) * 0.15f;
+        bloom_sum += image.Sample(textureSampler, saturate(uv - float2(bloom_radius, 0.0f))) * 0.15f;
+        bloom_sum += image.Sample(textureSampler, saturate(uv + float2(0.0f, bloom_radius))) * 0.15f;
+        bloom_sum += image.Sample(textureSampler, saturate(uv - float2(0.0f, bloom_radius))) * 0.15f;
 
         // Diagonal sampling for stronger bloom effect
-        if (bloom_strength > 0.3) {
-            bloom_sum += image.Sample(textureSampler, uv + float2(bloom_radius, bloom_radius) * 0.7) * 0.05;
-            bloom_sum += image.Sample(textureSampler, uv + float2(-bloom_radius, bloom_radius) * 0.7) * 0.05;
-            bloom_sum += image.Sample(textureSampler, uv + float2(bloom_radius, -bloom_radius) * 0.7) * 0.05;
-            bloom_sum += image.Sample(textureSampler, uv + float2(-bloom_radius, -bloom_radius) * 0.7) * 0.05;
+        if (bloom_strength > 0.3f) {
+            float diagonal_factor = 0.7f;
+            bloom_sum += image.Sample(textureSampler, saturate(uv + float2(bloom_radius, bloom_radius) * diagonal_factor)) * 0.05f;
+            bloom_sum += image.Sample(textureSampler, saturate(uv + float2(-bloom_radius, bloom_radius) * diagonal_factor)) * 0.05f;
+            bloom_sum += image.Sample(textureSampler, saturate(uv + float2(bloom_radius, -bloom_radius) * diagonal_factor)) * 0.05f;
+            bloom_sum += image.Sample(textureSampler, saturate(uv + float2(-bloom_radius, -bloom_radius) * diagonal_factor)) * 0.05f;
         }
 
-        float brightness = dot(bloom_sum.rgb, float3(0.299, 0.587, 0.114));
+        // Use precise luminance calculation for DirectX 11
+        float brightness = dot(bloom_sum.rgb, float3(0.299f, 0.587f, 0.114f));
 
         // Dynamic threshold that decreases as strength increases
-        float threshold = 0.85 - (bloom_strength * 0.45);
+        float threshold = 0.85f - (bloom_strength * 0.45f);
 
         if (brightness > threshold) {
             // Calculate bloom factor based on how much we exceed threshold
-            float bloom_factor = (brightness - threshold) / (1.0 - threshold);
+            float bloom_factor = (brightness - threshold) / max(1.0f - threshold, 0.001f); // Prevent division by zero
 
             // ENHANCED: 7.5x stronger bloom
-            float bloom_intensity = bloom_factor * (bloom_strength * 7.5);
+            float bloom_intensity = bloom_factor * (bloom_strength * 7.5f);
 
             // Create bloom effect that preserves color saturation but bleeds
-            float3 bloom_color = bloom_sum.rgb * (1.0 + bloom_intensity * 1.2);
+            float3 bloom_color = bloom_sum.rgb * (1.0f + bloom_intensity * 1.2f);
 
             // Allow more oversaturation for stronger glow effect
-            bloom_color = min(bloom_color, float3(1.5, 1.5, 1.5));
+            bloom_color = min(bloom_color, float3(1.5f, 1.5f, 1.5f));
 
-            // Blend with original color to create bleeding effect
-            color.rgb = lerp(center.rgb, bloom_color, bloom_intensity * 0.8);
+            // Blend with original color to create bleeding effect using saturate for DirectX 11
+            color.rgb = lerp(center.rgb, bloom_color, saturate(bloom_intensity * 0.8f));
         } else {
             // Use the blended sample even without bloom for subtle bleeding
-            color.rgb = lerp(center.rgb, bloom_sum.rgb, bloom_strength * 0.1);
+            color.rgb = lerp(center.rgb, bloom_sum.rgb, bloom_strength * 0.1f);
         }
     }
 
     // === AFTERGLOW EFFECT ===
     // Temporal afterglow - blend with previous frame to create phosphor persistence
     if (afterglow_duration_ms > 0) {
-        // Sample the previous frame at the same UV coordinate
-        float4 prev_frame = texture_accum_prev.Sample(textureSampler, uv);
+        // Sample the previous frame at the same UV coordinate with clamped UV for DirectX 11
+        float4 prev_frame = texture_accum_prev.Sample(textureSampler, saturate(uv));
 
         // Calculate decay factor based on duration (frame-to-frame persistence)
         // Higher duration = slower decay = more persistent afterglow
-        float decay_factor = 1.0 - (dt_ms / float(afterglow_duration_ms));
-        decay_factor = max(0.0, min(0.95, decay_factor)); // Clamp to prevent infinite persistence
+        float decay_factor = 1.0f - (dt_ms / max(float(afterglow_duration_ms), 1.0f)); // Prevent division by zero
+        decay_factor = saturate(decay_factor); // Use saturate for DirectX 11 compatibility
+        decay_factor = min(decay_factor, 0.95f); // Clamp to prevent infinite persistence
 
         // Apply decay curve to modify the decay behavior
         if (afterglow_curve == 1) { // Gradual Fade (Slow Start)
             decay_factor = decay_factor * decay_factor; // Quadratic - slower initial fade
         }
         else if (afterglow_curve == 2) { // Rapid Fade (Fast Start)
-            decay_factor = sqrt(decay_factor); // Square root - faster initial fade
+            decay_factor = sqrt(abs(decay_factor)); // Square root - faster initial fade, abs for DirectX 11
         }
         else if (afterglow_curve == 3) { // Long Tail (Exponential)
-            decay_factor = pow(decay_factor, 0.5); // More persistent tail
+            decay_factor = pow(abs(decay_factor), 0.5f); // More persistent tail, abs for DirectX 11
         }
         // Linear (0) uses decay_factor as-is
 
         // Blend previous frame with current frame
         // Only non-black pixels from previous frame should contribute to afterglow
-        float prev_brightness = dot(prev_frame.rgb, float3(0.299, 0.587, 0.114));
-        if (prev_brightness > 0.01) { // Threshold to avoid amplifying pure black
+        float prev_brightness = dot(prev_frame.rgb, float3(0.299f, 0.587f, 0.114f));
+        if (prev_brightness > 0.01f) { // Threshold to avoid amplifying pure black
             // Mix the previous frame's color with current color
             // This creates true temporal persistence - red→blue becomes red→purple→blue
             color.rgb = max(color.rgb, prev_frame.rgb * decay_factor);
@@ -193,31 +218,32 @@ float4 PSDefault(VertData v_in) : TARGET
 
     // === SCREEN TINT EFFECT ===
     // Emulate 1980s monochrome CRTs: first convert to monochrome, then apply tint
-    if (tint_mode > 0 && tint_strength > 0.0) {
+    if (tint_mode > 0 && tint_strength > 0.0f) {
         // Step 1: Convert to monochrome (grayscale)
-        float luminance = dot(color.rgb, float3(0.299, 0.587, 0.114));
+        float luminance = dot(color.rgb, float3(0.299f, 0.587f, 0.114f));
         float3 monochrome = float3(luminance, luminance, luminance);
 
         // Step 2: Apply tint to the monochrome image
         float3 tinted_color = color.rgb;
 
         if (tint_mode == 1) { // Amber CRT
-            float3 amber_tint = float3(1.0, 0.75, 0.3);
-            tinted_color = lerp(color.rgb, monochrome * amber_tint, tint_strength);
+            float3 amber_tint = float3(1.0f, 0.75f, 0.3f);
+            tinted_color = lerp(color.rgb, monochrome * amber_tint, saturate(tint_strength));
         }
         else if (tint_mode == 2) { // Green CRT
-            float3 green_tint = float3(0.5, 0.95, 0.35);
-            tinted_color = lerp(color.rgb, monochrome * green_tint, tint_strength);
+            float3 green_tint = float3(0.5f, 0.95f, 0.35f);
+            tinted_color = lerp(color.rgb, monochrome * green_tint, saturate(tint_strength));
         }
         else if (tint_mode == 3) { // Pure Monochrome
-            tinted_color = lerp(color.rgb, monochrome, tint_strength);
+            tinted_color = lerp(color.rgb, monochrome, saturate(tint_strength));
         }
         // tint_mode == 0 (None) - no change
 
         color.rgb = tinted_color;
     }
 
-    return color;
+    // Ensure final color is properly clamped for DirectX 11
+    return saturate(color);
 }
 
 technique Draw

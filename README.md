@@ -94,7 +94,11 @@ A new window opens. Keep the default settings and click "OK":
 - **Debug Logging**: Check this to see debug logs
 
 ### Network
-- **DNS Server IP:** IP address of DNS server for resolving device hostnames (default: `192.168.1.1` for most home routers). Used when the C64 Ultimate Host is a hostname rather than an IP address.
+- **DNS Resolution Details:**
+
+- **Default:** `192.168.1.1` (most common home router DNS server)
+- **Fallback:** If router DNS fails, the plugin tries standard DNS servers
+- **Enhanced Resolution:** The plugin uses multiple resolution strategies for maximum compatibility
 - **C64 Ultimate Host:** Enter your Ultimate device's hostname (default: `c64u`) or IP address to enable automatic streaming control from OBS (recommended for convenience), or set to `0.0.0.0` to accept streams from any C64 Ultimate on your network (requires manual control from the device)
 - **OBS Server IP:** IP address where C64 Ultimate sends streams (auto-detected by default)
 - **Auto-detect OBS IP:** Automatically detect and use OBS server IP in streaming commands (recommended)
@@ -105,15 +109,13 @@ A new window opens. Keep the default settings and click "OK":
 
 Recreate the authentic look and feel of classic CRT monitors and TVs with configurable visual effects that simulate the characteristics of vintage displays.
 
-**Quick Setup:** Choose from ready-made presets or customize individual effects:
-
-- **🎛️ Presets:** One-click configurations for different display types
-  - **[Classic CRT](./docs/images/effects/classic-crt.png)** - Balanced scan lines and bloom for general retro appeal
-  - **[Amber Monitor](./docs/images/effects/amber-monitor.png)** - Warm amber tint reminiscent of early computer monitors
-  - **[Green Monitor](./docs/images/effects/green-monitor.png)** - Classic green phosphor terminal look
-  - **[Sharp Pixels](./docs/images/effects/sharp-pixels.png)** - Crisp pixel doubling for arcade-style clarity
-  - **[Vintage TV](./docs/images/effects/vintage-tv.png)** - Softer look with prominent scan lines for old television feel
-  - **[Arcade Cabinet](./docs/images/effects/arcade-cabinet.png)** - High-contrast effects for authentic arcade experience
+**Presets:** One-click configurations for different display types
+- **[Classic CRT](./docs/images/effects/classic-crt.png)** - Balanced scan lines and bloom for general retro appeal
+- **[Amber Monitor](./docs/images/effects/amber-monitor.png)** - Warm amber tint reminiscent of early computer monitors
+- **[Green Monitor](./docs/images/effects/green-monitor.png)** - Classic green phosphor terminal look
+- **[Sharp Pixels](./docs/images/effects/sharp-pixels.png)** - Crisp pixel doubling for arcade-style clarity
+- **[Vintage TV](./docs/images/effects/vintage-tv.png)** - Softer look with prominent scan lines for old television feel
+- **[Arcade Cabinet](./docs/images/effects/arcade-cabinet.png)** - High-contrast effects for authentic arcade experience
 
 **Customizable Effects:**
 - **Scan Lines:** Adjustable spacing and intensity to simulate CRT raster lines
@@ -132,13 +134,25 @@ The plugin includes built-in recording capabilities that work independently of O
 
 ### Recording Options
 
-**Frame Saving (BMP):**
+The plugin offers three independent recording options that can be enabled separately or together:
+
+**📊 Network and Streaming Events (CSV):**
+
+- Records detailed timing data for network packets and OBS processing events
+- Creates `obs.csv` (OBS processing timeline) and `network.csv` (UDP packet analysis)
+- **Minimal Performance Impact:** Lightweight logging with microsecond precision
+- **Use Cases:** Debug performance issues, analyze network jitter, validate frame timing
+- Files: `session_YYYYMMDD_HHMMSS/obs.csv` and `session_YYYYMMDD_HHMMSS/network.csv`
+
+**🖼️ Raw Frames (BMP):**
+
 - Saves individual video frames as uncompressed BMP files
 - Useful for debugging video issues or creating frame-by-frame analysis
 - **Performance Impact:** Enabling this feature will reduce streaming performance due to disk I/O
 - Files saved as: `session_YYYYMMDD_HHMMSS/frames/frame_NNNNNN.bmp`
 
-**Video Recording (AVI + WAV):**
+**🎬 Raw Video and Audio (AVI + WAV):**
+
 - Records uncompressed AVI video and separate WAV audio files
 - Captures the raw data stream without OBS processing
 - **High Disk Usage:** Uncompressed video files are very large (~50MB per minute)
@@ -148,14 +162,15 @@ The plugin includes built-in recording capabilities that work independently of O
 #### File Organization
 
 All recording files are organized into session folders with timestamps:
-```
+
+```text
 ~/Documents/obs-studio/c64stream/recordings/
 ├── session_20240929_143052/
-│   ├── frames/           # BMP frame files (if enabled)
-│   ├── network.csv       # Network timings
-│   ├── obs.csv           # OBS timings
-│   ├── video.avi         # Uncompressed video (if enabled)
-│   └── audio.wav         # Uncompressed audio (if enabled)
+│   ├── frames/           # BMP frame files (if "Raw Frames" enabled)
+│   ├── network.csv       # Network timings (if "CSV Events" enabled)
+│   ├── obs.csv           # OBS timings (if "CSV Events" enabled)
+│   ├── video.avi         # Uncompressed video (if "Raw Video" enabled)
+│   └── audio.wav         # Uncompressed audio (if "Raw Video" enabled)
 └── session_20240929_151234/
     └── ...
 ```
@@ -171,22 +186,25 @@ All recording files are organized into session folders with timestamps:
 
 #### Usage Notes
 
-- Recording operates independently of OBS Studio's built-in recording
-- Both recording options can be enabled simultaneously
-- **Recording starts immediately when a checkbox is checked and continues until unchecked**
-- **⚠️ Checkbox states persist across OBS restarts - uncheck to stop recording or risk filling disk space**
-- Files are written in real-time as data is received from the C64 Ultimate
-- Session folders are created automatically with proper directory structure
+- **Independent Operation:** All recording operates independently of OBS Studio's built-in recording
+- **Mix and Match:** All three recording options can be enabled simultaneously
+- **Instant Recording:** Recording starts immediately when a checkbox is checked and continues until unchecked
+- **⚠️ Persistent State:** Checkbox states persist across OBS restarts - uncheck to stop recording or risk filling disk space
+- **Real-Time Writing:** Files are written in real-time as data is received from the C64 Ultimate
+- **Auto-Organization:** Session folders are created automatically with proper directory structure
+- **Recommended:** Enable **CSV recording** for debugging and **disable** BMP/AVI recording for normal streaming
 
 #### Debug & Analysis CSV Logs 📊
 
-The plugin automatically generates detailed CSV logs for debugging OBS performance and analyzing C64 Ultimate network streams. These logs enable bit-accurate recording analysis and precise frame timing measurements.
+When **"Network and Streaming Events (CSV)"** recording is enabled, the plugin generates detailed CSV logs for debugging OBS performance and analyzing C64 Ultimate network streams. These logs enable bit-accurate recording analysis and precise frame timing measurements.
 
 **Generated CSV Files:**
+
 - `obs.csv` - OBS processing timeline with microsecond precision
 - `network.csv` - UDP packet reception log with network timing analysis
 
 **Sample OBS Timeline (obs.csv):**
+
 ```csv
 event_type,frame_num,elapsed_us,calculated_timestamp_ms,actual_timestamp_ms,data_size_bytes,fps
 video,0,1443,6385631,6385625,368640,59.826
@@ -194,6 +212,7 @@ audio,0,15234,6385646,6385640,1536,48000
 ```
 
 **Sample Network Analysis (network.csv):**
+
 ```csv
 packet_type,elapsed_us,sequence_num,frame_num,line_num,packet_size,jitter_us
 video,225,1510,7671,8,780,0
@@ -201,6 +220,7 @@ audio,2341,847,0,0,192,125
 ```
 
 **Use Cases:**
+
 - **Debug OBS Performance:** Analyze frame processing delays and audio sync issues
 - **Network Stream Analysis:** Monitor UDP packet timing, jitter, and sequence errors
 - **Bit-Accurate Recordings:** Capture every frame with precise timing for forensic analysis
@@ -208,7 +228,7 @@ audio,2341,847,0,0,192,125
 
 **Sample Recording:** See [docs/recordings/session_19700101_024625](docs/recordings/session_19700101_024625) for complete examples with all file types.
 
-**Activation:** CSV logging is automatically enabled whenever any recording option is active. No additional configuration required.
+**Activation:** Enable the **"Network and Streaming Events (CSV)"** checkbox in the Recording properties. CSV files are generated only when this option is explicitly enabled.
 
 ## Network Details
 
@@ -217,6 +237,7 @@ audio,2341,847,0,0,192,125
 The plugin supports both **hostnames** and **IP addresses** for the C64 Ultimate Host field with enhanced DNS resolution that works reliably across all platforms:
 
 **Using Hostnames (Recommended):**
+
 - **Default:** `c64u` - The plugin will try to resolve this hostname to an IP address
 - **Custom:** `my-c64u` or `retro-pc` - Use any hostname your C64 Ultimate device is known by
 - **FQDN Support:** The plugin automatically tries both `hostname` and `hostname.` (with trailing dot) for proper DNS resolution
