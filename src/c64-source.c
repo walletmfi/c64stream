@@ -497,6 +497,10 @@ void c64_update(void *data, obs_data_t *settings)
     // Update recording settings
     c64_record_update_settings(context, settings);
 
+    // Check if dimension-affecting effects were previously disabled
+    bool prev_dimension_effects = (context->scan_line_distance > 0.0f) || (context->pixel_width != 1.0f) ||
+                                  (context->pixel_height != 1.0f);
+
     // Update CRT effect settings
     context->scan_line_distance = (float)obs_data_get_double(settings, "scan_line_distance");
     context->scan_line_strength = (float)obs_data_get_double(settings, "scan_line_strength");
@@ -512,6 +516,16 @@ void c64_update(void *data, obs_data_t *settings)
     context->tint_mode = (int)obs_data_get_int(settings, "tint_mode");
     context->tint_strength = (float)obs_data_get_double(settings, "tint_strength");
     context->tint_enable = (context->tint_mode > 0 && context->tint_strength > 0.0f);
+
+    // Check if dimension-affecting effects are now enabled
+    bool new_dimension_effects = (context->scan_line_distance > 0.0f) || (context->pixel_width != 1.0f) ||
+                                 (context->pixel_height != 1.0f);
+
+    // Reset timing base if dimension-affecting effects were just enabled during streaming
+    if (!prev_dimension_effects && new_dimension_effects && context->timestamp_base_set && context->streaming) {
+        context->timestamp_base_set = false;
+        C64_LOG_INFO("🔄 Dimension-affecting effects activated - timing base reset to maintain A/V sync");
+    }
 
     // Start streaming with current configuration (will create new sockets if needed)
     C64_LOG_INFO("Applying configuration and starting streaming");
@@ -684,9 +698,6 @@ void c64_video_tick(void *data, float seconds)
     if (!context->render_texture || gs_texture_get_width(context->render_texture) != context->width ||
         gs_texture_get_height(context->render_texture) != context->height) {
 
-        // Check if this is a dimension change due to effects activation
-        bool was_texture_recreation = (context->render_texture != NULL);
-
         obs_enter_graphics();
         if (context->render_texture) {
             gs_texture_destroy(context->render_texture);
@@ -718,11 +729,6 @@ void c64_video_tick(void *data, float seconds)
             C64_LOG_ERROR("Failed to create afterglow accumulation textures");
         }
 
-        // Reset timing base if this was a texture recreation due to effects activation
-        if (was_texture_recreation) {
-            context->timestamp_base_set = false;
-            C64_LOG_INFO("🔄 Render texture recreated - timing base reset to maintain A/V sync");
-        }
     } else {
         // Update texture with latest frame data
         obs_enter_graphics();
@@ -779,8 +785,11 @@ void c64_video_render(void *data, gs_effect_t *effect)
                 C64_LOG_ERROR("Failed to load CRT effect shader - falling back to default rendering");
             } else {
                 // Reset timing base to prevent sync drift caused by shader compilation delay
-                context->timestamp_base_set = false;
-                C64_LOG_INFO("🔄 CRT effect loaded - timing base reset to maintain A/V sync");
+                // Only reset if we're actually streaming (have established timing)
+                if (context->timestamp_base_set) {
+                    context->timestamp_base_set = false;
+                    C64_LOG_INFO("🔄 CRT effect loaded during stream - timing base reset to maintain A/V sync");
+                }
             }
             if (!context->crt_effect) {
                 // Fall back to default rendering
