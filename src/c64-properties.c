@@ -25,22 +25,23 @@ obs_properties_t *c64_create_properties(void *data)
     obs_properties_t *props = obs_properties_create();
 
     // Plugin Information Group
-    obs_property_t *info_group =
-        obs_properties_add_group(props, "info_group", "Plugin Information", OBS_GROUP_NORMAL, obs_properties_create());
+    obs_property_t *info_group = obs_properties_add_group(props, "info_group", obs_module_text("PluginInformation"),
+                                                          OBS_GROUP_NORMAL, obs_properties_create());
     obs_properties_t *info_props = obs_property_group_content(info_group);
 
     // Version information (read-only
-    obs_property_t *version_prop = obs_properties_add_text(info_props, "version_info", "Version", OBS_TEXT_INFO);
+    obs_property_t *version_prop =
+        obs_properties_add_text(info_props, "version_info", obs_module_text("Version"), OBS_TEXT_INFO);
     obs_property_set_long_description(version_prop, c64_get_build_info());
     obs_property_text_set_info_type(version_prop, OBS_TEXT_INFO_NORMAL);
 
     // Debug logging toggle
-    obs_property_t *debug_prop = obs_properties_add_bool(info_props, "debug_logging", "Debug Logging");
-    obs_property_set_long_description(debug_prop, "Enable detailed logging for debugging connection issues");
+    obs_property_t *debug_prop = obs_properties_add_bool(info_props, "debug_logging", obs_module_text("DebugLogging"));
+    obs_property_set_long_description(debug_prop, obs_module_text("DebugLogging.Description"));
 
     // Network Configuration Group
-    obs_property_t *network_group = obs_properties_add_group(props, "network_group", "Network Configuration",
-                                                             OBS_GROUP_NORMAL, obs_properties_create());
+    obs_property_t *network_group = obs_properties_add_group(
+        props, "network_group", obs_module_text("NetworkConfiguration"), OBS_GROUP_NORMAL, obs_properties_create());
     obs_properties_t *network_props = obs_property_group_content(network_group);
 
     // DNS Server IP
@@ -50,65 +51,60 @@ obs_properties_t *c64_create_properties(void *data)
 
     // C64 Ultimate Host (IP Address or Hostname)
     obs_property_t *host_prop =
-        obs_properties_add_text(network_props, "c64_host", "C64 Ultimate Host", OBS_TEXT_DEFAULT);
-    obs_property_set_long_description(
-        host_prop,
-        "Hostname or IP address of C64 Ultimate device (default: c64u). Use 0.0.0.0 to skip control commands.");
+        obs_properties_add_text(network_props, "c64_host", obs_module_text("C64UHost"), OBS_TEXT_DEFAULT);
+    obs_property_set_long_description(host_prop, obs_module_text("C64UHost.Description"));
 
     // OBS IP Address
     obs_property_t *obs_ip_prop =
-        obs_properties_add_text(network_props, "obs_ip_address", "OBS Server IP", OBS_TEXT_DEFAULT);
-    obs_property_set_long_description(obs_ip_prop, "IP address of this OBS server (where C64 Ultimate sends streams)");
+        obs_properties_add_text(network_props, "obs_ip_address", obs_module_text("OBSMachineIP"), OBS_TEXT_DEFAULT);
+    obs_property_set_long_description(obs_ip_prop, obs_module_text("OBSMachineIP.Description"));
 
     // Auto-detect IP toggle
-    obs_property_t *auto_ip_prop = obs_properties_add_bool(network_props, "auto_detect_ip", "Auto-detect OBS IP");
-    obs_property_set_long_description(auto_ip_prop, "Automatically detect and use OBS server IP in streaming commands");
+    obs_property_t *auto_ip_prop =
+        obs_properties_add_bool(network_props, "auto_detect_ip", obs_module_text("AutoDetectOBSIP"));
+    obs_property_set_long_description(auto_ip_prop, obs_module_text("AutoDetectOBSIP.Description"));
 
     // UDP Ports
-    obs_property_t *video_port_prop = obs_properties_add_int(network_props, "video_port", "Video Port", 1024, 65535, 1);
-    obs_property_set_long_description(video_port_prop, "UDP port for video stream from C64 Ultimate");
+    obs_property_t *video_port_prop =
+        obs_properties_add_int(network_props, "video_port", obs_module_text("VideoPort"), 1024, 65535, 1);
+    obs_property_set_long_description(video_port_prop, obs_module_text("VideoPort.Description"));
 
-    obs_property_t *audio_port_prop = obs_properties_add_int(network_props, "audio_port", "Audio Port", 1024, 65535, 1);
-    obs_property_set_long_description(audio_port_prop, "UDP port for audio stream from C64 Ultimate");
+    obs_property_t *audio_port_prop =
+        obs_properties_add_int(network_props, "audio_port", obs_module_text("AudioPort"), 1024, 65535, 1);
+    obs_property_set_long_description(audio_port_prop, obs_module_text("AudioPort.Description"));
 
     // Buffer Delay
     obs_property_t *delay_prop =
-        obs_properties_add_int_slider(network_props, "buffer_delay_ms", "Buffer Delay (millis)", 0, 500, 1);
-    obs_property_set_long_description(
-        delay_prop,
-        "Buffer network packets for specified milliseconds to smooth UDP packet loss/jitter (default: 10ms)");
+        obs_properties_add_int_slider(network_props, "buffer_delay_ms", obs_module_text("BufferDelay"), 0, 500, 1);
+    obs_property_set_long_description(delay_prop, obs_module_text("BufferDelay.Description"));
 
     // Recording Group
-    obs_property_t *recording_group =
-        obs_properties_add_group(props, "recording_group", "Recording", OBS_GROUP_NORMAL, obs_properties_create());
+    obs_property_t *recording_group = obs_properties_add_group(props, "recording_group", obs_module_text("Recording"),
+                                                               OBS_GROUP_NORMAL, obs_properties_create());
     obs_properties_t *recording_props = obs_property_group_content(recording_group);
 
-    obs_property_t *save_frames_prop = obs_properties_add_bool(recording_props, "save_frames", "☐ Save BMP Frames");
-    obs_property_set_long_description(
-        save_frames_prop,
-        "Save each frame as BMP in frames/ subfolder + CSV timing (for debugging - impacts performance)");
+    obs_property_t *save_frames_prop =
+        obs_properties_add_bool(recording_props, "save_frames", obs_module_text("SaveBMPFrames"));
+    obs_property_set_long_description(save_frames_prop, obs_module_text("SaveBMPFrames.Description"));
 
-    obs_property_t *record_video_prop = obs_properties_add_bool(recording_props, "record_video", "☐ Record AVI + WAV");
-    obs_property_set_long_description(
-        record_video_prop, "Record uncompressed AVI video + WAV audio + CSV timing (for debugging - high disk usage)");
+    obs_property_t *record_video_prop =
+        obs_properties_add_bool(recording_props, "record_video", obs_module_text("RecordAVIWAV"));
+    obs_property_set_long_description(record_video_prop, obs_module_text("RecordAVIWAV.Description"));
 
     // Save Folder
-    obs_property_t *save_folder_prop =
-        obs_properties_add_path(recording_props, "save_folder", "Output Folder", OBS_PATH_DIRECTORY, NULL, NULL);
-    obs_property_set_long_description(
-        save_folder_prop,
-        "Directory where session folders with frames, video, audio, and timing files will be created");
+    obs_property_t *save_folder_prop = obs_properties_add_path(
+        recording_props, "save_folder", obs_module_text("OutputFolder"), OBS_PATH_DIRECTORY, NULL, NULL);
+    obs_property_set_long_description(save_folder_prop, obs_module_text("OutputFolder.Description"));
 
     // Effects Group
-    obs_property_t *effects_group =
-        obs_properties_add_group(props, "effects_group", "Effects", OBS_GROUP_NORMAL, obs_properties_create());
+    obs_property_t *effects_group = obs_properties_add_group(props, "effects_group", obs_module_text("Effects"),
+                                                             OBS_GROUP_NORMAL, obs_properties_create());
     obs_properties_t *effects_props = obs_property_group_content(effects_group);
 
     // Presets dropdown at the top
-    obs_property_t *preset_prop =
-        obs_properties_add_list(effects_props, "crt_preset", "Presets", OBS_COMBO_TYPE_LIST, OBS_COMBO_FORMAT_STRING);
-    obs_property_set_long_description(preset_prop,
-                                      "Select a visual effect preset to apply predefined CRT simulation settings");
+    obs_property_t *preset_prop = obs_properties_add_list(effects_props, "crt_preset", obs_module_text("Presets"),
+                                                          OBS_COMBO_TYPE_LIST, OBS_COMBO_FORMAT_STRING);
+    obs_property_set_long_description(preset_prop, obs_module_text("Presets.Description"));
 
     // Populate presets from the loaded presets file
     c64_presets_populate_list(preset_prop);
@@ -117,69 +113,63 @@ obs_properties_t *c64_create_properties(void *data)
     obs_property_set_modified_callback(preset_prop, crt_preset_changed);
 
     // Scanlines
-    obs_property_t *scanline_distance_prop = obs_properties_add_list(
-        effects_props, "scan_line_distance", "Scan Line Distance", OBS_COMBO_TYPE_LIST, OBS_COMBO_FORMAT_FLOAT);
-    obs_property_list_add_float(scanline_distance_prop, "None (0%)", 0.0);
-    obs_property_list_add_float(scanline_distance_prop, "Tight (25%)", 0.25);
-    obs_property_list_add_float(scanline_distance_prop, "Normal (50%)", 0.50);
-    obs_property_list_add_float(scanline_distance_prop, "Wide (100%)", 1.0);
-    obs_property_list_add_float(scanline_distance_prop, "Extra Wide (200%)", 2.0);
-    obs_property_set_long_description(
-        scanline_distance_prop,
-        "Gap between consecutive scan lines as a percentage of a scan line width. Controls the spacing between bright "
-        "scan lines. 0% = no gaps (continuous lines), 100% = gap equals line height.");
+    obs_property_t *scanline_distance_prop = obs_properties_add_list(effects_props, "scan_line_distance",
+                                                                     obs_module_text("ScanLineDistance"),
+                                                                     OBS_COMBO_TYPE_LIST, OBS_COMBO_FORMAT_FLOAT);
+    obs_property_list_add_float(scanline_distance_prop, obs_module_text("ScanLineDistance.None"), 0.0);
+    obs_property_list_add_float(scanline_distance_prop, obs_module_text("ScanLineDistance.Tight"), 0.25);
+    obs_property_list_add_float(scanline_distance_prop, obs_module_text("ScanLineDistance.Normal"), 0.50);
+    obs_property_list_add_float(scanline_distance_prop, obs_module_text("ScanLineDistance.Wide"), 1.0);
+    obs_property_list_add_float(scanline_distance_prop, obs_module_text("ScanLineDistance.ExtraWide"), 2.0);
+    obs_property_set_long_description(scanline_distance_prop, obs_module_text("ScanLineDistance.Description"));
 
-    obs_property_t *scanline_strength_prop =
-        obs_properties_add_float_slider(effects_props, "scan_line_strength", "Scan Line Strength", 0.0, 1.0, 0.05);
-    obs_property_set_long_description(
-        scanline_strength_prop,
-        "Controls how dark the gaps between scan lines appear. 0.0 = gaps are as bright as scan lines (no effect), "
-        "1.0 = gaps are completely black.");
+    obs_property_t *scanline_strength_prop = obs_properties_add_float_slider(
+        effects_props, "scan_line_strength", obs_module_text("ScanLineStrength"), 0.0, 1.0, 0.05);
+    obs_property_set_long_description(scanline_strength_prop, obs_module_text("ScanLineStrength.Description"));
 
     // Pixel Geometry
     obs_property_t *pixel_width_prop =
-        obs_properties_add_float_slider(effects_props, "pixel_width", "Pixel Width", 0.5, 3.0, 0.1);
-    obs_property_set_long_description(pixel_width_prop, "Horizontal pixel size multiplier");
+        obs_properties_add_float_slider(effects_props, "pixel_width", obs_module_text("PixelWidth"), 0.5, 3.0, 0.1);
+    obs_property_set_long_description(pixel_width_prop, obs_module_text("PixelWidth.Description"));
 
     obs_property_t *pixel_height_prop =
-        obs_properties_add_float_slider(effects_props, "pixel_height", "Pixel Height", 0.5, 3.0, 0.1);
-    obs_property_set_long_description(pixel_height_prop, "Vertical pixel size multiplier");
+        obs_properties_add_float_slider(effects_props, "pixel_height", obs_module_text("PixelHeight"), 0.5, 3.0, 0.1);
+    obs_property_set_long_description(pixel_height_prop, obs_module_text("PixelHeight.Description"));
 
-    obs_property_t *blur_strength_prop =
-        obs_properties_add_float_slider(effects_props, "blur_strength", "Blur", 0.0, 1.0, 0.05);
-    obs_property_set_long_description(blur_strength_prop,
-                                      "Scaling blur (0.0 = precise scaling, 1.0 = very blurry with gaussian blur)");
+    obs_property_t *blur_strength_prop = obs_properties_add_float_slider(
+        effects_props, "blur_strength", obs_module_text("BlurStrength"), 0.0, 1.0, 0.05);
+    obs_property_set_long_description(blur_strength_prop, obs_module_text("BlurStrength.Description"));
 
     // CRT Bloom
-    obs_property_t *bloom_strength_prop =
-        obs_properties_add_float_slider(effects_props, "bloom_strength", "Bloom", 0.0, 1.0, 0.05);
-    obs_property_set_long_description(bloom_strength_prop, "Bloom effect strength (0.0 = off, 1.0 = maximum)");
+    obs_property_t *bloom_strength_prop = obs_properties_add_float_slider(
+        effects_props, "bloom_strength", obs_module_text("BloomStrength"), 0.0, 1.0, 0.05);
+    obs_property_set_long_description(bloom_strength_prop, obs_module_text("BloomStrength.Description"));
 
     // Afterglow
-    obs_property_t *afterglow_duration_prop =
-        obs_properties_add_int_slider(effects_props, "afterglow_duration_ms", "Afterglow Duration (ms)", 0, 3000, 10);
-    obs_property_set_long_description(afterglow_duration_prop, "Phosphor persistence duration (0 = off)");
+    obs_property_t *afterglow_duration_prop = obs_properties_add_int_slider(
+        effects_props, "afterglow_duration_ms", obs_module_text("AfterglowDuration"), 0, 3000, 10);
+    obs_property_set_long_description(afterglow_duration_prop, obs_module_text("AfterglowDuration.Description"));
 
-    obs_property_t *afterglow_curve_prop = obs_properties_add_list(effects_props, "afterglow_curve", "Afterglow Curve",
-                                                                   OBS_COMBO_TYPE_LIST, OBS_COMBO_FORMAT_INT);
-    obs_property_list_add_int(afterglow_curve_prop, "Instant Fade (Linear)", 0);
-    obs_property_list_add_int(afterglow_curve_prop, "Gradual Fade (Slow Start)", 1);
-    obs_property_list_add_int(afterglow_curve_prop, "Rapid Fade (Fast Start)", 2);
-    obs_property_list_add_int(afterglow_curve_prop, "Long Tail (Exponential)", 3);
-    obs_property_set_long_description(afterglow_curve_prop, "How quickly the afterglow fades away");
+    obs_property_t *afterglow_curve_prop = obs_properties_add_list(
+        effects_props, "afterglow_curve", obs_module_text("AfterglowCurve"), OBS_COMBO_TYPE_LIST, OBS_COMBO_FORMAT_INT);
+    obs_property_list_add_int(afterglow_curve_prop, obs_module_text("AfterglowCurve.InstantFade"), 0);
+    obs_property_list_add_int(afterglow_curve_prop, obs_module_text("AfterglowCurve.GradualFade"), 1);
+    obs_property_list_add_int(afterglow_curve_prop, obs_module_text("AfterglowCurve.RapidFade"), 2);
+    obs_property_list_add_int(afterglow_curve_prop, obs_module_text("AfterglowCurve.LongTail"), 3);
+    obs_property_set_long_description(afterglow_curve_prop, obs_module_text("AfterglowCurve.Description"));
 
     // Screen Tint
-    obs_property_t *tint_mode_prop =
-        obs_properties_add_list(effects_props, "tint_mode", "Tint Type", OBS_COMBO_TYPE_LIST, OBS_COMBO_FORMAT_INT);
-    obs_property_list_add_int(tint_mode_prop, "None (colour)", 0);
-    obs_property_list_add_int(tint_mode_prop, "Amber", 1);
-    obs_property_list_add_int(tint_mode_prop, "Green", 2);
-    obs_property_list_add_int(tint_mode_prop, "Monochrome", 3);
-    obs_property_set_long_description(tint_mode_prop, "Type of monochrome tint to apply");
+    obs_property_t *tint_mode_prop = obs_properties_add_list(effects_props, "tint_mode", obs_module_text("TintMode"),
+                                                             OBS_COMBO_TYPE_LIST, OBS_COMBO_FORMAT_INT);
+    obs_property_list_add_int(tint_mode_prop, obs_module_text("TintMode.None"), 0);
+    obs_property_list_add_int(tint_mode_prop, obs_module_text("TintMode.Amber"), 1);
+    obs_property_list_add_int(tint_mode_prop, obs_module_text("TintMode.Green"), 2);
+    obs_property_list_add_int(tint_mode_prop, obs_module_text("TintMode.Monochrome"), 3);
+    obs_property_set_long_description(tint_mode_prop, obs_module_text("TintMode.Description"));
 
-    obs_property_t *tint_strength_prop =
-        obs_properties_add_float_slider(effects_props, "tint_strength", "Tint Strength", 0.0, 1.0, 0.05);
-    obs_property_set_long_description(tint_strength_prop, "Strength of tint effect (0.0 = off, 1.0 = full tint)");
+    obs_property_t *tint_strength_prop = obs_properties_add_float_slider(
+        effects_props, "tint_strength", obs_module_text("TintStrength"), 0.0, 1.0, 0.05);
+    obs_property_set_long_description(tint_strength_prop, obs_module_text("TintStrength.Description"));
 
     return props;
 }
