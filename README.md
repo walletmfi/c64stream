@@ -109,6 +109,9 @@ A new window opens. Keep the default settings and click "OK":
 
 Recreate the authentic look and feel of classic CRT monitors and TVs with configurable visual effects that simulate the characteristics of vintage displays.
 
+![C64 Stream Effects](./docs/images/properties-effects.png "C64 Stream Effects")
+
+
 **Presets:** One-click configurations for different display types
 - **[Classic CRT](./docs/images/effects/classic-crt.png)** - Balanced scan lines and bloom for general retro appeal
 - **[Amber Monitor](./docs/images/effects/amber-monitor.png)** - Warm amber tint reminiscent of early computer monitors
