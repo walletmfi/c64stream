@@ -131,55 +131,80 @@ float4 PSDefault(VertData v_in) : TARGET
         // position_in_scanline_unit < scanline_pixels_per_unit: This pixel is the scanline itself (remains bright)
     }
 
-    // === ENHANCED BLOOM EFFECT WITH BLEEDING ===
+    // === REALISTIC CRT BLOOM EFFECT ===
     if (bloom_strength > 0.0f) {
-        // Sample current pixel and neighbors for bloom bleeding effect
         float4 center = color;
-        float bloom_radius = bloom_strength * 0.002f; // Radius scales with strength
-
-        // Multi-tap sampling for bloom bleeding - more taps = more bleeding at higher strength
-        float4 bloom_sum = center * 0.4f; // Center weight
-
-        // Cross pattern sampling (4 directions) with clamped UVs for DirectX 11
-        bloom_sum += image.Sample(textureSampler, saturate(uv + float2(bloom_radius, 0.0f))) * 0.15f;
-        bloom_sum += image.Sample(textureSampler, saturate(uv - float2(bloom_radius, 0.0f))) * 0.15f;
-        bloom_sum += image.Sample(textureSampler, saturate(uv + float2(0.0f, bloom_radius))) * 0.15f;
-        bloom_sum += image.Sample(textureSampler, saturate(uv - float2(0.0f, bloom_radius))) * 0.15f;
-
-        // Diagonal sampling for stronger bloom effect
-        if (bloom_strength > 0.3f) {
-            float diagonal_factor = 0.7f;
-            bloom_sum += image.Sample(textureSampler, saturate(uv + float2(bloom_radius, bloom_radius) * diagonal_factor)) * 0.05f;
-            bloom_sum += image.Sample(textureSampler, saturate(uv + float2(-bloom_radius, bloom_radius) * diagonal_factor)) * 0.05f;
-            bloom_sum += image.Sample(textureSampler, saturate(uv + float2(bloom_radius, -bloom_radius) * diagonal_factor)) * 0.05f;
-            bloom_sum += image.Sample(textureSampler, saturate(uv + float2(-bloom_radius, -bloom_radius) * diagonal_factor)) * 0.05f;
+        
+        // Create multiple bloom rings with different intensities for realistic falloff
+        float3 bloom_result = center.rgb;
+        
+        // Ring 1: Inner glow (closest to pixel) - strongest
+        float radius1 = bloom_strength * 0.0015f;
+        float4 ring1 = float4(0, 0, 0, 0);
+        ring1 += image.Sample(textureSampler, saturate(uv + float2(radius1, 0.0f)));
+        ring1 += image.Sample(textureSampler, saturate(uv - float2(radius1, 0.0f)));
+        ring1 += image.Sample(textureSampler, saturate(uv + float2(0.0f, radius1)));
+        ring1 += image.Sample(textureSampler, saturate(uv - float2(0.0f, radius1)));
+        ring1 += image.Sample(textureSampler, saturate(uv + float2(radius1 * 0.7f, radius1 * 0.7f)));
+        ring1 += image.Sample(textureSampler, saturate(uv + float2(-radius1 * 0.7f, radius1 * 0.7f)));
+        ring1 += image.Sample(textureSampler, saturate(uv + float2(radius1 * 0.7f, -radius1 * 0.7f)));
+        ring1 += image.Sample(textureSampler, saturate(uv + float2(-radius1 * 0.7f, -radius1 * 0.7f)));
+        ring1 /= 8.0f;
+        
+        // Ring 2: Medium glow
+        float radius2 = bloom_strength * 0.003f;
+        float4 ring2 = float4(0, 0, 0, 0);
+        ring2 += image.Sample(textureSampler, saturate(uv + float2(radius2, 0.0f)));
+        ring2 += image.Sample(textureSampler, saturate(uv - float2(radius2, 0.0f)));
+        ring2 += image.Sample(textureSampler, saturate(uv + float2(0.0f, radius2)));
+        ring2 += image.Sample(textureSampler, saturate(uv - float2(0.0f, radius2)));
+        ring2 /= 4.0f;
+        
+        // Ring 3: Outer halo (softest, widest)
+        float radius3 = bloom_strength * 0.006f;
+        float4 ring3 = float4(0, 0, 0, 0);
+        ring3 += image.Sample(textureSampler, saturate(uv + float2(radius3, 0.0f)));
+        ring3 += image.Sample(textureSampler, saturate(uv - float2(radius3, 0.0f)));
+        ring3 += image.Sample(textureSampler, saturate(uv + float2(0.0f, radius3)));
+        ring3 += image.Sample(textureSampler, saturate(uv - float2(0.0f, radius3)));
+        ring3 /= 4.0f;
+        
+        // Calculate per-channel bloom contribution (CRT phosphors respond differently)
+        // Red phosphor: More persistent, wider bloom
+        // Green phosphor: Brightest, tighter bloom  
+        // Blue phosphor: Fastest decay, narrower bloom
+        float3 phosphor_response = float3(1.2f, 1.0f, 0.8f); // Red, Green, Blue response
+        
+        // Calculate luminance-based bloom threshold (much lower than before)
+        float center_luma = dot(center.rgb, float3(0.299f, 0.587f, 0.114f));
+        float bloom_threshold = 0.3f - (bloom_strength * 0.25f); // Start blooming at much lower brightness
+        
+        if (center_luma > bloom_threshold) {
+            // Smooth bloom factor based on brightness curve
+            float bloom_factor = smoothstep(bloom_threshold, 1.0f, center_luma);
+            
+            // Combine rings with realistic falloff (inverse square-like)
+            float3 combined_bloom = (ring1.rgb * 0.6f + ring2.rgb * 0.25f + ring3.rgb * 0.15f);
+            
+            // Apply phosphor response characteristics
+            combined_bloom *= phosphor_response;
+            
+            // Create realistic bloom intensity that doesn't clip to white
+            float bloom_intensity = bloom_factor * bloom_strength * 2.0f;
+            
+            // Add bloom as additive glow (key to realistic CRT bloom)
+            bloom_result = center.rgb + (combined_bloom * bloom_intensity);
+            
+            // Simulate phosphor saturation (bright pixels don't go pure white, they saturate per channel)
+            bloom_result = bloom_result / (1.0f + bloom_result * 0.3f); // Tone mapping to prevent clipping
         }
-
-        // Use precise luminance calculation for DirectX 11
-        float brightness = dot(bloom_sum.rgb, float3(0.299f, 0.587f, 0.114f));
-
-        // Dynamic threshold that decreases as strength increases
-        float threshold = 0.85f - (bloom_strength * 0.45f);
-
-        if (brightness > threshold) {
-            // Calculate bloom factor based on how much we exceed threshold
-            float bloom_factor = (brightness - threshold) / max(1.0f - threshold, 0.001f); // Prevent division by zero
-
-            // ENHANCED: 7.5x stronger bloom
-            float bloom_intensity = bloom_factor * (bloom_strength * 7.5f);
-
-            // Create bloom effect that preserves color saturation but bleeds
-            float3 bloom_color = bloom_sum.rgb * (1.0f + bloom_intensity * 1.2f);
-
-            // Allow more oversaturation for stronger glow effect
-            bloom_color = min(bloom_color, float3(1.5f, 1.5f, 1.5f));
-
-            // Blend with original color to create bleeding effect using saturate for DirectX 11
-            color.rgb = lerp(center.rgb, bloom_color, saturate(bloom_intensity * 0.8f));
-        } else {
-            // Use the blended sample even without bloom for subtle bleeding
-            color.rgb = lerp(center.rgb, bloom_sum.rgb, bloom_strength * 0.1f);
-        }
+        
+        // Apply subtle bloom bleeding even for darker pixels (characteristic of CRT)
+        float subtle_bloom = bloom_strength * 0.15f;
+        float3 neighbor_average = (ring1.rgb * 0.7f + ring2.rgb * 0.3f);
+        bloom_result = lerp(bloom_result, bloom_result + neighbor_average * subtle_bloom, bloom_strength * 0.2f);
+        
+        color.rgb = bloom_result;
     }
 
     // === AFTERGLOW EFFECT ===
