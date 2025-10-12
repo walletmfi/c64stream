@@ -683,6 +683,10 @@ void c64_video_tick(void *data, float seconds)
     // Update render texture if needed (create or recreate on size change)
     if (!context->render_texture || gs_texture_get_width(context->render_texture) != context->width ||
         gs_texture_get_height(context->render_texture) != context->height) {
+
+        // Check if this is a dimension change due to effects activation
+        bool was_texture_recreation = (context->render_texture != NULL);
+
         obs_enter_graphics();
         if (context->render_texture) {
             gs_texture_destroy(context->render_texture);
@@ -712,6 +716,12 @@ void c64_video_tick(void *data, float seconds)
         }
         if (!context->afterglow_accum_prev || !context->afterglow_accum_next) {
             C64_LOG_ERROR("Failed to create afterglow accumulation textures");
+        }
+
+        // Reset timing base if this was a texture recreation due to effects activation
+        if (was_texture_recreation) {
+            context->timestamp_base_set = false;
+            C64_LOG_INFO("🔄 Render texture recreated - timing base reset to maintain A/V sync");
         }
     } else {
         // Update texture with latest frame data
@@ -767,6 +777,12 @@ void c64_video_render(void *data, gs_effect_t *effect)
             bfree(effect_path);
             if (!context->crt_effect) {
                 C64_LOG_ERROR("Failed to load CRT effect shader - falling back to default rendering");
+            } else {
+                // Reset timing base to prevent sync drift caused by shader compilation delay
+                context->timestamp_base_set = false;
+                C64_LOG_INFO("🔄 CRT effect loaded - timing base reset to maintain A/V sync");
+            }
+            if (!context->crt_effect) {
                 // Fall back to default rendering
                 gs_effect_t *default_effect = obs_get_base_effect(OBS_EFFECT_DEFAULT);
                 if (default_effect) {
