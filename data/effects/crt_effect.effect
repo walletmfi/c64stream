@@ -81,11 +81,11 @@ float4 PSDefault(VertData v_in) : TARGET
         // Fundamental fix: Every output pixel should alternate between scanline and gap
         // scan_line_distance controls gap WIDTH, not gap FREQUENCY
         // For ALL settings, pattern should be: S G S G S G (single scanline, single gap)
-        
+
         // Simple integer-based approach: every 2nd pixel is a gap
         int pixel_index = int(pixel_row);
         bool is_even_pixel = (pixel_index % 2) == 0;
-        
+
         if (!is_even_pixel) {
             // Odd pixels are gaps - darken them based on scan_line_distance
             // scan_line_distance controls how dark the gap is, not its frequency
