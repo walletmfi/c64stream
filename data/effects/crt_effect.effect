@@ -79,25 +79,30 @@ float4 PSDefault(VertData v_in) : TARGET
         float pixel_row = uv.y * output_height;
 
         // Match C code integer-based scaling for pixel-perfect scanlines
-        // Map scanline distance to distinct integer scaling ratios (same as C code)
+        // Map scanline distance to distinct scaling ratios with correct spacing patterns
         // This ensures crisp scanlines and gaps with no fractional scaling
 
-        float integer_pixels_per_scanline;
-        if (scan_line_distance <= 0.25) {       // Tight
-            integer_pixels_per_scanline = 4.0;
-        } else if (scan_line_distance <= 0.5) { // Normal
-            integer_pixels_per_scanline = 3.0;
-        } else if (scan_line_distance <= 1.0) { // Wide
-            integer_pixels_per_scanline = 2.0;
-        } else {                                // Extra Wide (2.0)
-            integer_pixels_per_scanline = 3.0;
+        float total_pixels_per_unit;
+        float scanline_pixels_per_unit;
+        if (scan_line_distance <= 0.25) {       // Tight: S1S1S1S1G1
+            total_pixels_per_unit = 5.0;
+            scanline_pixels_per_unit = 4.0;
+        } else if (scan_line_distance <= 0.5) { // Normal: S1S1G1
+            total_pixels_per_unit = 3.0;
+            scanline_pixels_per_unit = 2.0;
+        } else if (scan_line_distance <= 1.0) { // Wide: S1S1G1G1
+            total_pixels_per_unit = 4.0;
+            scanline_pixels_per_unit = 2.0;
+        } else {                                // Extra Wide: S1G1G1
+            total_pixels_per_unit = 3.0;
+            scanline_pixels_per_unit = 1.0;
         }
 
-        float scanline_index = floor(pixel_row / integer_pixels_per_scanline);
-        float position_in_scanline_unit = pixel_row - (scanline_index * integer_pixels_per_scanline);
+        float scanline_index = floor(pixel_row / total_pixels_per_unit);
+        float position_in_scanline_unit = pixel_row - (scanline_index * total_pixels_per_unit);
 
-        // First pixel of each integer unit is the scanline, remaining pixels are the gap
-        if (position_in_scanline_unit >= 1.0) {
+        // Check if this pixel is in the scanline portion or gap portion
+        if (position_in_scanline_unit >= scanline_pixels_per_unit) {
             // This pixel is in the gap portion - darken it
             color.rgb *= (1.0 - scan_line_strength);
         }

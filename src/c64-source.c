@@ -863,6 +863,24 @@ void c64_video_render(void *data, gs_effect_t *effect)
     }
 }
 
+// Helper function to get scanline scaling parameters based on distance setting
+static void get_scanline_scaling_info(float scan_line_distance, uint32_t *total_pixels, uint32_t *scanline_pixels)
+{
+    if (scan_line_distance <= 0.25f) { // Tight
+        *total_pixels = 5;             // spacing (Scanline, Gap): S1S1S1S1G1 S2S2S2S2G2 ...
+        *scanline_pixels = 4;
+    } else if (scan_line_distance <= 0.5f) { // Normal
+        *total_pixels = 3;                   // spacing (Scanline, Gap): S1S1G1 S2S2G2 ...
+        *scanline_pixels = 2;
+    } else if (scan_line_distance <= 1.0f) { // Wide
+        *total_pixels = 4;                   // spacing (Scanline, Gap): S1S1G1G1 S2S2G2G2 ...
+        *scanline_pixels = 2;
+    } else {               // Extra Wide (2.0f)
+        *total_pixels = 3; // spacing (Scanline, Gap, Gap): S1G1G1 S2G2G2 ...
+        *scanline_pixels = 1;
+    }
+}
+
 uint32_t c64_get_width(void *data)
 {
     struct c64_source *context = data;
@@ -882,19 +900,11 @@ uint32_t c64_get_width(void *data)
     // Scanlines require upscaling to accommodate gaps with integer pixel alignment
     // Each C64 pixel column needs an integer number of output pixels for crisp rendering
     if (context->scan_line_distance > 0.0f) {
-        uint32_t integer_pixels_per_scanline;
-        if (context->scan_line_distance <= 0.25f) {       // Tight
-            integer_pixels_per_scanline = 5;              // spacing (Scanline, Gap): S1S1S1S1G1 S2S2S2S2G2 ...
-        } else if (context->scan_line_distance <= 0.5f) { // Normal
-            integer_pixels_per_scanline = 3;              // spacing (Scanline, Gap): S1S1G1 S2S2G2 ...
-        } else if (context->scan_line_distance <= 1.0f) { // Wide
-            integer_pixels_per_scanline = 4;              // spacing (Scanline, Gap): S1G1 S1G1 ...
-        } else {                                          // Extra Wide (2.0f) // spacing (Scanline, Gap): SGG
-            integer_pixels_per_scanline = 3;              // spacing (Scanline, Gap, Gap): S1G1G1 S2G2G2 ...
-        }
+        uint32_t total_pixels_per_unit, scanline_pixels_per_unit;
+        get_scanline_scaling_info(context->scan_line_distance, &total_pixels_per_unit, &scanline_pixels_per_unit);
 
-        // Total width = original_pixels * integer_pixels_per_scanline
-        width_scale *= (float)integer_pixels_per_scanline;
+        // Total width = original_pixels * total_pixels_per_unit
+        width_scale *= (float)total_pixels_per_unit;
     }
 
     return (uint32_t)((float)context->width * width_scale);
@@ -919,19 +929,11 @@ uint32_t c64_get_height(void *data)
     // Scanlines require upscaling to accommodate gaps with integer pixel alignment
     // Each C64 scanline needs an integer number of output pixels for crisp rendering
     if (context->scan_line_distance > 0.0f) {
-        uint32_t integer_pixels_per_scanline;
-        if (context->scan_line_distance <= 0.25f) {       // Tight
-            integer_pixels_per_scanline = 5;              // spacing (Scanline, Gap): S1S1S1S1G1 S2S2S2S2G2 ...
-        } else if (context->scan_line_distance <= 0.5f) { // Normal
-            integer_pixels_per_scanline = 3;              // spacing (Scanline, Gap): S1S1G1 S2S2G2 ...
-        } else if (context->scan_line_distance <= 1.0f) { // Wide
-            integer_pixels_per_scanline = 4;              // spacing (Scanline, Gap): S1G1 S1G1 ...
-        } else {                                          // Extra Wide (2.0f) // spacing (Scanline, Gap): SGG
-            integer_pixels_per_scanline = 3;              // spacing (Scanline, Gap, Gap): S1G1G1 S2G2G2 ...
-        }
+        uint32_t total_pixels_per_unit, scanline_pixels_per_unit;
+        get_scanline_scaling_info(context->scan_line_distance, &total_pixels_per_unit, &scanline_pixels_per_unit);
 
-        // Total height = original_scanlines * integer_pixels_per_scanline
-        height_scale *= (float)integer_pixels_per_scanline;
+        // Total height = original_scanlines * total_pixels_per_unit
+        height_scale *= (float)total_pixels_per_unit;
     }
 
     return (uint32_t)((float)context->height * height_scale);
