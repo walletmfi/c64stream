@@ -114,43 +114,42 @@ void *audio_thread_func(void *data)
 }
 
 // Audio timestamp validation to prevent OBS TS_SMOOTHING_THRESHOLD warnings
-static void validate_audio_timestamp_progression(uint64_t current_timestamp)
+static void validate_audio_timestamp_progression(struct c64_source *context, uint64_t current_timestamp)
 {
-    static uint64_t last_audio_timestamp = 0;
-    if (last_audio_timestamp > 0) {
-        int64_t timestamp_delta = (int64_t)(current_timestamp - last_audio_timestamp);
+    if (context->last_audio_timestamp_validation > 0) {
+        int64_t timestamp_delta = (int64_t)(current_timestamp - context->last_audio_timestamp_validation);
         // Expected delta is ~4ms (4,000,000 ns), warn if significantly off
         if (timestamp_delta < 2000000 || timestamp_delta > 6000000) {
-            C64_LOG_DEBUG("Audio timestamp jump detected: delta=%" PRId64 "ns (expected ~4000000ns)", timestamp_delta);
+            C64_LOG_DEBUG("Audio timestamp jump detected [%s]: delta=%" PRId64 "ns (expected ~4000000ns)",
+                          obs_source_get_name(context->source), timestamp_delta);
         }
     }
-    last_audio_timestamp = current_timestamp;
+    context->last_audio_timestamp_validation = current_timestamp;
 }
 
 // Generate monotonic audio timestamps at exactly 4ms intervals
-static uint64_t generate_monotonic_audio_timestamp(void)
+static uint64_t generate_monotonic_audio_timestamp(struct c64_source *context)
 {
     // Audio packets must have exactly 4ms intervals (192 samples at 48kHz = 4000000ns)
     // This creates synthetic timestamps independent of network jitter
-    static uint64_t audio_base_time = 0;
-    static uint64_t audio_packet_count = 0;
 
     // Initialize on first call using system time
-    if (audio_base_time == 0) {
-        audio_base_time = os_gettime_ns();
-        C64_LOG_DEBUG("Audio synthetic timestamps initialized: base=%" PRIu64, audio_base_time);
+    if (context->audio_base_time == 0) {
+        context->audio_base_time = os_gettime_ns();
+        context->audio_packet_count = 0;
+        C64_LOG_DEBUG("Audio synthetic timestamps initialized for source '%s': base=%" PRIu64,
+                      obs_source_get_name(context->source), context->audio_base_time);
     }
 
     // Calculate current timestamp: base + (packet_count * 4ms)
-    uint64_t current_timestamp = audio_base_time + (audio_packet_count * 4000000ULL);
-    audio_packet_count++;
+    uint64_t current_timestamp = context->audio_base_time + (context->audio_packet_count * 4000000ULL);
+    context->audio_packet_count++;
 
     // Debug logging every 100 packets to verify progression
-    static int debug_count = 0;
-    if ((++debug_count % 100) == 0) {
-        C64_LOG_DEBUG("Audio synthetic TS: count=%" PRIu64 ", timestamp=%" PRIu64 " (+%dms from base)",
-                      audio_packet_count - 1, current_timestamp,
-                      (int)((current_timestamp - audio_base_time) / 1000000));
+    if ((context->audio_packet_count % 100) == 0) {
+        C64_LOG_DEBUG("Audio synthetic TS [%s]: count=%" PRIu64 ", timestamp=%" PRIu64 " (+%dms from base)",
+                      obs_source_get_name(context->source), context->audio_packet_count - 1, current_timestamp,
+                      (int)((current_timestamp - context->audio_base_time) / 1000000));
     }
 
     return current_timestamp;
@@ -179,10 +178,10 @@ void c64_process_audio_packet(struct c64_source *context, const uint8_t *audio_d
 
     // Generate synthetic audio timestamp with exactly 4ms intervals
     // This ensures monotonic progression independent of network jitter
-    uint64_t audio_timestamp = generate_monotonic_audio_timestamp();
+    uint64_t audio_timestamp = generate_monotonic_audio_timestamp(context);
 
     // Validate timestamp progression for debugging
-    validate_audio_timestamp_progression(audio_timestamp);
+    validate_audio_timestamp_progression(context, audio_timestamp);
 
     // Set up OBS audio data structure
     struct obs_source_audio audio_output = {0};

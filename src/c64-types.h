@@ -111,8 +111,10 @@ struct c64_source {
     bool timestamp_base_set;        // Flag indicating if base timestamp is established
 
     // Monotonic audio timestamp generation
-    uint64_t audio_packet_count;  // Total audio packets processed since stream start
-    uint64_t audio_interval_ns;   // Nanoseconds per audio packet (4ms for 192 samples at 48kHz)
+    uint64_t audio_packet_count;               // Total audio packets processed since stream start
+    uint64_t audio_interval_ns;                // Nanoseconds per audio packet (4ms for 192 samples at 48kHz)
+    uint64_t audio_base_time;                  // Base timestamp for synthetic audio timestamps
+    uint64_t last_audio_timestamp_validation;  // Last timestamp for progression validation
 
     // Logo texture for no-connection display
     gs_texture_t *logo_texture;  // Loaded logo texture for async video output
