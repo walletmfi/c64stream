@@ -29,7 +29,7 @@ uniform texture2d texture_accum_prev;
 uniform float output_height; // Output resolution height for scanline calculation
 
 sampler_state textureSampler {
-    Filter   = Linear;
+    Filter   = Point;  // Use nearest neighbor for pixel-perfect scaling
     AddressU = Clamp;
     AddressV = Clamp;
     MinLOD   = 0.0;
