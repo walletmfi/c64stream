@@ -78,24 +78,20 @@ float4 PSDefault(VertData v_in) : TARGET
         // Calculate which row we're in within the scaled output
         float pixel_row = uv.y * output_height;
 
-        // Fixed CRT behavior: ALWAYS ensure separation between consecutive C64 scanlines
-        // Every scanline gets exactly 1 pixel, followed by a gap of variable width
-        // scan_line_distance controls the gap width: minimum 1 pixel gap always present
+        // Match C code scaling: render target height is scaled by (1.0 + scan_line_distance)  
+        // This means we have (1.0 + scan_line_distance) pixels for each original C64 scanline
+        // We want exactly 1 pixel for scanline, rest for gap - perfect integer alignment
         
-        float min_gap = 1.0;  // Always at least 1 pixel gap between scanlines
-        float additional_gap = scan_line_distance;  // Additional gap width based on setting
-        float total_gap_width = min_gap + additional_gap;
+        float pixels_per_scanline = 1.0 + scan_line_distance;  // Total pixels allocated per C64 scanline
+        float scanline_index = floor(pixel_row / pixels_per_scanline);
+        float position_in_scanline_unit = pixel_row - (scanline_index * pixels_per_scanline);
         
-        float scanline_width = 1.0;
-        float total_period = scanline_width + total_gap_width;
-        
-        float position_in_period = fmod(pixel_row, total_period);
-        
-        if (position_in_period >= scanline_width) {
+        // First pixel of each unit is the scanline, remaining pixels are the gap
+        if (position_in_scanline_unit >= 1.0) {
             // This pixel is in the gap portion - darken it
             color.rgb *= (1.0 - scan_line_strength);
         }
-        // position_in_period < scanline_width: This pixel is part of the scanline (remains bright)
+        // position_in_scanline_unit < 1.0: This pixel is the scanline itself (remains bright)
     }
 
     // === ENHANCED BLOOM EFFECT WITH BLEEDING ===
