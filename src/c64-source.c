@@ -879,10 +879,17 @@ uint32_t c64_get_width(void *data)
     // Apply pixel geometry scaling for CRT effects
     float width_scale = context->pixel_width;
 
-    // Scanlines require upscaling to accommodate gaps
-    // Scale factor: 1.0 + scan_line_distance (e.g., 0.5 distance = 50% upscale = 1.5x)
+    // Scanlines require upscaling to accommodate gaps with integer pixel alignment
+    // Each C64 pixel column needs an integer number of output pixels for crisp rendering
     if (context->scan_line_distance > 0.0f) {
-        width_scale *= (1.0f + context->scan_line_distance);
+        // Calculate pixels per scanline to ensure integer boundaries
+        float pixels_per_scanline = 1.0f + context->scan_line_distance;
+
+        // Round up to ensure each scanline gets at least the minimum pixels needed
+        uint32_t integer_pixels_per_scanline = (uint32_t)ceilf(pixels_per_scanline);
+
+        // Total width = original_pixels * integer_pixels_per_scanline
+        width_scale *= (float)integer_pixels_per_scanline;
     }
 
     return (uint32_t)((float)context->width * width_scale);
@@ -904,10 +911,17 @@ uint32_t c64_get_height(void *data)
     // Apply pixel geometry scaling for CRT effects
     float height_scale = context->pixel_height;
 
-    // Scanlines require upscaling to accommodate gaps
-    // Scale factor: 1.0 + scan_line_distance (e.g., 0.5 distance = 50% upscale = 1.5x)
+    // Scanlines require upscaling to accommodate gaps with integer pixel alignment
+    // Each C64 scanline needs an integer number of output pixels for crisp rendering
     if (context->scan_line_distance > 0.0f) {
-        height_scale *= (1.0f + context->scan_line_distance);
+        // Calculate pixels per scanline to ensure integer boundaries
+        float pixels_per_scanline = 1.0f + context->scan_line_distance;
+
+        // Round up to ensure each scanline gets at least the minimum pixels needed
+        uint32_t integer_pixels_per_scanline = (uint32_t)ceilf(pixels_per_scanline);
+
+        // Total height = original_scanlines * integer_pixels_per_scanline
+        height_scale *= (float)integer_pixels_per_scanline;
     }
 
     return (uint32_t)((float)context->height * height_scale);

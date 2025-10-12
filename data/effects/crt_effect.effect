@@ -78,15 +78,17 @@ float4 PSDefault(VertData v_in) : TARGET
         // Calculate which row we're in within the scaled output
         float pixel_row = uv.y * output_height;
 
-        // Match C code scaling: render target height is scaled by (1.0 + scan_line_distance)  
-        // This means we have (1.0 + scan_line_distance) pixels for each original C64 scanline
-        // We want exactly 1 pixel for scanline, rest for gap - perfect integer alignment
-        
-        float pixels_per_scanline = 1.0 + scan_line_distance;  // Total pixels allocated per C64 scanline
-        float scanline_index = floor(pixel_row / pixels_per_scanline);
-        float position_in_scanline_unit = pixel_row - (scanline_index * pixels_per_scanline);
-        
-        // First pixel of each unit is the scanline, remaining pixels are the gap
+        // Match C code integer-based scaling for pixel-perfect scanlines
+        // C code rounds up pixels_per_scanline to ensure integer pixel boundaries
+        // This ensures crisp scanlines and gaps with no fractional scaling
+
+        float requested_pixels_per_scanline = 1.0 + scan_line_distance;
+        float integer_pixels_per_scanline = ceil(requested_pixels_per_scanline);
+
+        float scanline_index = floor(pixel_row / integer_pixels_per_scanline);
+        float position_in_scanline_unit = pixel_row - (scanline_index * integer_pixels_per_scanline);
+
+        // First pixel of each integer unit is the scanline, remaining pixels are the gap
         if (position_in_scanline_unit >= 1.0) {
             // This pixel is in the gap portion - darken it
             color.rgb *= (1.0 - scan_line_strength);
