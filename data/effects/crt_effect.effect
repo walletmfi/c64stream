@@ -78,20 +78,17 @@ float4 PSDefault(VertData v_in) : TARGET
         // Calculate which row we're in within the scaled output
         float pixel_row = uv.y * output_height;
 
-        // Each scanline unit consists of: 1.0 scanline + scan_line_distance gap
-        // This ensures perfect alternation: scanline → gap → scanline → gap
-        float scanline_unit_size = 1.0 + scan_line_distance;
+        // Perfect alternating pattern: 1 pixel scanline + scan_line_distance pixels gap
+        // This creates: scanline → gap → scanline → gap (no consecutive scanlines ever)
+        float pattern_size = 1.0 + scan_line_distance;
+        float position_in_pattern = fmod(pixel_row, pattern_size);
 
-        // Determine which scanline unit we're in and position within that unit
-        float scanline_index = floor(pixel_row / scanline_unit_size);
-        float position_in_unit = pixel_row - (scanline_index * scanline_unit_size);
-
-        // CRT-accurate logic: each individual scanline followed by exactly one gap
-        if (position_in_unit >= 1.0) {
-            // This pixel is in the gap between scanlines - darken it
+        // CRT-accurate logic: EXACTLY one scanline pixel followed by gap pixels
+        if (position_in_pattern >= 1.0) {
+            // This pixel is in the gap portion - darken it
             color.rgb *= (1.0 - scan_line_strength);
         }
-        // position_in_unit < 1.0: This pixel is part of the scanline itself (remains bright)
+        // position_in_pattern < 1.0: This pixel is the single scanline pixel (remains bright)
     }
 
     // === ENHANCED BLOOM EFFECT WITH BLEEDING ===
